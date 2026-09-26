@@ -5,6 +5,13 @@ import AppKit
 final class DiffRowCell: NSView {
   private var row: DiffRow?
   private var metrics = DiffMetrics(lineNumberDigits: 3)
+  private var hunkAction: String?
+  var isRowSelected = false {
+    didSet { if isRowSelected != oldValue { needsDisplay = true } }
+  }
+
+  /// Width of the clickable "Stage Hunk" label at the right of a hunk header.
+  static let hunkActionWidth: CGFloat = 110
 
   init(identifier: NSUserInterfaceItemIdentifier) {
     super.init(frame: .zero)
@@ -16,9 +23,11 @@ final class DiffRowCell: NSView {
   override var isFlipped: Bool { true }
   override var isOpaque: Bool { true }
 
-  func configure(_ row: DiffRow, metrics: DiffMetrics) {
+  func configure(_ row: DiffRow, metrics: DiffMetrics, hunkAction: String? = nil) {
     self.row = row
     self.metrics = metrics
+    self.hunkAction = hunkAction
+    isRowSelected = (superview as? NSTableRowView)?.isSelected ?? false
     needsDisplay = true
   }
 
@@ -32,6 +41,12 @@ final class DiffRowCell: NSView {
     case .note(let text): drawNote(text)
     case .line(let line): drawUnified(line)
     case .split(let pair): drawSplit(pair)
+    }
+    if isRowSelected {
+      NSColor.controlAccentColor.withAlphaComponent(0.22).setFill()
+      bounds.fill(using: .sourceOver)
+      NSColor.controlAccentColor.setFill()
+      NSRect(x: 0, y: 0, width: 3, height: bounds.height).fill()
     }
   }
 
@@ -94,13 +109,22 @@ final class DiffRowCell: NSView {
   private func drawHunkHeader(_ hunk: Hunk) {
     NSColor.controlAccentColor.withAlphaComponent(0.08).setFill()
     bounds.fill()
+    var width = bounds.width - 24
+    if let hunkAction {
+      let label = NSAttributedString(
+        string: hunkAction,
+        attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.controlAccentColor])
+      let size = label.size()
+      label.draw(at: NSPoint(x: bounds.width - 12 - size.width, y: (bounds.height - size.height) / 2))
+      width -= Self.hunkActionWidth
+    }
     let paragraph = NSMutableParagraphStyle()
     paragraph.lineBreakMode = .byTruncatingTail
     NSAttributedString(
       string: hunk.header,
       attributes: [.font: DiffMetrics.font, .foregroundColor: NSColor.secondaryLabelColor, .paragraphStyle: paragraph]
     ).draw(
-      with: NSRect(x: 12, y: (bounds.height - DiffMetrics.lineHeight) / 2, width: bounds.width - 24, height: DiffMetrics.lineHeight),
+      with: NSRect(x: 12, y: (bounds.height - DiffMetrics.lineHeight) / 2, width: max(0, width), height: DiffMetrics.lineHeight),
       options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
   }
 

@@ -155,6 +155,21 @@ actor GitRepository {
     }
   }
 
+  /// Applies a patch to the index only, leaving the working tree alone. This
+  /// is how hunk and line staging work: see `Patch`.
+  func applyToIndex(_ patch: String) throws {
+    try reloadIndex()
+    var diff: OpaquePointer?
+    try GitError.check(
+      git_diff_from_buffer(&diff, patch, patch.utf8.count), "Couldn't read the patch for those lines.")
+    defer { git_diff_free(diff) }
+    var options = git_apply_options()
+    git_apply_options_init(&options, UInt32(GIT_APPLY_OPTIONS_VERSION))
+    try GitError.check(
+      git_apply(handle, diff, GIT_APPLY_LOCATION_INDEX, &options),
+      "Those lines no longer match what's staged. The diff was out of date; try again.")
+  }
+
   /// Throws away unstaged changes to tracked files by restoring them from the
   /// index, like `git restore`. Staged changes are kept. Untracked files
   /// aren't touched here: the caller moves those to the Trash.

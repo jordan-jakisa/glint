@@ -63,15 +63,7 @@ extension RepositorySession {
       selection.staged ? unstageAll() : stageAll()
       return
     }
-    let group = selection.staged ? status.staged : status.unstaged
-    let index = group.firstIndex { $0.path == path } ?? 0
-    let rest = group.filter { $0.path != path }
     setStaged(path, !selection.staged)
-    if rest.isEmpty {
-      selectedChange = ChangeSelection(staged: !selection.staged, path: path)
-    } else {
-      selectedChange = ChangeSelection(staged: selection.staged, path: rest[min(index, rest.count - 1)].path)
-    }
   }
 
   func stageAll() {
@@ -108,9 +100,10 @@ extension RepositorySession {
     }
   }
 
-  /// Keeps the selection sensible after status changes behind the user's back:
-  /// follow a file that moved between groups, or land on its neighbour when it
-  /// has no changes left.
+  /// Keeps the selection sensible after status changes: when the selected
+  /// file leaves its group (staged, unstaged, or discarded), move to its
+  /// neighbour in that group, so you can keep working down the list. Only when
+  /// the group is empty does the selection follow the file to the other one.
   private func reconcileChangeSelection(previous: WorkingTreeStatus) {
     guard let selection = selectedChange else {
       selectedChange = ChangeSelection.first(in: status)
@@ -122,17 +115,17 @@ extension RepositorySession {
       return
     }
     if group.contains(where: { $0.path == path }) { return }
+    if !group.isEmpty {
+      let oldGroup = selection.staged ? previous.staged : previous.unstaged
+      let index = oldGroup.firstIndex { $0.path == path } ?? 0
+      selectedChange = ChangeSelection(staged: selection.staged, path: group[min(index, group.count - 1)].path)
+      return
+    }
     let other = selection.staged ? status.unstaged : status.staged
     if other.contains(where: { $0.path == path }) {
       selectedChange = ChangeSelection(staged: !selection.staged, path: path)
-      return
-    }
-    let oldGroup = selection.staged ? previous.staged : previous.unstaged
-    let index = oldGroup.firstIndex { $0.path == path } ?? 0
-    if group.isEmpty {
-      selectedChange = ChangeSelection.first(in: status)
     } else {
-      selectedChange = ChangeSelection(staged: selection.staged, path: group[min(index, group.count - 1)].path)
+      selectedChange = ChangeSelection.first(in: status)
     }
   }
 

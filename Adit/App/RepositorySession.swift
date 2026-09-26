@@ -85,6 +85,8 @@ final class RepositorySession {
   /// without comparing them.
   private(set) var rowsVersion = 0
   private(set) var lineNumberDigits = 3
+  /// Changed lines selected in a working-tree diff, for line staging.
+  internal(set) var selectedLineRows: [DiffRowID] = []
   /// Hands keyboard jumps straight to the table, skipping a SwiftUI update.
   @ObservationIgnored let diffScroller = DiffScroller()
 
@@ -329,6 +331,9 @@ final class RepositorySession {
     case "c":
       tab = .changes
       commitFocusRequest += 1
+    case "s":
+      guard isPartialStagingAvailable else { return false }
+      stageAtCursor()
     default: return false
     }
     return true

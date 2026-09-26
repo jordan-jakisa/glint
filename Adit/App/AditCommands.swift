@@ -55,6 +55,7 @@ struct AditCommands: Commands {
         Divider()
 
         Button("Stage or Unstage File") { session?.toggleSelectedStaged() }
+        Button("Stage or Unstage Hunk or Lines") { session?.stageAtCursor() }
         Button("Stage All") { session?.stageAll() }
           .keyboardShortcut("s", modifiers: [.command, .option])
         Button("Unstage All") { session?.unstageAll() }

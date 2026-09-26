@@ -23,7 +23,10 @@ struct DiffPane: View {
             lineNumberDigits: session.lineNumberDigits, scroller: session.diffScroller,
             toggleCollapsed: session.toggleCollapsed,
             visibleRowsChanged: session.visibleRowsChanged,
-            didPaint: session.diffDidAppear)
+            didPaint: session.diffDidAppear,
+            partialAction: session.partialAction,
+            selectionChanged: session.lineSelectionChanged,
+            hunkAction: session.stageHunk)
         }
       }
     } else if session.tab == .changes {
@@ -46,7 +49,10 @@ struct DiffPane: View {
         commit: session.commits.first { $0.id == id },
         diff: diff, isLoading: session.isLoadingDiff)
     case .workingTree(let staged, let path):
-      WorkingTreeHeader(staged: staged, path: path, diff: diff, isLoading: session.isLoadingDiff) {
+      WorkingTreeHeader(
+        staged: staged, path: path, diff: diff, isLoading: session.isLoadingDiff,
+        selectedLines: session.selectedLineRows.count, stageLines: session.stageSelectedLines
+      ) {
         if let path {
           session.setStaged(path, !staged)
         } else if staged {
@@ -72,6 +78,8 @@ private struct WorkingTreeHeader: View {
   let path: String?
   let diff: Diff
   let isLoading: Bool
+  let selectedLines: Int
+  let stageLines: () -> Void
   let toggleStaged: () -> Void
 
   var body: some View {
@@ -93,6 +101,10 @@ private struct WorkingTreeHeader: View {
       Spacer(minLength: 12)
       if isLoading {
         ProgressView().controlSize(.small)
+      }
+      if selectedLines > 0 {
+        Button(staged ? "Unstage Lines" : "Stage Lines", action: stageLines)
+          .help("\(selectedLines) selected (S)")
       }
       Button(buttonTitle, action: toggleStaged)
         .help("Space")

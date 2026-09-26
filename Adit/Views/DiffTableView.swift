@@ -15,6 +15,11 @@ struct DiffTableView: NSViewRepresentable {
   let toggleCollapsed: (Int) -> Void
   let visibleRowsChanged: ([DiffRowID]) -> Void
   let didPaint: (DiffSource) -> Void
+  /// "Stage" or "Unstage" for working-tree diffs, where changed lines can be
+  /// selected and hunk headers carry an action. Nil for commits.
+  var partialAction: String? = nil
+  var selectionChanged: ([DiffRowID]) -> Void = { _ in }
+  var hunkAction: (DiffRowID) -> Void = { _ in }
 
   func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -24,7 +29,9 @@ struct DiffTableView: NSViewRepresentable {
     table.style = .plain
     table.intercellSpacing = .zero
     table.gridStyleMask = []
-    table.selectionHighlightStyle = .none
+    table.selectionHighlightStyle = .regular
+    table.allowsMultipleSelection = true
+    table.allowsEmptySelection = true
     table.usesAutomaticRowHeights = false
     table.floatsGroupRows = true
     table.backgroundColor = .textBackgroundColor
@@ -67,6 +74,9 @@ struct DiffTableView: NSViewRepresentable {
     private var toggleCollapsed: (Int) -> Void = { _ in }
     private var visibleRowsChanged: ([DiffRowID]) -> Void = { _ in }
     private var didPaint: (DiffSource) -> Void = { _ in }
+    private var partialAction: String?
+    private var selectionChanged: ([DiffRowID]) -> Void = { _ in }
+    private var hunkAction: (DiffRowID) -> Void = { _ in }
     private var observers: [NSObjectProtocol] = []
 
     func attach(table: NSTableView, scrollView: NSScrollView) {
@@ -90,15 +100,22 @@ struct DiffTableView: NSViewRepresentable {
       toggleCollapsed = view.toggleCollapsed
       visibleRowsChanged = view.visibleRowsChanged
       didPaint = view.didPaint
+      selectionChanged = view.selectionChanged
+      hunkAction = view.hunkAction
       guard let table else { return }
+      let actionChanged = view.partialAction != partialAction
+      partialAction = view.partialAction
 
-      if view.rowsVersion != version {
+      if view.rowsVersion != version || actionChanged {
         let isNewSource = view.source != source
         rows = view.rows
         version = view.rowsVersion
         source = view.source
         metrics = DiffMetrics(lineNumberDigits: view.lineNumberDigits)
         heightsWidth = -1
+        // Line selections refer to the old rows; after staging, the lines
+        // they pointed at are gone.
+        if !table.selectedRowIndexes.isEmpty { table.deselectAll(nil) }
         table.reloadData()
         if isNewSource {
           scroll(toY: 0)
@@ -145,7 +162,7 @@ struct DiffTableView: NSViewRepresentable {
       let cell =
         tableView.makeView(withIdentifier: identifier, owner: nil) as? DiffRowCell
         ?? DiffRowCell(identifier: identifier)
-      cell.configure(rows[row], metrics: metrics)
+      cell.configure(rows[row], metrics: metrics, hunkAction: partialAction.map { "\($0) Hunk" })
       return cell
     }
 
@@ -153,12 +170,36 @@ struct DiffTableView: NSViewRepresentable {
       PlainRowView()
     }
 
+    func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
+      guard partialAction != nil else { return false }
+      switch rows[row].content {
+      case .line(let line): return line.kind == .addition || line.kind == .deletion
+      case .split(let pair):
+        return pair.left?.kind == .deletion || pair.right?.kind == .addition
+      default: return false
+      }
+    }
+
+    func tableViewSelectionDidChange(_ notification: Notification) {
+      guard let table else { return }
+      selectionChanged(table.selectedRowIndexes.compactMap { rows.indices.contains($0) ? rows[$0].id : nil })
+    }
+
     @objc func clicked(_ sender: NSTableView) {
       let row = sender.clickedRow
-      guard rows.indices.contains(row), case .fileHeader(let file, _) = rows[row].content else {
-        return
+      guard rows.indices.contains(row) else { return }
+      switch rows[row].content {
+      case .fileHeader(let file, _):
+        toggleCollapsed(file.id)
+      case .hunkHeader where partialAction != nil:
+        // Only the action label at the right edge acts; the rest of the
+        // header is just a header.
+        guard let event = NSApp.currentEvent else { return }
+        let point = sender.convert(event.locationInWindow, from: nil)
+        if point.x > sender.bounds.width - DiffRowCell.hunkActionWidth { hunkAction(rows[row].id) }
+      default:
+        break
       }
-      toggleCollapsed(file.id)
     }
 
     // MARK: Scrolling
@@ -231,6 +272,14 @@ final class DiffScroller {
 private final class PlainRowView: NSTableRowView {
   override func drawBackground(in dirtyRect: NSRect) {}
   override func drawSelection(in dirtyRect: NSRect) {}
+
+  /// Cells draw their own selection tint; tell them when it changes.
+  override var isSelected: Bool {
+    didSet {
+      guard isSelected != oldValue else { return }
+      for case let cell as DiffRowCell in subviews { cell.isRowSelected = isSelected }
+    }
+  }
 }
 
 // MARK: - Metrics
