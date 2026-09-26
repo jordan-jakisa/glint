@@ -400,6 +400,7 @@ final class RepositorySession {
     repository = opened.repository
     info = opened.info
     status = opened.status
+    refreshCommitSize()
     commits = opened.commits
     sync = opened.sync
     branchBaseName = opened.branchBase
