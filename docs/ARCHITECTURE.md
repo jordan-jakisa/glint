@@ -6,7 +6,7 @@ committing are next (see `docs/plans/v0.1-git-panel.md`).
 
 ## The one constraint that shapes everything
 
-Adit exists because opening a git client to read a diff is too slow. Every
+Glint exists because opening a git client to read a diff is too slow. Every
 architectural choice below is subordinate to keeping the path from "I want to see
 my changes" to "I am looking at my changes" under about 100ms.
 
@@ -14,7 +14,7 @@ That rules out two things other tools do:
 
 1. **No shelling out to `git`.** Each `Process` spawn costs roughly 10-30ms before
    git does any work, and a commit list plus per-file diffs means dozens of calls.
-   Adit links libgit2 in-process instead.
+   Glint links libgit2 in-process instead.
 2. **No web view.** The diff is the hot path. It renders with native text layout.
 
 ## Layering
@@ -36,7 +36,7 @@ makes the views previewable and testable without a repository on disk.
 ## Git access
 
 **libgit2, vendored from source** (`Packages/Clibgit2`, see `VENDORED.md`), with
-Adit's own thin wrapper in `Git/`. libgit2 is the same library GitHub, GitKraken, and
+Glint's own thin wrapper in `Git/`. libgit2 is the same library GitHub, GitKraken, and
 Xcode's own source control use. It is C, in-process, and has no subprocess cost.
 
 Diff reading specifically uses libgit2's `git_diff` API with a configured

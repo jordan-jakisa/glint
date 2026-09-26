@@ -3,7 +3,31 @@
 Durable decisions with their evidence. Weigh changes against these. Do not
 re-litigate without new evidence.
 
-## Name: Adit (2026-09-26)
+## Name: Glint (2026-09-26, replaces Adit)
+
+Adit's acronym (AI Diff Inspection Tool) stopped fitting once the app grew into a
+full git panel: staging, commits, branches, push and pull, a terminal. AI is a
+small part of it. The goal became a short, easy name with character, like Zed or
+Ghostty.
+
+**Glint**: a quick flash of light, the one look you need to see what changed. It
+shares a root with "glance" (Middle English *glenten*, to gleam or look askance;
+etymonline), which gives the tagline "Every change, at a glance."
+
+- One syllable, spelled as it sounds. Easy-to-pronounce names are processed more
+  fluently and rated better (Alter & Oppenheimer 2006, PNAS). The short front
+  vowel reads as quick, light and small (Klink 2000, Marketing Letters).
+- Homebrew cask and formula both free. No git or diff tool uses the name; the
+  largest GitHub project called Glint has under 500 stars.
+- Rejected: Diffy (a 3.8k-star diff tool has it), Flick, Scout, Tuck, Blip,
+  Gleam, Snap (taken on Homebrew or by large projects), Spry (describes a feeling,
+  not the job), Tick, Nib, Twig, Sprig, Kite, Graft, Peek (weaker fit or clashes).
+
+The bundle id is `com.kerustudios.glint`. `LegacyMigration` copies Adit's
+settings on first launch, and `Keychain` copies a key saved under Adit's service
+the first time it's read.
+
+## Name: Adit (2026-09-26, replaced the same day)
 
 **A**I **D**iff **I**nspection **T**ool, and a real word: the horizontal entry
 tunnel into a mine, cut for access and inspection.

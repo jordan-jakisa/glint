@@ -1,24 +1,25 @@
 <p align="center">
-  <img src="docs/assets/icon.png" width="128" height="128" alt="Adit icon: a timber-framed mine entrance with diff lines inside">
+  <img src="docs/assets/icon.png" width="128" height="128" alt="Glint icon: a prompt whose cursor glows violet">
 </p>
 
-<h1 align="center">Adit</h1>
+<h1 align="center">Glint</h1>
 
-<p align="center"><strong>A way in to every change.</strong></p>
+<p align="center"><strong>Every change, at a glance.</strong></p>
 
-A lightweight, native macOS git panel: see your changes, stage, commit. With
-AI-written commit messages from free models.
+A fast, native macOS git panel: read the diff, stage exactly what you mean, and
+commit with a message that says why. With AI-written commit messages from free
+models.
 
-An *adit* is the horizontal tunnel miners cut to enter and inspect a seam. Adit is
-the way in to look at your changes. It also expands to **A**I **D**iff
-**I**nspection **T**ool.
+A *glint* is a quick flash of light: the one look you need to see what changed.
+Glint was called Adit until 2026-09-26; it brings your settings and keys over
+on first launch.
 
 ## Why this exists
 
 Reviewing a diff and writing a commit message means leaving whatever you are doing
 and opening a full git client. The existing macOS options (Tower, Fork, Sourcetree)
 are repository managers: they do branching, remotes, rebasing, stashing, and the
-diff is one panel among many. Adit does the two things you actually do dozens of
+diff is one panel among many. Glint does the two things you actually do dozens of
 times a day, and nothing else:
 
 1. Read the diff.
@@ -49,7 +50,7 @@ All of these can be changed in Settings > Shortcuts.
 | `c` | Write the commit message (Escape leaves it) |
 | `⌘↩` | Commit |
 | `⌥⌘G` | Write the commit message with AI |
-| `⌘T` / `⌥⌘T` | Terminal in Adit / in your terminal app |
+| `⌘T` / `⌥⌘T` | Terminal in Glint / in your terminal app |
 | `⇧⌘R`, `⌘1`–`⌘9` | Switch repository (in a folder of several) |
 | `⌘B` | Switch branch |
 | `⌥⌘F` / `⌥⌘P` / `⌥⇧⌘P` | Fetch / pull / push |
@@ -60,10 +61,10 @@ All of these can be changed in Settings > Shortcuts.
 ## Build
 
 ```bash
-xcodebuild -project Adit.xcodeproj -scheme Adit -configuration Debug build
+xcodebuild -project Glint.xcodeproj -scheme Glint -configuration Debug build
 ```
 
-Or open `Adit.xcodeproj` in Xcode and press Run. To build and install to
+Or open `Glint.xcodeproj` in Xcode and press Run. To build and install to
 `/Applications`, run `scripts/install.sh`; it signs with your Apple Development
 certificate if you have one, so macOS keeps Keychain permissions across updates. Requires Xcode 27 or later and
 macOS 15 or later. Signs ad-hoc, so no developer team is needed for local builds.
@@ -71,9 +72,9 @@ macOS 15 or later. Signs ad-hoc, so no developer team is needed for local builds
 ## Layout
 
 ```
-Adit.xcodeproj      Xcode project. Uses a synchronized root group, so files added
+Glint.xcodeproj      Xcode project. Uses a synchronized root group, so files added
                     on disk are picked up with no project-file edits.
-Adit/               All app source.
+Glint/               All app source.
 docs/               Architecture, decision log, and plans.
 ```
 

@@ -2,11 +2,11 @@
 
 Guidance for Claude Code working in this repository.
 
-Adit is a lightweight native macOS git panel: changes, diffs, staging (files,
+Glint is a lightweight native macOS git panel: changes, diffs, staging (files,
 hunks, lines), commits, branches, push/pull, a built-in terminal, folders of
 several repositories, and AI commit messages from free hosted models. SwiftUI,
 Swift 6 with complete strict concurrency, libgit2 vendored in `Packages/Clibgit2`,
-SwiftTerm for the terminal. Bundle id `com.kerustudios.adit`. v0.1 is feature
+SwiftTerm for the terminal. Bundle id `com.kerustudios.glint`. v0.1 is feature
 complete and heading into a polish pass; the task tracker is in
 `docs/plans/v0.1-git-panel.md`.
 
@@ -19,7 +19,7 @@ complete and heading into a polish pass; the task tracker is in
 
 ## The constraint
 
-Speed is the product. Adit exists because opening a git client to read a diff is too
+Speed is the product. Glint exists because opening a git client to read a diff is too
 slow. Before adding anything, ask whether it makes reading a diff or writing a
 commit message faster. If not, it does not belong. See the scope decision in
 `docs/DECISIONS.md`.
@@ -27,14 +27,14 @@ commit message faster. If not, it does not belong. See the scope decision in
 ## Commands
 
 ```bash
-xcodebuild -project Adit.xcodeproj -scheme Adit -configuration Debug build
-xcodebuild -project Adit.xcodeproj -scheme Adit test
+xcodebuild -project Glint.xcodeproj -scheme Glint -configuration Debug build
+xcodebuild -project Glint.xcodeproj -scheme Glint test
 ```
 
 ## Conventions
 
 - 2-space indentation.
-- The project uses a synchronized root group: files added under `Adit/` are picked
+- The project uses a synchronized root group: files added under `Glint/` are picked
   up automatically. Do not hand-edit `project.pbxproj` to add sources.
 - `Views/` never imports `Git/`. libgit2 types are converted to Sendable value
   types at the git boundary.

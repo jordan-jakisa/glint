@@ -1,7 +1,7 @@
 # Premium polish: the whole app
 
 - **Date:** 2026-09-26
-- **Scope:** every screen of Adit on macOS (the only platform it ships on)
+- **Scope:** every screen of Glint on macOS (the only platform it ships on)
 - **Description:** audit against the nine premium-polish criteria, then a
   ranked list of changes
 - **Problem:** v0.1 is feature complete, but a handful of broken promises
@@ -66,7 +66,7 @@ dark.
    - Conflicts: "Fix the files marked ! and stage them, then commit."
    - Lock: the same copy as `GitRepository.swift:218`.
    - Offline: "You look offline. Connect and try again."
-   - libgit2 errors: Adit's own context message first.
+   - libgit2 errors: Glint's own context message first.
    - Alerts are titled by what failed ("Couldn't push"). AI setup hints get
      an "Open Settings" button and aren't called failures.
    - Research: NN/g error messages (visible, precise, constructive).
