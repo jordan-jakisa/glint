@@ -450,3 +450,42 @@ import Testing
     #expect(Set(diff.files.map(\.path)) == ["feature.txt", "shared.txt"])
   }
 }
+
+@Suite struct HistogramDiffTests {
+  /// Diffs stay correct with the histogram flag on: a function inserted
+  /// between two others shows as pure additions. (Myers often gets this one
+  /// right too; this guards the patched flag, not the algorithm's quality.)
+  @Test func insertedFunctionShowsAsPureAdditions() async throws {
+    let fixture = try FixtureRepository()
+    let before = """
+      func a() {
+        one()
+      }
+
+      func c() {
+        three()
+      }
+
+      """
+    let after = """
+      func a() {
+        one()
+      }
+
+      func b() {
+        two()
+      }
+
+      func c() {
+        three()
+      }
+
+      """
+    try fixture.commit("Base", files: ["f.swift": before])
+    try fixture.write("f.swift", after)
+    let diff = try await GitRepository.open(at: fixture.url).workingTreeDiff(staged: false, path: "f.swift")
+    let lines = diff.files.flatMap(\.hunks).flatMap(\.lines)
+    #expect(lines.filter { $0.kind == .deletion }.isEmpty)
+    #expect(lines.filter { $0.kind == .addition }.count == 4)
+  }
+}

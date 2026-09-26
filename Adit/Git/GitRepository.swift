@@ -531,6 +531,10 @@ actor GitRepository {
     var options = git_diff_options()
     git_diff_options_init(&options, UInt32(GIT_DIFF_OPTIONS_VERSION))
     options.context_lines = 3
+    // Histogram gave the better diff for 62.6% of changed code files, against
+    // 16.9% for the default Myers (Nugroho et al., EMSE 2020). libgit2 needs a
+    // local patch for it; see Packages/Clibgit2/VENDORED.md.
+    options.flags |= GIT_DIFF_HISTOGRAM.rawValue
     // Rename and copy detection (git_diff_find_similar) is deliberately not
     // run: it is the expensive part of diffing. Renames show as delete + add.
     return options

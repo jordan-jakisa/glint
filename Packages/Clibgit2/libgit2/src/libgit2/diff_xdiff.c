@@ -251,6 +251,9 @@ void git_xdiff_init(git_xdiff_output *xo, const git_diff_options *opts)
 
 	if (flags & GIT_DIFF_PATIENCE)
 		xo->params.flags |= XDF_PATIENCE_DIFF;
+	/* Adit: local patch; see VENDORED.md */
+	if (flags & GIT_DIFF_HISTOGRAM)
+		xo->params.flags |= XDF_HISTOGRAM_DIFF;
 	if (flags & GIT_DIFF_MINIMAL)
 		xo->params.flags |= XDF_NEED_MINIMAL;
 

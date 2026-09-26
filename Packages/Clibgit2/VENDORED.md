@@ -28,7 +28,12 @@ Removed from `src/util/hash/`: every backend except CommonCrypto. Removed from
 - `include/git2/experimental.h`: hand-written, no experimental features.
 - `include/module.modulemap`: exposes `git2.h` to Swift as `Clibgit2`.
 
-The C sources themselves are unmodified. `Package.swift` compiles them with
+- `include/git2/diff.h` and `src/libgit2/diff_xdiff.c`: a `GIT_DIFF_HISTOGRAM`
+  flag (bit 31) that turns on xdiff's histogram algorithm, which libgit2
+  bundles but doesn't expose. Marked "Adit: local patch" in both files.
+  Reapply on upgrade, or drop it if upstream adds the flag.
+
+Apart from that patch, the C sources are unmodified. `Package.swift` compiles them with
 `-fno-modules`, because with Clang modules on, libgit2's own `struct entry`
 collides with the one in `<search.h>`.
 
