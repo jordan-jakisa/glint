@@ -11,14 +11,12 @@ struct DiffPane: View {
         description: Text(error))
     } else if let diff = session.diff {
       VStack(spacing: 0) {
-        CommitHeader(
-          commit: session.commits.first { $0.id == diff.source.commitID },
-          diff: diff, isLoading: session.isLoadingDiff)
+        header(for: diff)
         Divider()
         if diff.files.isEmpty {
           ContentUnavailableView(
             "No changes", systemImage: "doc",
-            description: Text("This commit doesn't change any files."))
+            description: Text(emptyDescription(for: diff.source)))
         } else {
           DiffTableView(
             rows: session.rows, rowsVersion: session.rowsVersion, source: diff.source,
@@ -28,6 +26,10 @@ struct DiffPane: View {
             didPaint: session.diffDidAppear)
         }
       }
+    } else if session.tab == .changes {
+      ContentUnavailableView(
+        "No changes to commit", systemImage: "checkmark.circle",
+        description: Text("Your working tree matches the last commit."))
     } else if session.selectedCommitID == nil {
       ContentUnavailableView("Pick a commit", systemImage: "list.bullet")
     } else {
@@ -35,6 +37,57 @@ struct DiffPane: View {
       // nothing rather than a spinner that would only flicker.
       Color.clear
     }
+  }
+
+  @ViewBuilder private func header(for diff: Diff) -> some View {
+    switch diff.source {
+    case .commit(let id):
+      CommitHeader(
+        commit: session.commits.first { $0.id == id },
+        diff: diff, isLoading: session.isLoadingDiff)
+    case .workingTree(let staged, let path):
+      WorkingTreeHeader(staged: staged, path: path, diff: diff, isLoading: session.isLoadingDiff)
+    }
+  }
+
+  private func emptyDescription(for source: DiffSource) -> String {
+    switch source {
+    case .commit: "This commit doesn't change any files."
+    case .workingTree(true, _): "Nothing staged here."
+    case .workingTree(false, _): "Nothing changed here."
+    }
+  }
+}
+
+private struct WorkingTreeHeader: View {
+  let staged: Bool
+  let path: String?
+  let diff: Diff
+  let isLoading: Bool
+
+  var body: some View {
+    HStack(alignment: .firstTextBaseline, spacing: 12) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(path ?? (staged ? "All staged changes" : "All unstaged changes"))
+          .font(.headline)
+          .lineLimit(1)
+          .truncationMode(.head)
+          .textSelection(.enabled)
+        HStack(spacing: 12) {
+          Text(staged ? "Staged" : "Not staged")
+          Text("+\(diff.additions)").foregroundStyle(.green)
+          Text("-\(diff.deletions)").foregroundStyle(.red)
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+      }
+      Spacer(minLength: 12)
+      if isLoading {
+        ProgressView().controlSize(.small)
+      }
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 10)
   }
 }
 

@@ -33,9 +33,9 @@ struct AditCommands: Commands {
 
     CommandMenu("Go") {
       Group {
-        Button("Next Commit") { session?.selectNextCommit() }
+        Button("Next Item") { session?.selectNextItem() }
           .keyboardShortcut("j", modifiers: [])
-        Button("Previous Commit") { session?.selectPreviousCommit() }
+        Button("Previous Item") { session?.selectPreviousItem() }
           .keyboardShortcut("k", modifiers: [])
 
         Divider()

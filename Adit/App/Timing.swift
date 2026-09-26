@@ -43,6 +43,6 @@ enum Timing {
     guard !reportedLaunch, let ms = millisecondsSinceLaunch() else { return }
     reportedLaunch = true
     let verdict = ms <= 300 ? "ok" : "OVER BUDGET"
-    log.info("launch to commit list: \(ms, format: .fixed(precision: 1)) ms (budget 300 ms, \(verdict, privacy: .public))")
+    log.info("launch to first list: \(ms, format: .fixed(precision: 1)) ms (budget 300 ms, \(verdict, privacy: .public))")
   }
 }

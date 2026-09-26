@@ -1,11 +1,12 @@
 import AppKit
 import Observation
 
-/// State for one window: the open repository, its commit list, the selected
-/// commit's diff, and where the reader is within that diff.
+/// State for one window: the open repository, its working-tree changes and
+/// history, the diff on screen, and where the reader is within it.
 ///
 /// This is the only type that talks to `GitRepository`. Views read `Models/`
-/// values from here and call its methods; they never see the git layer.
+/// values from here and call its methods; they never see the git layer. The
+/// methods live in extensions by area: `+Changes`, `+History`, `+Navigation`.
 @MainActor
 @Observable
 final class RepositorySession {
@@ -16,32 +17,43 @@ final class RepositorySession {
     case ready
   }
 
+  enum Tab: String {
+    case changes, history
+  }
+
   private(set) var phase: Phase = .closed(message: nil)
-  private(set) var info: RepositoryInfo?
-  private(set) var commits: [Commit] = []
-  private(set) var hasMoreCommits = false
-  /// Shown as an alert. Set when opening a newly picked folder fails while
-  /// another repository stays open.
+  internal(set) var info: RepositoryInfo?
+  /// Shown as an alert: failures of actions the user asked for.
   var alertMessage: String?
 
+  /// Each tab keeps its own selection; switching tabs shows that tab's diff.
+  var tab: Tab = .changes {
+    didSet { if tab != oldValue { showSelectedDiff() } }
+  }
+
+  // MARK: Changes tab
+
+  internal(set) var status = WorkingTreeStatus.clean
+  var selectedChange: ChangeSelection? {
+    didSet { if tab == .changes, selectedChange != oldValue { showSelectedDiff() } }
+  }
+
+  // MARK: History tab
+
+  internal(set) var commits: [Commit] = []
+  internal(set) var hasMoreCommits = false
   var selectedCommitID: String? {
-    didSet {
-      guard selectedCommitID != oldValue else { return }
-      showDiff(for: selectedCommitID)
-    }
+    didSet { if tab == .history, selectedCommitID != oldValue { showSelectedDiff() } }
   }
 
-  var selectedCommit: Commit? {
-    guard let selectedCommitID else { return nil }
-    return commits.first { $0.id == selectedCommitID }
-  }
+  // MARK: Diff on screen
 
-  private(set) var diff: Diff? {
+  internal(set) var diff: Diff? {
     didSet { rebuildRows() }
   }
-  private(set) var diffError: String?
-  private(set) var isLoadingDiff = false
-  private(set) var collapsedFiles: Set<Int> = [] {
+  internal(set) var diffError: String?
+  internal(set) var isLoadingDiff = false
+  internal(set) var collapsedFiles: Set<Int> = [] {
     didSet { rebuildRows() }
   }
 
@@ -54,8 +66,8 @@ final class RepositorySession {
     }
   }
 
-  /// The current diff, flattened for the lazy stack. Rebuilt only when the
-  /// diff, layout, or collapsed files change, never while scrolling.
+  /// The current diff, flattened for the table. Rebuilt only when the diff,
+  /// layout, or collapsed files change, never while scrolling.
   private(set) var rows: [DiffRow] = []
   /// Bumped with every rebuild, so the table can tell new rows from old
   /// without comparing them.
@@ -64,21 +76,23 @@ final class RepositorySession {
   /// Hands keyboard jumps straight to the table, skipping a SwiftUI update.
   @ObservationIgnored let diffScroller = DiffScroller()
 
-  // MARK: - Private state
+  // MARK: Internal state for the extensions
 
-  private var access = RepositoryAccess()
-  @ObservationIgnored private var repository: GitRepository?
-  @ObservationIgnored private var isLoadingMore = false
-  @ObservationIgnored private var diffTask: Task<Void, Never>?
-  @ObservationIgnored private var prefetchTask: Task<Void, Never>?
-  @ObservationIgnored private var cache = DiffCache(capacity: 32)
-  @ObservationIgnored private var diffRequestedAt: ContinuousClock.Instant?
+  @ObservationIgnored var repository: GitRepository?
+  @ObservationIgnored var access = RepositoryAccess()
+  @ObservationIgnored var isLoadingMore = false
+  @ObservationIgnored var diffTask: Task<Void, Never>?
+  @ObservationIgnored var prefetchTask: Task<Void, Never>?
+  @ObservationIgnored var statusTask: Task<Void, Never>?
+  @ObservationIgnored var statusRefreshQueued = false
+  @ObservationIgnored var cache = DiffCache(capacity: 32)
+  @ObservationIgnored var diffRequestedAt: ContinuousClock.Instant?
   /// The reader's position in the diff: the top-most visible row, or the last
   /// place a keyboard jump landed. Not observed: it changes on every scroll.
-  @ObservationIgnored private var cursor = DiffRowID.top
+  @ObservationIgnored var cursor = DiffRowID.top
 
-  private nonisolated static let firstPageSize = 100
-  private static let pageSize = 200
+  nonisolated static let firstPageSize = 100
+  static let pageSize = 200
   private static let layoutKey = "diffLayout"
 
   init() {
@@ -99,23 +113,29 @@ final class RepositorySession {
   // MARK: - Opening
 
   /// Everything the first frame needs, loaded in one go off the main actor.
-  private struct Opened: Sendable {
+  struct Opened: Sendable {
     let repository: GitRepository
     let info: RepositoryInfo
+    let status: WorkingTreeStatus
     let commits: [Commit]
+    let firstChange: ChangeSelection?
     let firstDiff: Diff?
   }
 
   @concurrent
-  private nonisolated static func load(_ url: URL) async throws -> Opened {
+  nonisolated static func load(_ url: URL) async throws -> Opened {
     let repository = try await GitRepository.open(at: url)
     let info = await repository.info()
+    let status = try await repository.status()
     let commits = try await repository.firstCommits(limit: firstPageSize)
+    let firstChange = ChangeSelection.first(in: status)
     var firstDiff: Diff?
-    if let head = commits.first {
-      firstDiff = try? await repository.diff(commitID: head.id)
+    if let firstChange {
+      firstDiff = try? await repository.workingTreeDiff(staged: firstChange.staged, path: firstChange.path)
     }
-    return Opened(repository: repository, info: info, commits: commits, firstDiff: firstDiff)
+    return Opened(
+      repository: repository, info: info, status: status, commits: commits,
+      firstChange: firstChange, firstDiff: firstDiff)
   }
 
   /// The last repository, already opening. Started from `AditApp.init` so git
@@ -124,7 +144,11 @@ final class RepositorySession {
 
   static func prewarm() {
     let access = RepositoryAccess()
-    guard let url = access.restore() else { return }
+    // `-AditRepository <path>` opens a specific repository, for benchmarks.
+    let override = UserDefaults.standard.string(forKey: "AditRepository").map {
+      URL(fileURLWithPath: $0)
+    }
+    guard let url = override ?? access.restore() else { return }
     prewarmed = (access, url, Task { try await load(url) })
   }
 
@@ -169,83 +193,67 @@ final class RepositorySession {
   private func install(_ opened: Opened) {
     diffTask?.cancel()
     prefetchTask?.cancel()
+    statusTask?.cancel()
     repository = opened.repository
     info = opened.info
+    status = opened.status
     commits = opened.commits
     hasMoreCommits = opened.commits.count == Self.firstPageSize
     cache = DiffCache(capacity: 32)
-    if let firstDiff = opened.firstDiff, let id = firstDiff.source.commitID { cache[id] = firstDiff }
-    diff = nil
     diffError = nil
     phase = .ready
+
+    // Show the preloaded diff directly, so it paints with the window.
+    tab = .changes
+    selectedChange = opened.firstChange
     selectedCommitID = opened.commits.first?.id
+    diffTask?.cancel()
+    diff = opened.firstDiff
+    isLoadingDiff = false
     // The first diff paints with the window; the launch budget covers it.
     diffRequestedAt = nil
     if Self.isBenchmarking { Task { await runBenchmark() } }
   }
 
-  /// Rereads HEAD, and the first page of history if HEAD moved. Cheap enough to
-  /// run every time the app comes forward, so new commits show up unasked.
+  /// Rereads everything that can change behind Adit's back: HEAD, history,
+  /// and the working tree. Cheap enough to run whenever the app comes forward.
   func refresh() {
-    guard let repository, phase == .ready, !isLoadingMore else { return }
-    Task {
-      let info = await repository.info()
-      let head = await repository.headCommitID()
-      guard info != self.info || head != commits.first?.id else { return }
-      guard let fresh = try? await repository.firstCommits(limit: Self.firstPageSize) else { return }
-      self.info = info
-      commits = fresh
-      hasMoreCommits = fresh.count == Self.firstPageSize
-      if let selectedCommitID, fresh.contains(where: { $0.id == selectedCommitID }) { return }
-      selectedCommitID = fresh.first?.id
-    }
-  }
-
-  // MARK: - Commit list
-
-  func loadMoreCommits() {
-    guard let repository, hasMoreCommits, !isLoadingMore else { return }
-    isLoadingMore = true
-    Task {
-      defer { isLoadingMore = false }
-      guard let more = try? await repository.moreCommits(limit: Self.pageSize) else { return }
-      commits.append(contentsOf: more)
-      hasMoreCommits = more.count == Self.pageSize
-    }
-  }
-
-  func selectNextCommit() { moveSelection(by: 1) }
-  func selectPreviousCommit() { moveSelection(by: -1) }
-
-  private func moveSelection(by offset: Int) {
-    guard !commits.isEmpty else { return }
-    guard let current = selectedCommitID, let index = commits.firstIndex(where: { $0.id == current })
-    else {
-      selectedCommitID = commits.first?.id
-      return
-    }
-    let next = min(max(index + offset, 0), commits.count - 1)
-    selectedCommitID = commits[next].id
-    // Page in more history before the reader reaches the end of it.
-    if commits.count - next < 20 { loadMoreCommits() }
+    guard phase == .ready else { return }
+    refreshHistory()
+    refreshWorkingTree()
   }
 
   // MARK: - Diff loading
 
-  private func showDiff(for commitID: String?) {
+  /// The diff the selected tab wants on screen.
+  var selectedSource: DiffSource? {
+    switch tab {
+    case .changes: selectedChange?.source
+    case .history: selectedCommitID.map(DiffSource.commit)
+    }
+  }
+
+  /// Loads the selected tab's diff. With `inPlace`, the same source is being
+  /// reloaded (the file changed on disk): keep scroll position and collapsed
+  /// files instead of starting over at the top.
+  func showSelectedDiff(inPlace: Bool = false) {
     diffTask?.cancel()
-    cursor = .top
-    if !collapsedFiles.isEmpty { collapsedFiles = [] }
+    let source = selectedSource
+    if !inPlace {
+      cursor = .top
+      if !collapsedFiles.isEmpty { collapsedFiles = [] }
+      diffRequestedAt = .now
+    }
     diffError = nil
-    diffRequestedAt = .now
-    guard let commitID, let repository else {
+    guard let source, let repository else {
       diff = nil
+      isLoadingDiff = false
       return
     }
-    if let cached = cache[commitID] {
+    if case .commit(let id) = source, let cached = cache[id] {
       diff = cached
       isLoadingDiff = false
-      prefetch(after: commitID)
+      prefetch(after: id)
       return
     }
     // Keep the previous diff on screen until the new one is ready. Most loads
@@ -253,34 +261,25 @@ final class RepositorySession {
     isLoadingDiff = true
     diffTask = Task {
       do {
-        let loaded = try await repository.diff(commitID: commitID)
-        cache[commitID] = loaded
-        guard !Task.isCancelled, selectedCommitID == commitID else { return }
+        let loaded: Diff
+        switch source {
+        case .commit(let id):
+          loaded = try await repository.diff(commitID: id)
+          cache[id] = loaded
+        case .workingTree(let staged, let path):
+          loaded = try await repository.workingTreeDiff(staged: staged, path: path)
+        }
+        guard !Task.isCancelled, selectedSource == source else { return }
         diff = loaded
         isLoadingDiff = false
-        prefetch(after: commitID)
+        if case .commit(let id) = source { prefetch(after: id) }
       } catch is CancellationError {
       } catch {
-        guard selectedCommitID == commitID else { return }
+        guard selectedSource == source else { return }
         diff = nil
         diffError = "\(error)"
         isLoadingDiff = false
       }
-    }
-  }
-
-  /// Builds the next commit's diff in the background, so `j` usually finds it
-  /// already cached.
-  private func prefetch(after commitID: String) {
-    prefetchTask?.cancel()
-    guard let repository, let index = commits.firstIndex(where: { $0.id == commitID }),
-      index + 1 < commits.count
-    else { return }
-    let next = commits[index + 1].id
-    guard cache[next] == nil else { return }
-    prefetchTask = Task(priority: .utility) {
-      guard let loaded = try? await repository.diff(commitID: next) else { return }
-      cache[next] = loaded
     }
   }
 
@@ -296,65 +295,42 @@ final class RepositorySession {
     }
   }
 
-  // MARK: - Diff navigation
-
-  func toggleLayout() {
-    layout = layout == .unified ? .split : .unified
+  /// Moves the selection in whichever tab is showing.
+  func selectNextItem() {
+    switch tab {
+    case .changes: moveChangeSelection(by: 1)
+    case .history: moveCommitSelection(by: 1)
+    }
   }
 
-  func toggleCollapsed(_ fileID: Int) {
-    if collapsedFiles.remove(fileID) == nil { collapsedFiles.insert(fileID) }
-  }
-
-  func toggleCurrentFileCollapsed() {
-    guard diff?.files.isEmpty == false else { return }
-    toggleCollapsed(cursor.file)
-    scroll(to: .file(cursor.file))
-  }
-
-  /// Called as the diff scrolls, with the rows now on screen.
-  func visibleRowsChanged(_ rows: [DiffRowID]) {
-    if let top = rows.min() { cursor = top }
-  }
-
-  func nextFile() {
-    guard let files = diff?.files, cursor.file + 1 < files.count else { return }
-    scroll(to: .file(cursor.file + 1))
-  }
-
-  func previousFile() {
-    guard let files = diff?.files, !files.isEmpty else { return }
-    // Inside a file, go back to its header first, like previous-hunk does.
-    let target = cursor.hunk >= 0 ? cursor.file : max(cursor.file - 1, 0)
-    scroll(to: .file(target))
-  }
-
-  func nextHunk() {
-    guard let target = hunkAnchors().first(where: { $0 > cursor }) else { return }
-    collapsedFiles.remove(target.file)
-    scroll(to: target)
-  }
-
-  func previousHunk() {
-    guard let target = hunkAnchors().last(where: { $0 < cursor }) else { return }
-    collapsedFiles.remove(target.file)
-    scroll(to: target)
-  }
-
-  private func hunkAnchors() -> [DiffRowID] {
-    guard let files = diff?.files else { return [] }
-    return files.flatMap { file in file.hunks.map { DiffRowID.hunk(file.id, $0.id) } }
-  }
-
-  private func scroll(to target: DiffRowID) {
-    cursor = target
-    diffScroller.scroll(to: target, rowsVersion: rowsVersion)
+  func selectPreviousItem() {
+    switch tab {
+    case .changes: moveChangeSelection(by: -1)
+    case .history: moveCommitSelection(by: -1)
+    }
   }
 }
 
-/// Recently built diffs, so moving back and forth between commits is instant.
-/// Commits are immutable, so an entry never goes stale.
-private struct DiffCache {
+/// Which working-tree diff the Changes tab has selected: one file, or every
+/// file in a group when `path` is nil.
+struct ChangeSelection: Hashable, Sendable {
+  let staged: Bool
+  let path: String?
+
+  var source: DiffSource { .workingTree(staged: staged, path: path) }
+
+  /// Where the Changes tab starts: the first unstaged file, since that's what
+  /// you review next, else the first staged one.
+  static func first(in status: WorkingTreeStatus) -> ChangeSelection? {
+    if let file = status.unstaged.first { return ChangeSelection(staged: false, path: file.path) }
+    if let file = status.staged.first { return ChangeSelection(staged: true, path: file.path) }
+    return nil
+  }
+}
+
+/// Recently built commit diffs, so moving back and forth through history is
+/// instant. Commits are immutable, so an entry never goes stale.
+struct DiffCache {
   let capacity: Int
   private var entries: [String: Diff] = [:]
   private var order: [String] = []

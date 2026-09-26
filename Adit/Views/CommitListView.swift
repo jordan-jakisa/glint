@@ -26,9 +26,6 @@ struct CommitListView: View {
           description: Text("Commit something and it shows up here."))
       }
     }
-    .onAppear {
-      if !session.commits.isEmpty { Timing.reportLaunchIfNeeded() }
-    }
   }
 }
 

@@ -5,7 +5,8 @@ import Foundation
 ///
 ///     open Adit.app --args -AditBenchmark YES
 ///
-/// and read the results with the `log stream` command in `Timing`.
+/// and read the results with the `log stream` command in `Timing`. Add
+/// `-AditRepository <path>` to benchmark a specific repository.
 extension RepositorySession {
   static var isBenchmarking: Bool {
     UserDefaults.standard.bool(forKey: "AditBenchmark")
@@ -16,13 +17,20 @@ extension RepositorySession {
     try? await Task.sleep(for: .seconds(1))
     Timing.log.info("benchmark: start")
 
+    for _ in 0..<3 {
+      refreshWorkingTree()
+      try? await Task.sleep(for: .milliseconds(300))
+    }
+    tab = .history
+    try? await Task.sleep(for: .milliseconds(300))
+
     for _ in 0..<15 {
-      await measure("next commit, main thread", budget: 50) { selectNextCommit() }
+      await measure("next commit, main thread", budget: 50) { selectNextItem() }
       try? await Task.sleep(for: .milliseconds(100))
     }
     // Back up through commits that are now cached.
     for _ in 0..<5 {
-      await measure("previous commit, main thread", budget: 50) { selectPreviousCommit() }
+      await measure("previous commit, main thread", budget: 50) { selectPreviousItem() }
       try? await Task.sleep(for: .milliseconds(100))
     }
     // Back to the newest commit, which is the large one in the bench repo.

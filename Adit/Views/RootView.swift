@@ -32,7 +32,7 @@ struct RootView: View {
       Color.clear
     case .ready:
       NavigationSplitView {
-        CommitListView(session: session)
+        SidebarView(session: session)
           .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 480)
       } detail: {
         DiffPane(session: session)
