@@ -31,8 +31,10 @@ final class RepositorySession {
   internal(set) var repositorySummaries: [String: RepositorySummary] = [:]
   var isRepositoryPickerShown = false
   var isProjectSwitcherShown = false
-  /// The terminal panel under the diff (⌃`).
-  var isTerminalShown = false
+  /// The terminal panel under the diff. Remembered between launches.
+  var isTerminalShown = UserDefaults.standard.bool(forKey: "terminalShown") {
+    didSet { UserDefaults.standard.set(isTerminalShown, forKey: "terminalShown") }
+  }
   /// Lists the other repositories' changes under the active one's.
   var showsAllRepositories = UserDefaults.standard.bool(forKey: "showsAllRepositories") {
     didSet { UserDefaults.standard.set(showsAllRepositories, forKey: "showsAllRepositories") }

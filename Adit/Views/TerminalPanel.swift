@@ -102,6 +102,8 @@ struct TerminalPanel: NSViewRepresentable {
       terminal.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
       terminal.bottomAnchor.constraint(equalTo: container.bottomAnchor),
     ])
-    DispatchQueue.main.async { terminal.window?.makeFirstResponder(terminal) }
+    // Only when the panel opens: switching repository with it open re-parents
+    // the terminal, and taking focus then would swallow j and k.
+    if focus { DispatchQueue.main.async { terminal.window?.makeFirstResponder(terminal) } }
   }
 }

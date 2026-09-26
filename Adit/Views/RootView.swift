@@ -64,19 +64,8 @@ struct RootView: View {
         SidebarView(session: session)
           .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 480)
       } detail: {
-        Group {
-          if session.isTerminalShown, let folder = session.repositoryURL {
-            VSplitView {
-              DiffPane(session: session)
-                .frame(minHeight: 160)
-              TerminalPanel(folder: folder, store: terminals)
-                .frame(minHeight: 100, idealHeight: 240)
-            }
-          } else {
-            DiffPane(session: session)
-          }
-        }
-        .modifier(DiffToolbar(session: session))
+        DiffAndTerminal(session: session, terminals: terminals)
+          .modifier(DiffToolbar(session: session))
       }
       .toolbar(removing: .title)
     }
@@ -132,6 +121,54 @@ private struct WelcomeView: View {
     }
     .padding(40)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
+/// The diff, with the terminal under it when it's shown. The diff keeps one
+/// place in the view tree, so showing or hiding the terminal never rebuilds it
+/// and your scroll position stays put.
+private struct DiffAndTerminal: View {
+  let session: RepositorySession
+  let terminals: TerminalStore
+  @AppStorage("terminalHeight") private var terminalHeight = 240.0
+  @State private var dragStart: Double?
+
+  var body: some View {
+    GeometryReader { geometry in
+      VStack(spacing: 0) {
+        DiffPane(session: session)
+          .frame(maxHeight: .infinity)
+        if session.isTerminalShown, let folder = session.repositoryURL {
+          divider(in: geometry.size.height)
+          TerminalPanel(folder: folder, store: terminals)
+            .frame(height: clamped(terminalHeight, in: geometry.size.height))
+        }
+      }
+    }
+  }
+
+  /// Drag to resize. The height is remembered between launches.
+  private func divider(in total: Double) -> some View {
+    Divider()
+      .padding(.vertical, 3)
+      .contentShape(Rectangle())
+      .padding(.vertical, -3)
+      .onHover { inside in
+        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
+      }
+      .gesture(
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+          .onChanged { drag in
+            let start = dragStart ?? clamped(terminalHeight, in: total)
+            dragStart = start
+            terminalHeight = clamped(start - drag.translation.height, in: total)
+          }
+          .onEnded { _ in dragStart = nil })
+  }
+
+  /// At least 100 pt of terminal, and at least 160 pt of diff above it.
+  private func clamped(_ height: Double, in total: Double) -> Double {
+    max(100, min(height, total - 160))
   }
 }
 
