@@ -185,3 +185,17 @@ dark.
 Tier 1 in listed order, one commit each. Then Tiers 2, 3 and 4. Screenshots
 in light and dark are retaken at the end, and the scorecard is re-scored
 here.
+
+## Result (re-scored after the work)
+
+| # | Criterion | Before | After | What changed |
+|---|---|---|---|---|
+| 1 | Anticipates needs | 1 | 2 | Focus follows the keys, drafts survive a quit, terminal state and History are kept, pickers work from the keyboard |
+| 2 | Intentional transitions | 1 | 2 | Delayed spinners, no layout jumps, "Opening…" for slow opens |
+| 3 | Delight | 1 | 2 | "Committed a1b2c3d", "Pushed 3", "All caught up" |
+| 4 | Knows when not to animate | 2 | 2 | Unchanged: nothing animates on repeated paths |
+| 5 | Invisible consistency | 1 | 2 | One badge, one stats view, one name per command, type and grid fixes, tooltips follow your keys |
+| 6 | Empty states | 1 | 2 | Every empty state says why and what to do next |
+| 7 | Rewards discovery | 1 | 2 | The empty diff pane teaches J, Space and S; Stage Hunk shows its key |
+| 8 | Prescriptive errors | 1 | 2 | UserAlert: plain advice, raw text behind Copy Details |
+| 9 | Premium performance | 1 | 1 | Slow opens show progress; the five over-budget measurements remain their own track |
