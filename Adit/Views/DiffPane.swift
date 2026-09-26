@@ -46,7 +46,15 @@ struct DiffPane: View {
         commit: session.commits.first { $0.id == id },
         diff: diff, isLoading: session.isLoadingDiff)
     case .workingTree(let staged, let path):
-      WorkingTreeHeader(staged: staged, path: path, diff: diff, isLoading: session.isLoadingDiff)
+      WorkingTreeHeader(staged: staged, path: path, diff: diff, isLoading: session.isLoadingDiff) {
+        if let path {
+          session.setStaged(path, !staged)
+        } else if staged {
+          session.unstageAll()
+        } else {
+          session.stageAll()
+        }
+      }
     }
   }
 
@@ -64,9 +72,10 @@ private struct WorkingTreeHeader: View {
   let path: String?
   let diff: Diff
   let isLoading: Bool
+  let toggleStaged: () -> Void
 
   var body: some View {
-    HStack(alignment: .firstTextBaseline, spacing: 12) {
+    HStack(alignment: .center, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
         Text(path ?? (staged ? "All staged changes" : "All unstaged changes"))
           .font(.headline)
@@ -85,9 +94,20 @@ private struct WorkingTreeHeader: View {
       if isLoading {
         ProgressView().controlSize(.small)
       }
+      Button(buttonTitle, action: toggleStaged)
+        .help("Space")
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 10)
+  }
+
+  private var buttonTitle: String {
+    switch (staged, path) {
+    case (true, nil): "Unstage All"
+    case (false, nil): "Stage All"
+    case (true, _): "Unstage File"
+    case (false, _): "Stage File"
+    }
   }
 }
 

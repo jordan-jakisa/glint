@@ -118,3 +118,25 @@ import Testing
     #expect(RepositoryWatcher.classify("/repo/.git/logs/HEAD", root: root) == .ignored)
   }
 }
+
+@Suite struct OptimisticStatusTests {
+  @Test func stagingMovesAFileAndRenamesItsKind() {
+    var status = WorkingTreeStatus(
+      staged: [ChangedFile(path: "b", kind: .modified)],
+      unstaged: [ChangedFile(path: "a", kind: .untracked), ChangedFile(path: "c", kind: .deleted)])
+    status.markStaged("a")
+    #expect(status.staged == [ChangedFile(path: "a", kind: .added), ChangedFile(path: "b", kind: .modified)])
+    #expect(status.unstaged == [ChangedFile(path: "c", kind: .deleted)])
+    status.markUnstaged("a")
+    #expect(status.unstaged.first == ChangedFile(path: "a", kind: .untracked))
+  }
+
+  @Test func partlyStagedFileCollapsesIntoOneGroup() {
+    var status = WorkingTreeStatus(
+      staged: [ChangedFile(path: "a", kind: .modified)],
+      unstaged: [ChangedFile(path: "a", kind: .modified)])
+    status.markStaged("a")
+    #expect(status.staged.map(\.path) == ["a"])
+    #expect(status.unstaged.isEmpty)
+  }
+}

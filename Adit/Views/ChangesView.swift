@@ -6,14 +6,47 @@ struct ChangesView: View {
 
   var body: some View {
     VStack(spacing: 0) {
+      toolbar
+      Divider()
       if session.status.isClean {
         ContentUnavailableView(
           "No changes to commit", systemImage: "checkmark.circle",
           description: Text("Edit a file and it shows up here."))
+          .frame(maxHeight: .infinity)
       } else {
         list
       }
     }
+  }
+
+  private var toolbar: some View {
+    HStack(spacing: 8) {
+      Button {
+        session.selectedChange = ChangeSelection(staged: session.status.unstaged.isEmpty, path: nil)
+      } label: {
+        Label("View All", systemImage: "plusminus")
+      }
+      .buttonStyle(.borderless)
+      .disabled(session.status.isClean)
+      .help("Show every change in one diff")
+      Spacer()
+      Menu {
+        Button("Stage All", action: session.stageAll)
+          .disabled(session.status.unstaged.isEmpty)
+        Button("Unstage All", action: session.unstageAll)
+          .disabled(session.status.staged.isEmpty)
+      } label: {
+        Text(session.status.unstaged.isEmpty && !session.status.staged.isEmpty ? "Unstage All" : "Stage All")
+      } primaryAction: {
+        if session.status.unstaged.isEmpty { session.unstageAll() } else { session.stageAll() }
+      }
+      .menuStyle(.borderedButton)
+      .fixedSize()
+      .disabled(session.status.isClean)
+    }
+    .controlSize(.small)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
   }
 
   private var list: some View {
@@ -22,7 +55,7 @@ struct ChangesView: View {
         if !session.status.staged.isEmpty {
           Section {
             ForEach(session.status.staged) { file in
-              ChangeRow(file: file).tag(ChangeSelection(staged: true, path: file.path))
+              row(file, staged: true)
             }
           } header: {
             GroupHeader(title: "Staged", count: session.status.staged.count) {
@@ -33,7 +66,7 @@ struct ChangesView: View {
         if !session.status.unstaged.isEmpty {
           Section {
             ForEach(session.status.unstaged) { file in
-              ChangeRow(file: file).tag(ChangeSelection(staged: false, path: file.path))
+              row(file, staged: false)
             }
           } header: {
             GroupHeader(title: "Changes", count: session.status.unstaged.count) {
@@ -46,6 +79,17 @@ struct ChangesView: View {
         if let selection, selection.path != nil { proxy.scrollTo(selection) }
       }
     }
+  }
+
+  private func row(_ file: ChangedFile, staged: Bool) -> some View {
+    ChangeRow(file: file, staged: staged) { session.setStaged(file.path, $0) }
+      .tag(ChangeSelection(staged: staged, path: file.path))
+      .contextMenu {
+        Button(staged ? "Unstage" : "Stage") { session.setStaged(file.path, !staged) }
+        Divider()
+        Button("Reveal in Finder") { session.revealInFinder(file.path) }
+        Button("Copy Path") { session.copyPath(file.path) }
+      }
   }
 }
 
@@ -67,9 +111,15 @@ private struct GroupHeader: View {
 
 struct ChangeRow: View {
   let file: ChangedFile
+  let staged: Bool
+  let setStaged: (Bool) -> Void
 
   var body: some View {
     HStack(spacing: 6) {
+      Toggle("Staged", isOn: Binding(get: { staged }, set: setStaged))
+        .toggleStyle(.checkbox)
+        .labelsHidden()
+        .help(staged ? "Unstage (Space)" : "Stage (Space)")
       ChangeKindBadge(kind: file.kind)
       Text(file.fileName)
         .lineLimit(1)

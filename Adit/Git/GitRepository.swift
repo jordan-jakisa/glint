@@ -109,6 +109,74 @@ actor GitRepository {
     return result
   }
 
+  // MARK: - Staging
+
+  /// Stages whole files, like `git add`. A path that no longer exists on disk
+  /// is staged as a deletion.
+  func stage(_ paths: [String]) throws {
+    try withIndex { index in
+      for path in paths {
+        let exists = (try? FileManager.default.attributesOfItem(atPath: url.appendingPathComponent(path).path)) != nil
+        let code = exists ? git_index_add_bypath(index, path) : git_index_remove_bypath(index, path)
+        try GitError.check(code, "Couldn't stage \(path).")
+      }
+    }
+  }
+
+  /// Stages every change, new and deleted files included, like `git add -A`.
+  func stageAll() throws {
+    try withIndex { index in
+      try GitError.check(
+        git_index_add_all(index, nil, GIT_INDEX_ADD_DEFAULT.rawValue, nil, nil), "Couldn't stage everything.")
+      try GitError.check(git_index_update_all(index, nil, nil, nil), "Couldn't stage deletions.")
+    }
+  }
+
+  /// Unstages files, keeping their changes in the working tree, like
+  /// `git restore --staged`.
+  func unstage(_ paths: [String]) throws {
+    guard !paths.isEmpty else { return }
+    try reloadIndex()
+    var head: OpaquePointer?
+    if git_repository_head_unborn(handle) != 1 {
+      try GitError.check(git_revparse_single(&head, handle, "HEAD"), "Couldn't read HEAD.")
+    }
+    defer { if let head { git_object_free(head) } }
+    let strings = CStringArray(paths)
+    var array = strings.array
+    // With no HEAD, resetting to nothing removes the entries from the index.
+    for attempt in 0..<5 {
+      let code = git_reset_default(handle, head, &array)
+      if code != GIT_ELOCKED.rawValue || attempt == 4 {
+        try GitError.check(code, "Couldn't unstage.")
+        return
+      }
+      usleep(20_000)
+    }
+  }
+
+  /// Runs `body` on the freshly read index, then writes it back. Another git
+  /// process holding `index.lock` gets a few quick retries before giving up.
+  private func withIndex(_ body: (OpaquePointer) throws -> Void) throws {
+    var index: OpaquePointer?
+    try GitError.check(git_repository_index(&index, handle), "Couldn't read the index.")
+    defer { git_index_free(index) }
+    try GitError.check(git_index_read(index, 0), "Couldn't read the index.")
+    try body(index!)
+    try retryingLock("Couldn't save the index.") { git_index_write(index) }
+  }
+
+  private func retryingLock(_ message: String, _ attempt: () -> Int32) throws {
+    for _ in 0..<5 {
+      let code = attempt()
+      if code != GIT_ELOCKED.rawValue { return try GitError.check(code, message) }
+      usleep(20_000)
+    }
+    throw GitError(
+      code: GIT_ELOCKED.rawValue,
+      message: "Another git process is using this repository (.git/index.lock). Try again in a moment. If it keeps happening and nothing else is running git, delete that file.")
+  }
+
   /// libgit2 caches the index. Other tools (the terminal, the editor) write it
   /// too, so reread it from disk if it changed before trusting it.
   private func reloadIndex() throws {
@@ -403,5 +471,21 @@ actor GitRepository {
       }
     }
     return String(decoding: buffer, as: UTF8.self)
+  }
+}
+
+/// A `git_strarray` that owns its C strings for as long as it lives.
+private final class CStringArray {
+  let array: git_strarray
+
+  init(_ strings: [String]) {
+    let buffer = UnsafeMutablePointer<UnsafeMutablePointer<CChar>?>.allocate(capacity: strings.count)
+    for (index, string) in strings.enumerated() { buffer[index] = strdup(string) }
+    array = git_strarray(strings: buffer, count: strings.count)
+  }
+
+  deinit {
+    for index in 0..<array.count { free(array.strings[index]) }
+    array.strings.deallocate()
   }
 }

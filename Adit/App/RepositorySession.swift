@@ -300,6 +300,24 @@ final class RepositorySession {
     }
   }
 
+  /// Single-key commands from `KeyMonitor`. Returns false for keys it doesn't
+  /// use, so they reach the focused control as usual.
+  func handleKey(_ key: Character) -> Bool {
+    guard phase == .ready else { return false }
+    switch key {
+    case "j": selectNextItem()
+    case "k": selectPreviousItem()
+    case "n": nextHunk()
+    case "p": previousHunk()
+    case "o": toggleCurrentFileCollapsed()
+    case " ":
+      guard tab == .changes else { return false }
+      toggleSelectedStaged()
+    default: return false
+    }
+    return true
+  }
+
   /// Moves the selection in whichever tab is showing.
   func selectNextItem() {
     switch tab {

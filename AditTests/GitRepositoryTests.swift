@@ -251,3 +251,64 @@ import Testing
     #expect(diff.files.map(\.path) == ["[x]*.txt"])
   }
 }
+
+@Suite struct StagingTests {
+  @Test func stageAndUnstageFiles() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n", "gone.txt": "x\n"])
+    try fixture.write("a.txt", "2\n")
+    try fixture.write("new.txt", "n\n")
+    try fixture.delete("gone.txt")
+    let repository = try await GitRepository.open(at: fixture.url)
+
+    try await repository.stage(["a.txt", "new.txt", "gone.txt"])
+    var status = try await repository.status()
+    #expect(Set(status.staged) == [
+      ChangedFile(path: "a.txt", kind: .modified),
+      ChangedFile(path: "new.txt", kind: .added),
+      ChangedFile(path: "gone.txt", kind: .deleted),
+    ])
+    #expect(status.unstaged.isEmpty)
+
+    try await repository.unstage(["a.txt", "new.txt", "gone.txt"])
+    status = try await repository.status()
+    #expect(status.staged.isEmpty)
+    #expect(Set(status.unstaged.map(\.path)) == ["a.txt", "new.txt", "gone.txt"])
+    #expect(status.unstaged.first { $0.path == "new.txt" }?.kind == .untracked)
+  }
+
+  @Test func stageAllIncludesDeletions() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n", "b.txt": "2\n"])
+    try fixture.write("a.txt", "changed\n")
+    try fixture.delete("b.txt")
+    try fixture.write("dir/c.txt", "c\n")
+    let repository = try await GitRepository.open(at: fixture.url)
+
+    try await repository.stageAll()
+    let status = try await repository.status()
+    #expect(status.unstaged.isEmpty)
+    #expect(Set(status.staged.map(\.path)) == ["a.txt", "b.txt", "dir/c.txt"])
+  }
+
+  @Test func unstageInAnEmptyRepository() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.write("first.txt", "1\n")
+    let repository = try await GitRepository.open(at: fixture.url)
+    try await repository.stage(["first.txt"])
+    #expect(try await repository.status().staged.map(\.path) == ["first.txt"])
+    try await repository.unstage(["first.txt"])
+    let status = try await repository.status()
+    #expect(status.staged.isEmpty)
+    #expect(status.unstaged.map(\.kind) == [.untracked])
+  }
+
+  @Test func reportsAHeldIndexLock() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n"])
+    try fixture.write("a.txt", "2\n")
+    try fixture.write(".git/index.lock", "")
+    let repository = try await GitRepository.open(at: fixture.url)
+    await #expect(throws: GitError.self) { try await repository.stage(["a.txt"]) }
+  }
+}

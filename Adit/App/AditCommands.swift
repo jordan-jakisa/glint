@@ -5,8 +5,8 @@ extension FocusedValues {
   @Entry var session: RepositorySession?
 }
 
-/// Every action has a key. Plain letters work because Adit has no text fields
-/// to type into.
+/// Menu commands. Single-letter keys (j, k, n, p, o, Space) are handled by
+/// `KeyMonitor` instead, so they never fire while you type a commit message.
 struct AditCommands: Commands {
   @FocusedValue(\.session) private var session
 
@@ -34,9 +34,7 @@ struct AditCommands: Commands {
     CommandMenu("Go") {
       Group {
         Button("Next Item") { session?.selectNextItem() }
-          .keyboardShortcut("j", modifiers: [])
         Button("Previous Item") { session?.selectPreviousItem() }
-          .keyboardShortcut("k", modifiers: [])
 
         Divider()
 
@@ -48,14 +46,19 @@ struct AditCommands: Commands {
         Divider()
 
         Button("Next Hunk") { session?.nextHunk() }
-          .keyboardShortcut("n", modifiers: [])
         Button("Previous Hunk") { session?.previousHunk() }
-          .keyboardShortcut("p", modifiers: [])
 
         Divider()
 
         Button("Collapse or Expand File") { session?.toggleCurrentFileCollapsed() }
-          .keyboardShortcut("o", modifiers: [])
+
+        Divider()
+
+        Button("Stage or Unstage File") { session?.toggleSelectedStaged() }
+        Button("Stage All") { session?.stageAll() }
+          .keyboardShortcut("s", modifiers: [.command, .option])
+        Button("Unstage All") { session?.unstageAll() }
+          .keyboardShortcut("u", modifiers: [.command, .option])
       }
       .disabled(!isReady)
     }

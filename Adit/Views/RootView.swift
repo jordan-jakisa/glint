@@ -8,6 +8,7 @@ struct RootView: View {
       .navigationTitle(session.info?.name ?? "Adit")
       .navigationSubtitle(subtitle)
       .focusedSceneValue(\.session, session)
+      .background(KeyMonitor(handle: session.handleKey))
       .onAppear { session.restoreLastRepository() }
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         session.refresh()

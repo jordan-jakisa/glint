@@ -1,4 +1,4 @@
-import Foundation
+import AppKit
 
 /// The Changes tab: working-tree status and its selection.
 extension RepositorySession {
@@ -30,15 +30,78 @@ extension RepositorySession {
     }
   }
 
-  func apply(_ fresh: WorkingTreeStatus) {
+  func apply(_ fresh: WorkingTreeStatus, reloadDiff: Bool = true) {
     let old = status
     status = fresh
     let previousSelection = selectedChange
     reconcileChangeSelection(previous: old)
     // A file on screen may have changed without its status changing, so the
     // diff reloads either way. Same source: keep the reader's place.
-    if tab == .changes, selectedChange == previousSelection, selectedChange != nil {
+    if reloadDiff, tab == .changes, selectedChange == previousSelection, selectedChange != nil {
       showSelectedDiff(inPlace: true)
+    }
+  }
+
+  // MARK: - Staging
+
+  /// Stages or unstages one whole file. The list updates this frame; the index
+  /// write and a real status refresh follow.
+  func setStaged(_ path: String, _ staged: Bool) {
+    if staged {
+      changeIndex({ $0.markStaged(path) }) { try await $0.stage([path]) }
+    } else {
+      changeIndex({ $0.markUnstaged(path) }) { try await $0.unstage([path]) }
+    }
+  }
+
+  /// Space on the selected file: flip it to the other group and move on to
+  /// the next file in this one, so you can go down the list staging.
+  func toggleSelectedStaged() {
+    guard tab == .changes, let selection = selectedChange else { return }
+    guard let path = selection.path else {
+      selection.staged ? unstageAll() : stageAll()
+      return
+    }
+    let group = selection.staged ? status.staged : status.unstaged
+    let index = group.firstIndex { $0.path == path } ?? 0
+    let rest = group.filter { $0.path != path }
+    setStaged(path, !selection.staged)
+    if rest.isEmpty {
+      selectedChange = ChangeSelection(staged: !selection.staged, path: path)
+    } else {
+      selectedChange = ChangeSelection(staged: selection.staged, path: rest[min(index, rest.count - 1)].path)
+    }
+  }
+
+  func stageAll() {
+    let paths = status.unstaged.map(\.path)
+    guard !paths.isEmpty else { return }
+    changeIndex({ status in paths.forEach { status.markStaged($0) } }) { try await $0.stageAll() }
+  }
+
+  func unstageAll() {
+    let paths = status.staged.map(\.path)
+    guard !paths.isEmpty else { return }
+    changeIndex({ status in paths.forEach { status.markUnstaged($0) } }) { try await $0.unstage(paths) }
+  }
+
+  private func changeIndex(
+    _ optimistic: (inout WorkingTreeStatus) -> Void,
+    _ work: @escaping @Sendable (GitRepository) async throws -> Void
+  ) {
+    guard let repository else { return }
+    var next = status
+    optimistic(&next)
+    apply(next, reloadDiff: false)
+    Task {
+      let start = ContinuousClock.now
+      do {
+        try await work(repository)
+        Timing.report("index write", since: start, budget: 100)
+      } catch {
+        alertMessage = "\(error)"
+      }
+      refreshWorkingTree()
     }
   }
 
@@ -84,5 +147,17 @@ extension RepositorySession {
       return
     }
     selectedChange = all[min(max(index + offset, 0), all.count - 1)]
+  }
+
+  // MARK: - Files
+
+  func revealInFinder(_ path: String) {
+    guard let repository else { return }
+    NSWorkspace.shared.activateFileViewerSelecting([repository.url.appendingPathComponent(path)])
+  }
+
+  func copyPath(_ path: String) {
+    NSPasteboard.general.clearContents()
+    NSPasteboard.general.setString(path, forType: .string)
   }
 }

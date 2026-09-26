@@ -34,3 +34,25 @@ struct WorkingTreeStatus: Equatable, Sendable {
 
   var isClean: Bool { staged.isEmpty && unstaged.isEmpty }
 }
+
+extension WorkingTreeStatus {
+  /// What the lists should show right after staging `path`, before git has
+  /// confirmed it. The next real status replaces this.
+  mutating func markStaged(_ path: String) {
+    guard let index = unstaged.firstIndex(where: { $0.path == path }) else { return }
+    let file = unstaged.remove(at: index)
+    guard !staged.contains(where: { $0.path == path }) else { return }
+    let kind: ChangedFile.Kind = file.kind == .untracked ? .added : file.kind
+    staged.append(ChangedFile(path: path, kind: kind))
+    staged.sort { $0.path < $1.path }
+  }
+
+  mutating func markUnstaged(_ path: String) {
+    guard let index = staged.firstIndex(where: { $0.path == path }) else { return }
+    let file = staged.remove(at: index)
+    guard !unstaged.contains(where: { $0.path == path }) else { return }
+    let kind: ChangedFile.Kind = file.kind == .added ? .untracked : file.kind
+    unstaged.append(ChangedFile(path: path, kind: kind))
+    unstaged.sort { $0.path < $1.path }
+  }
+}
