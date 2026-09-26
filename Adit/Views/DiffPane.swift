@@ -149,9 +149,7 @@ private struct WorkingTreeHeader: View {
         .foregroundStyle(.secondary)
       }
       Spacer(minLength: 12)
-      if isLoading {
-        ProgressView().controlSize(.small)
-      }
+      DelayedSpinner(isActive: isLoading)
       if selectedLines > 0 {
         Button(staged ? "Unstage Lines" : "Stage Lines", action: stageLines)
           .help("\(selectedLines) selected (S)")
@@ -186,9 +184,7 @@ private struct CommitHeader: View {
           .lineLimit(2)
           .textSelection(.enabled)
         Spacer(minLength: 12)
-        if isLoading {
-          ProgressView().controlSize(.small)
-        }
+        DelayedSpinner(isActive: isLoading)
       }
       HStack(spacing: 12) {
         Text(String((diff.source.commitID ?? "").prefix(10)))
@@ -242,9 +238,7 @@ private struct BranchHeader: View {
         .foregroundStyle(.secondary)
       }
       Spacer(minLength: 12)
-      if isLoading {
-        ProgressView().controlSize(.small)
-      }
+      DelayedSpinner(isActive: isLoading)
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 10)

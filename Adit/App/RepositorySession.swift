@@ -503,8 +503,9 @@ final class RepositorySession {
       return
     }
     // Keep the previous diff on screen until the new one is ready. Most loads
-    // finish inside a frame or two, and a blank flash reads as slower.
-    isLoadingDiff = true
+    // finish inside a frame or two, and a blank flash reads as slower. A
+    // reload in place (after staging, after a save) shows no spinner at all.
+    if !inPlace { isLoadingDiff = true }
     diffTask = Task {
       do {
         // Big commits and branches show their first screenful first; the
