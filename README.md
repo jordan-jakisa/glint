@@ -55,7 +55,9 @@ from OpenCode Zen, Vercel AI Gateway, or OpenRouter (set up in Settings). See
 xcodebuild -project Adit.xcodeproj -scheme Adit -configuration Debug build
 ```
 
-Or open `Adit.xcodeproj` in Xcode and press Run. Requires Xcode 27 or later and
+Or open `Adit.xcodeproj` in Xcode and press Run. To build and install to
+`/Applications`, run `scripts/install.sh`; it signs with your Apple Development
+certificate if you have one, so macOS keeps Keychain permissions across updates. Requires Xcode 27 or later and
 macOS 15 or later. Signs ad-hoc, so no developer team is needed for local builds.
 
 ## Layout

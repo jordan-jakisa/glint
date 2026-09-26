@@ -92,7 +92,10 @@ the project file. This removes the merge conflicts and churn that normally make
 diffs.
 
 Signing is ad-hoc (`CODE_SIGN_IDENTITY = "-"`) so the project builds with no
-developer team configured. A real team and notarization get added when there is
+developer team configured. `scripts/install.sh` overrides that for installed
+builds when an Apple Development certificate is available: an ad-hoc signature
+changes with every build, and macOS ties Keychain "Always Allow" to it, so each
+update asked for the API key again. A real team and notarization get added when there is
 something worth distributing.
 
 ## Not sandboxed; system git for writes and network (2026-09-26, revised)
