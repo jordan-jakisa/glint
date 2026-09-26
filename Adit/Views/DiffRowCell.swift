@@ -26,9 +26,21 @@ final class DiffRowCell: NSView {
   func configure(_ row: DiffRow, metrics: DiffMetrics, hunkAction: String? = nil) {
     self.row = row
     self.metrics = metrics
+    let actionChanged = self.hunkAction != hunkAction
     self.hunkAction = hunkAction
     isRowSelected = (superview as? NSTableRowView)?.isSelected ?? false
     needsDisplay = true
+    if actionChanged { window?.invalidateCursorRects(for: self) }
+  }
+
+  /// The hunk action is drawn text, not a button, so it says it's clickable
+  /// with the pointing hand and a tooltip.
+  override func resetCursorRects() {
+    removeAllToolTips()
+    guard let hunkAction, case .hunkHeader = row?.content else { return }
+    let action = NSRect(x: bounds.width - Self.hunkActionWidth, y: 0, width: Self.hunkActionWidth, height: bounds.height)
+    addCursorRect(action, cursor: .pointingHand)
+    addToolTip(action, owner: AppCommand.stagePartial.hint(hunkAction) as NSString, userData: nil)
   }
 
   override func draw(_ dirtyRect: NSRect) {
