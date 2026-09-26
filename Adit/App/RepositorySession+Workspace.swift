@@ -9,6 +9,12 @@ extension RepositorySession {
     return workspace.repositories.first { $0.url.standardizedFileURL == url }
   }
 
+  /// A dot beside the repository name says another repository has changes.
+  var otherRepositoriesHaveChanges: Bool {
+    let active = activeWorkspaceRepository?.relativePath
+    return repositorySummaries.contains { $0.key != active && $0.value.changeCount > 0 }
+  }
+
   /// Makes another repository of the workspace the active one. Everything
   /// (Changes, History, the commit box, branches, sync) follows it. With
   /// `selecting`, lands on that file.
@@ -53,8 +59,59 @@ extension RepositorySession {
     if mine.count < change.paths.count { otherRepositoriesChanged(Array(change.paths.keys)) }
   }
 
-  /// Hook for the picker's counts; filled in with the repository picker.
-  func otherRepositoriesChanged(_ paths: [String]) {}
+  /// Files changed in repositories other than the active one: refresh just
+  /// their summaries.
+  func otherRepositoriesChanged(_ paths: [String]) {
+    guard let workspace else { return }
+    let touched = workspace.repositories.filter { repo in
+      let prefix = repo.url.standardizedFileURL.path + "/"
+      return paths.contains { $0.hasPrefix(prefix) }
+    }
+    let active = activeWorkspaceRepository?.relativePath
+    let others = Set(touched.map(\.relativePath)).subtracting(active.map { [$0] } ?? [])
+    if !others.isEmpty { refreshSummaries(of: others) }
+  }
+
+  /// The active repository's summary comes straight from what's on screen.
+  func updateActiveSummary() {
+    guard let active = activeWorkspaceRepository else { return }
+    repositorySummaries[active.relativePath] = RepositorySummary(branch: info?.branch, status: status)
+  }
+
+  /// Rereads branch and status for the workspace's other repositories (or
+  /// just `only`), in the background, one at a time so they don't compete
+  /// with the active repository for disk.
+  func refreshSummaries(of only: Set<String>?) {
+    guard let workspace else { return }
+    let active = activeWorkspaceRepository?.relativePath
+    let targets = workspace.repositories.filter {
+      $0.relativePath != active && (only?.contains($0.relativePath) ?? true)
+    }
+    guard !targets.isEmpty else { return }
+    let previous = summaryTask
+    summaryTask = Task(priority: .utility) {
+      await previous?.value
+      let start = ContinuousClock.now
+      for target in targets {
+        guard self.workspace == workspace else { return }
+        do {
+          let handle: GitRepository
+          if let existing = summaryHandles[target.relativePath] {
+            handle = existing
+          } else {
+            handle = try await GitRepository.open(at: target.url)
+            summaryHandles[target.relativePath] = handle
+          }
+          let branch = await handle.info().branch
+          let status = try await handle.status()
+          repositorySummaries[target.relativePath] = RepositorySummary(branch: branch, status: status)
+        } catch {
+          continue
+        }
+      }
+      if only == nil { Timing.report("workspace status, other repositories", since: start, budget: 150) }
+    }
+  }
 }
 
 /// Which repository of each workspace was active last, so reopening a

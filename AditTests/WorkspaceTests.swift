@@ -89,3 +89,38 @@ import Testing
     #expect(summary.changeCount == 2)
   }
 }
+
+@MainActor
+@Suite struct WorkspaceSessionTests {
+  @Test func summariesCoverEveryRepositoryAndSwitchingFollows() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("adit-wssession-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for name in ["api", "web"] {
+      _ = try await SystemGit(directory: root).run(["init", "-q", "-b", "main", name])
+    }
+    try Data("1\n".utf8).write(to: root.appendingPathComponent("web/a.txt"))
+    try Data("2\n".utf8).write(to: root.appendingPathComponent("web/b.txt"))
+    WorkspaceMemory.remember("api", in: root)
+
+    let session = RepositorySession()
+    session.install(try await RepositorySession.load(root))
+    await session.summaryTask?.value
+
+    #expect(session.workspace?.repositories.count == 2)
+    #expect(session.activeWorkspaceRepository?.relativePath == "api")
+    #expect(session.repositorySummaries["api"]?.changeCount == 0)
+    #expect(session.repositorySummaries["web"]?.changeCount == 2)
+    #expect(session.otherRepositoriesHaveChanges)
+
+    // Switching keeps the unsent message with the repository it was for.
+    session.commitMessage = "api draft"
+    session.install(try await RepositorySession.load(root.appendingPathComponent("web"), in: session.workspace))
+    #expect(session.activeWorkspaceRepository?.relativePath == "web")
+    #expect(session.commitMessage == "")
+    #expect(session.status.unstaged.count == 2)
+    #expect(WorkspaceMemory.activeRepository(in: root) == "web")
+    session.install(try await RepositorySession.load(root.appendingPathComponent("api"), in: session.workspace))
+    #expect(session.commitMessage == "api draft")
+  }
+}

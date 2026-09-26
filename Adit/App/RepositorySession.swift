@@ -26,6 +26,10 @@ final class RepositorySession {
   /// Set when the opened folder holds several repositories; `repository` is
   /// then the active one.
   internal(set) var workspace: Workspace?
+  /// Branch and changes for every repository in the workspace, keyed by
+  /// relative path, for the repository picker.
+  internal(set) var repositorySummaries: [String: RepositorySummary] = [:]
+  var isRepositoryPickerShown = false
   /// Shown as an alert: failures of actions the user asked for.
   var alertMessage: String?
   /// Files waiting for the user to confirm a discard.
@@ -122,6 +126,10 @@ final class RepositorySession {
   /// Unsent commit messages per repository, kept while you switch between
   /// the repositories of a workspace.
   @ObservationIgnored var messageDrafts: [URL: String] = [:]
+  /// Open handles for the workspace's other repositories, used to keep their
+  /// summaries current without switching to them.
+  @ObservationIgnored var summaryHandles: [String: GitRepository] = [:]
+  @ObservationIgnored var summaryTask: Task<Void, Never>?
   @ObservationIgnored var isLoadingMore = false
   @ObservationIgnored var diffTask: Task<Void, Never>?
   @ObservationIgnored var prefetchTask: Task<Void, Never>?
@@ -314,6 +322,10 @@ final class RepositorySession {
     {
       selectedChange = preferred
     }
+    if workspace != nil {
+      updateActiveSummary()
+      refreshSummaries(of: nil)
+    }
     if Self.isBenchmarking { Task { await runBenchmark() } }
   }
 
@@ -323,6 +335,7 @@ final class RepositorySession {
     guard phase == .ready else { return }
     refreshHistory()
     refreshWorkingTree()
+    if workspace != nil { refreshSummaries(of: nil) }
   }
 
   // MARK: - Diff loading

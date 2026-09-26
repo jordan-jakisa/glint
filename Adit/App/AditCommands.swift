@@ -45,6 +45,20 @@ struct AditCommands: Commands {
       .keyboardShortcut("g", modifiers: [.command, .option])
       .disabled(!isReady)
 
+      Button("Switch Repository…") {
+        session?.tab = .changes
+        session?.isRepositoryPickerShown = true
+      }
+      .keyboardShortcut("r", modifiers: [.command, .shift])
+      .disabled(!isReady || session?.workspace == nil)
+
+      ForEach(0..<9, id: \.self) { index in
+        if let repositories = session?.workspace?.repositories, index < repositories.count {
+          Button(repositories[index].relativePath) { session?.switchRepository(at: index) }
+            .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")), modifiers: .command)
+        }
+      }
+
       Button("Switch Branch…") {
         session?.tab = .changes
         session?.isBranchPickerShown = true

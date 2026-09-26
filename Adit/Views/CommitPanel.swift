@@ -99,9 +99,32 @@ struct BranchBar: View {
     HStack(spacing: 4) {
       Image(systemName: "arrow.triangle.branch")
         .foregroundStyle(.secondary)
-      Text(session.info?.name ?? "")
+      if session.workspace != nil {
+        Button {
+          session.isRepositoryPickerShown.toggle()
+        } label: {
+          HStack(spacing: 2) {
+            Text(session.info?.name ?? "")
+              .lineLimit(1)
+            if session.otherRepositoriesHaveChanges {
+              Circle().fill(.orange).frame(width: 5, height: 5)
+            }
+            Image(systemName: "chevron.down")
+              .font(.caption2)
+              .foregroundStyle(.secondary)
+          }
+        }
+        .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
-        .lineLimit(1)
+        .help("Switch repository (\u{21E7}\u{2318}R)")
+        .popover(isPresented: $session.isRepositoryPickerShown, arrowEdge: .top) {
+          RepositoryPicker(session: session)
+        }
+      } else {
+        Text(session.info?.name ?? "")
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+      }
       Text("/").foregroundStyle(.tertiary)
       Button {
         session.isBranchPickerShown.toggle()
