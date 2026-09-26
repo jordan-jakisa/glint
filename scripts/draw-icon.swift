@@ -1,10 +1,7 @@
-// Draws Adit's app icon: a timber-framed adit (a mine's horizontal entrance)
-// cut into dark rock, with the seam inside drawn as a diff's added and
-// removed lines. Run: swift scripts/draw-icon.swift <output folder>
+// Draws Glint's app icon: a prompt and a cursor on graphite, the cursor
+// catching the light. The one glowing element is the glint.
+// Run: swift scripts/draw-icon.swift <output folder> [light]
 import AppKit
-
-let out = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ".")
-try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
 
 func color(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
   NSColor(
@@ -12,7 +9,7 @@ func color(_ hex: UInt32, _ alpha: CGFloat = 1) -> NSColor {
     blue: CGFloat(hex & 0xFF) / 255, alpha: alpha)
 }
 
-func draw(size: CGFloat) -> NSBitmapImageRep {
+func draw(size: CGFloat, light: Bool) -> NSBitmapImageRep {
   let rep = NSBitmapImageRep(
     bitmapDataPlanes: nil, pixelsWide: Int(size), pixelsHigh: Int(size), bitsPerSample: 8,
     samplesPerPixel: 4, hasAlpha: true, isPlanar: false, colorSpaceName: .deviceRGB, bytesPerRow: 0,
@@ -20,69 +17,91 @@ func draw(size: CGFloat) -> NSBitmapImageRep {
   NSGraphicsContext.saveGraphicsState()
   NSGraphicsContext.current = NSGraphicsContext(bitmapImageRep: rep)
   let s = size / 1024
-  func r(_ x: CGFloat, _ y: CGFloat, _ w: CGFloat, _ h: CGFloat) -> NSRect {
-    NSRect(x: x * s, y: y * s, width: w * s, height: h * s)
+  let small = size <= 32
+  func p(_ x: CGFloat, _ y: CGFloat) -> NSPoint { NSPoint(x: x * s, y: y * s) }
+
+  // macOS icon grid: an 824-point rounded square centred on 1024, with a drop shadow.
+  let tileRect = NSRect(x: 100 * s, y: 100 * s, width: 824 * s, height: 824 * s)
+  let tile = NSBezierPath(roundedRect: tileRect, xRadius: 185 * s, yRadius: 185 * s)
+  NSGraphicsContext.saveGraphicsState()
+  let drop = NSShadow()
+  drop.shadowColor = color(0x000000, light ? 0.25 : 0.45)
+  drop.shadowBlurRadius = 24 * s
+  drop.shadowOffset = NSSize(width: 0, height: -10 * s)
+  drop.set()
+  (light ? color(0xF4F3F9) : color(0x16181D)).setFill()
+  tile.fill()
+  NSGraphicsContext.restoreGraphicsState()
+  let ground = light
+    ? [color(0xFFFFFF), color(0xF3F2F8), color(0xE4E2EE)]
+    : [color(0x2B2E36), color(0x16181D), color(0x0A0B0E)]
+  NSGradient(colors: ground)!.draw(in: tile, angle: -90)
+
+  NSGraphicsContext.saveGraphicsState()
+  tile.addClip()
+  // Soft light from above.
+  NSGradient(colors: [color(0xFFFFFF, light ? 0.6 : 0.10), color(0xFFFFFF, 0)])!
+    .draw(fromCenter: p(512, 1000), radius: 0, toCenter: p(512, 1000), radius: 700 * s, options: [])
+
+  let ink = light ? color(0x1C1E25) : color(0xF5F4FA)
+  let glint = light ? color(0x5B47F0) : color(0x9A8FFF)
+  let weight: CGFloat = (small ? 110 : 84) * s
+
+  // The prompt: a chevron.
+  let caret = NSBezierPath()
+  caret.move(to: p(280, 700))
+  caret.line(to: p(470, 512))
+  caret.line(to: p(280, 324))
+  caret.lineWidth = weight
+  caret.lineCapStyle = .round
+  caret.lineJoinStyle = .round
+  ink.setStroke()
+  caret.stroke()
+
+  // The cursor: white fading into violet, with a halo.
+  let cursor = NSBezierPath()
+  cursor.move(to: p(560, 324))
+  cursor.line(to: p(750, 324))
+  cursor.lineWidth = weight
+  cursor.lineCapStyle = .round
+  let tip = p(760, 324)
+  NSGradient(colors: [glint.withAlphaComponent(light ? 0.28 : 0.5), glint.withAlphaComponent(0)])!
+    .draw(fromCenter: tip, radius: 0, toCenter: tip, radius: (small ? 200 : 250) * s, options: [])
+  ink.setStroke()
+  cursor.stroke()
+  NSGraphicsContext.saveGraphicsState()
+  NSBezierPath(
+    cgPath: cursor.cgPath.copy(strokingWithWidth: weight, lineCap: .round, lineJoin: .round, miterLimit: 10)
+  ).addClip()
+  NSGradient(colors: [glint, glint.withAlphaComponent(0)])!
+    .draw(fromCenter: tip, radius: 0, toCenter: tip, radius: 250 * s, options: [])
+  NSGraphicsContext.restoreGraphicsState()
+  NSGraphicsContext.restoreGraphicsState()
+
+  // A hairline rim so the tile holds its edge on any wallpaper.
+  if !small {
+    let rim = NSBezierPath(roundedRect: tileRect.insetBy(dx: 3 * s, dy: 3 * s), xRadius: 182 * s, yRadius: 182 * s)
+    rim.lineWidth = 5 * s
+    color(0xFFFFFF, light ? 0.5 : 0.08).setStroke()
+    rim.stroke()
   }
-
-  // macOS icon grid: an 824-point rounded square centred on 1024.
-  let plate = NSBezierPath(roundedRect: r(100, 100, 824, 824), xRadius: 185 * s, yRadius: 185 * s)
-  NSGradient(colors: [color(0x3A4252), color(0x1B2029)])!.draw(in: plate, angle: -90)
-
-  plate.addClip()
-  // Rock strata: faint diagonal bands.
-  color(0xFFFFFF, 0.035).setFill()
-  for i in 0..<6 {
-    let band = NSBezierPath()
-    let y = CGFloat(180 + i * 130)
-    band.move(to: NSPoint(x: 60 * s, y: y * s))
-    band.line(to: NSPoint(x: 980 * s, y: (y + 90) * s))
-    band.line(to: NSPoint(x: 980 * s, y: (y + 130) * s))
-    band.line(to: NSPoint(x: 60 * s, y: (y + 40) * s))
-    band.close()
-    band.fill()
-  }
-
-  // The tunnel mouth: an opening with a rounded top.
-  let mouth = NSBezierPath(roundedRect: r(292, 150, 440, 560), xRadius: 150 * s, yRadius: 150 * s)
-  let floor = NSBezierPath(rect: r(292, 150, 440, 200))
-  mouth.append(floor)
-  NSGradient(colors: [color(0x07090D), color(0x131820)])!.draw(in: mouth, angle: 90)
-
-  // The seam inside: diff lines receding into the dark.
-  let lines: [(y: CGFloat, width: CGFloat, hex: UInt32, alpha: CGFloat)] = [
-    (520, 250, 0x3FB950, 1.0), (455, 190, 0xF85149, 0.95), (390, 280, 0x3FB950, 0.9),
-    (325, 150, 0x3FB950, 0.75), (260, 220, 0xF85149, 0.6),
-  ]
-  for line in lines {
-    let bar = NSBezierPath(roundedRect: r(512 - line.width / 2, line.y, line.width, 34), xRadius: 17 * s, yRadius: 17 * s)
-    color(line.hex, line.alpha).setFill()
-    bar.fill()
-  }
-
-  // Timber frame: two posts and a lintel, amber, the accent colour.
-  let timber = color(0xD08A2E)
-  let timberDark = color(0x9A5E17)
-  for x in [262.0, 712.0] as [CGFloat] {
-    NSGradient(colors: [timber, timberDark])!.draw(in: NSBezierPath(roundedRect: r(x, 150, 50, 470), xRadius: 8 * s, yRadius: 8 * s), angle: 0)
-  }
-  NSGradient(colors: [timber, timberDark])!.draw(
-    in: NSBezierPath(roundedRect: r(232, 610, 560, 64), xRadius: 10 * s, yRadius: 10 * s), angle: -90)
-
-  // Ground line.
-  color(0x0B0E13, 0.9).setFill()
-  NSBezierPath(rect: r(100, 100, 824, 50)).fill()
 
   NSGraphicsContext.restoreGraphicsState()
   return rep
 }
 
+let out = URL(fileURLWithPath: CommandLine.arguments.count > 1 ? CommandLine.arguments[1] : ".")
+let light = CommandLine.arguments.count > 2 && CommandLine.arguments[2] == "light"
+try? FileManager.default.createDirectory(at: out, withIntermediateDirectories: true)
+
 // Asset catalog sizes for a macOS app icon.
-let sizes: [(points: Int, scale: Int)] = [(16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2), (256, 1), (256, 2), (512, 1), (512, 2)]
+let sizes: [(points: Int, scale: Int)] = [
+  (16, 1), (16, 2), (32, 1), (32, 2), (128, 1), (128, 2), (256, 1), (256, 2), (512, 1), (512, 2),
+]
 var images: [[String: String]] = []
 for (points, scale) in sizes {
-  let pixels = CGFloat(points * scale)
   let name = "icon_\(points)x\(points)\(scale == 2 ? "@2x" : "").png"
-  let data = draw(size: pixels).representation(using: .png, properties: [:])!
+  let data = draw(size: CGFloat(points * scale), light: light).representation(using: .png, properties: [:])!
   try! data.write(to: out.appendingPathComponent(name))
   images.append(["idiom": "mac", "size": "\(points)x\(points)", "scale": "\(scale)x", "filename": name])
 }
