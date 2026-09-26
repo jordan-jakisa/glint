@@ -7,10 +7,7 @@ struct RootView: View {
 
   var body: some View {
     content
-      // The toolbar shows `ProjectTitle` in its place; an empty title keeps
-      // the toolbar's flexible space so the layout controls stay trailing.
-      .navigationTitle("")
-      .background(WindowTitle(title: title))
+      .navigationTitle(title)
       .focusedSceneValue(\.session, session)
       .background(KeyMonitor(handle: session.handleKey))
       .onAppear { session.restoreLastRepository() }
@@ -52,38 +49,21 @@ struct RootView: View {
         SidebarView(session: session)
           .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 480)
       } detail: {
-        if session.isTerminalShown, let folder = session.repositoryURL {
-          VSplitView {
+        Group {
+          if session.isTerminalShown, let folder = session.repositoryURL {
+            VSplitView {
+              DiffPane(session: session)
+                .frame(minHeight: 160)
+              TerminalPanel(folder: folder, store: terminals)
+                .frame(minHeight: 100, idealHeight: 240)
+            }
+          } else {
             DiffPane(session: session)
-              .frame(minHeight: 160)
-            TerminalPanel(folder: folder, store: terminals)
-              .frame(minHeight: 100, idealHeight: 240)
           }
-        } else {
-          DiffPane(session: session)
         }
+        .modifier(DiffToolbar(session: session))
       }
-      .toolbar {
-        ToolbarItem(placement: .navigation) {
-          ProjectTitle(session: session)
-        }
-        ToolbarItem(placement: .primaryAction) {
-          Button {
-            session.isTerminalShown.toggle()
-          } label: {
-            Label("Terminal", systemImage: "apple.terminal")
-          }
-          .help(AppCommand.showTerminal.hint(session.isTerminalShown ? "Hide the terminal" : "Show the terminal"))
-        }
-        ToolbarItem(placement: .primaryAction) {
-          Picker("Layout", selection: $session.layout) {
-            Text("Unified").tag(DiffLayout.unified)
-            Text("Split").tag(DiffLayout.split)
-          }
-          .pickerStyle(.segmented)
-          .help("Switch between unified and split diffs (⌘\\)")
-        }
-      }
+      .toolbar(removing: .title)
     }
   }
 
@@ -103,22 +83,6 @@ struct RootView: View {
   /// `ProjectTitle` instead.
   private var title: String {
     session.projectURL?.lastPathComponent ?? "Adit"
-  }
-}
-
-/// Names the window in the Window menu and Mission Control without drawing
-/// a title in the toolbar.
-private struct WindowTitle: NSViewRepresentable {
-  let title: String
-
-  func makeNSView(context: Context) -> NSView { NSView() }
-
-  func updateNSView(_ view: NSView, context: Context) {
-    DispatchQueue.main.async {
-      guard let window = view.window else { return }
-      window.title = title
-      window.titleVisibility = .hidden
-    }
   }
 }
 
@@ -153,5 +117,48 @@ private struct WelcomeView: View {
     }
     .padding(40)
     .frame(maxWidth: .infinity, maxHeight: .infinity)
+  }
+}
+
+/// The project switcher on the left, the terminal and layout controls on the
+/// right. With no title there's no flexible space to push them apart, so the
+/// toolbar needs a spacer, and it must sit on the detail column: on the whole
+/// split view the spacer does nothing. Before macOS 26 there's no spacer and
+/// the controls sit beside the switcher.
+private struct DiffToolbar: ViewModifier {
+  @Bindable var session: RepositorySession
+
+  func body(content: Content) -> some View {
+    if #available(macOS 26, *) {
+      content.toolbar {
+        ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
+        ToolbarSpacer(.flexible)
+        controls
+      }
+    } else {
+      content.toolbar {
+        ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
+        controls
+      }
+    }
+  }
+
+  @ToolbarContentBuilder private var controls: some ToolbarContent {
+    ToolbarItem {
+      Button {
+        session.isTerminalShown.toggle()
+      } label: {
+        Label("Terminal", systemImage: "apple.terminal")
+      }
+      .help(AppCommand.showTerminal.hint(session.isTerminalShown ? "Hide the terminal" : "Show the terminal"))
+    }
+    ToolbarItem {
+      Picker("Layout", selection: $session.layout) {
+        Text("Unified").tag(DiffLayout.unified)
+        Text("Split").tag(DiffLayout.split)
+      }
+      .pickerStyle(.segmented)
+      .help(AppCommand.toggleLayout.hint("Switch between unified and split diffs"))
+    }
   }
 }
