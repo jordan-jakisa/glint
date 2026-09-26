@@ -53,6 +53,11 @@ extension RepositorySession {
       do {
         _ = try await git.run(arguments, input: message)
         Timing.report("commit", since: start, budget: 100)
+        if let generated = generatedMessage {
+          let ratio = CommitPrompt.editRatio(from: generated, to: message)
+          Timing.log.info("AI message edited before commit: \(Int(ratio * 100))% changed")
+          generatedMessage = nil
+        }
         commitMessage = ""
         isAmending = false
       } catch {

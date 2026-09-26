@@ -122,3 +122,29 @@ import Testing
         == "diff --git a/f.txt b/f.txt\n--- a/f.txt\n+++ b/f.txt\n@@ -1,2 +1,2 @@\n a\n-b\n+c\n")
   }
 }
+
+@Suite struct CommitMessageQualityTests {
+  @Test func holdsBackWeakMessages() {
+    #expect(CommitPrompt.isWeak("Update"))
+    #expect(CommitPrompt.isWeak("Minor changes"))
+    #expect(CommitPrompt.isWeak("wip"))
+    #expect(CommitPrompt.isWeak("Update GitRepository.swift"))
+    #expect(!CommitPrompt.isWeak("Show the files worth reading first"))
+    #expect(!CommitPrompt.isWeak("Fix crash when the index is locked\n\nBody."))
+  }
+
+  @Test func promptCarriesHistoryAndTheUsersWhy() {
+    let prompt = CommitPrompt.build(
+      diff: "DIFF", subject: "", rules: nil, userInstructions: nil,
+      recentSubjects: ["Add the branch picker", "Fix a crash"], userWhy: "Users kept losing drafts.")
+    #expect(prompt.contains("<recent_commits>\nAdd the branch picker\nFix a crash\n</recent_commits>"))
+    #expect(prompt.contains("<why>\nUsers kept losing drafts.\n</why>"))
+    #expect(prompt.contains("stop after the subject rather than guess"))
+  }
+
+  @Test func measuresHowMuchAMessageWasEdited() {
+    #expect(CommitPrompt.editRatio(from: "Add login", to: "Add login") == 0)
+    #expect(CommitPrompt.editRatio(from: "abc", to: "xyz") == 1)
+    #expect(abs(CommitPrompt.editRatio(from: "Add login", to: "Add logout") - 0.3) < 0.01)
+  }
+}

@@ -50,6 +50,9 @@ final class RepositorySession {
   internal(set) var isCommitting = false
   /// Size of what Commit would take right now, shown in the commit box.
   internal(set) var commitSize: ChangeSize?
+  /// The last message AI wrote, to measure how much you edit it before
+  /// committing. Logged locally, never sent.
+  @ObservationIgnored var generatedMessage: String?
   /// Writing a message with AI. Observed so the button can show Stop.
   internal(set) var messageTask: Task<Void, Never>?
   /// Bumped to move keyboard focus into the commit message.

@@ -11,9 +11,9 @@ enum CommitPrompt {
   static let instructions = """
     Write a git commit message for the changes below.
 
-    - Subject line: imperative mood, capitalized, no period at the end, about 50 characters or fewer.
-    - Only add a body when it says something the subject can't. Put a blank line after the subject and wrap the body at 72 characters.
-    - Keep it short, and don't repeat the subject in the body.
+    - Subject line: imperative mood, capitalized, no period at the end, about 50 characters or fewer. Say what changed in terms a reader cares about, not which files were touched.
+    - A good message says why the change was made, not just what changed. Add a body only when the diff, or the user's own words, show the reason. If the reason isn't visible, stop after the subject rather than guess.
+    - Put a blank line after the subject and wrap the body at 72 characters. Keep it short, and don't repeat the subject in the body.
     - Reply with the commit message and nothing else: no preamble, no quotes, no code fences, and don't include the diff.
     """
 
@@ -24,7 +24,10 @@ enum CommitPrompt {
     ".github/copilot-instructions.md",
   ]
 
-  static func build(diff: String, subject: String, rules: String?, userInstructions: String?) -> String {
+  static func build(
+    diff: String, subject: String, rules: String?, userInstructions: String?,
+    recentSubjects: [String] = [], userWhy: String? = nil
+  ) -> String {
     var prompt = instructions
     if let rules, !rules.isEmpty {
       prompt += "\n\nThis repository has its own conventions. Follow them where they cover commit messages:\n<repository_rules>\n\(rules)\n</repository_rules>"
@@ -32,11 +35,58 @@ enum CommitPrompt {
     if let userInstructions, !userInstructions.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
       prompt += "\n\nThe user's own instructions for commit messages:\n<instructions>\n\(userInstructions)\n</instructions>"
     }
+    let recent = recentSubjects.map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }.prefix(10)
+    if !recent.isEmpty {
+      prompt += "\n\nRecent commit subjects in this repository. Match their style (tense, prefixes, capitalization), not their content:\n<recent_commits>\n\(recent.joined(separator: "\n"))\n</recent_commits>"
+    }
     let subject = subject.trimmingCharacters(in: .whitespaces)
     if !subject.isEmpty {
       prompt += "\n\nThe user already wrote this subject line. Start the message with it, unchanged:\n\(subject)"
     }
+    if let userWhy, !userWhy.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+      prompt += "\n\nThe user explained why they made this change. Use it for the body and keep its meaning:\n<why>\n\(userWhy.trimmingCharacters(in: .whitespacesAndNewlines))\n</why>"
+    }
     return prompt + "\n\nThe changes:\n\(diff)"
+  }
+
+  /// Messages generators get wrong in known ways (Tian et al., ICSE 2022):
+  /// a single word, only a vague scope ("minor changes"), or a file name
+  /// restated as the whole subject. Better to show nothing than one of these.
+  static func isWeak(_ message: String) -> Bool {
+    let subject = message.components(separatedBy: "\n").first?
+      .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    let words = subject.split(whereSeparator: \.isWhitespace)
+    if words.count <= 1 { return true }
+    let normalized = subject.lowercased().trimmingCharacters(in: CharacterSet(charactersIn: ".!"))
+    let vague = [
+      "minor changes", "minor fixes", "small changes", "small fixes", "some changes", "various changes",
+      "update files", "update code", "fix bugs", "fix bug", "changes", "wip", "misc", "cleanup", "code cleanup",
+      "update", "updates", "fix stuff", "more changes", "improvements",
+    ]
+    if vague.contains(normalized) { return true }
+    // "Update foo.swift", "Add bar.txt": a verb and nothing but a file name.
+    if words.count == 2, words[1].contains("."), !words[1].hasSuffix(".") { return true }
+    return false
+  }
+
+  /// How much of a generated message was changed before committing, from 0
+  /// (kept as written) to 1 (rewritten): edit distance over the longer
+  /// length. Real users' edits track message quality better than BLEU-style
+  /// scores (Tsvetkov et al., ICSE 2025).
+  static func editRatio(from generated: String, to committed: String) -> Double {
+    let a = Array(generated.trimmingCharacters(in: .whitespacesAndNewlines))
+    let b = Array(committed.trimmingCharacters(in: .whitespacesAndNewlines))
+    guard !a.isEmpty || !b.isEmpty else { return 0 }
+    var previous = Array(0...b.count)
+    for i in 1...max(a.count, 1) where !a.isEmpty {
+      var current = [i] + Array(repeating: 0, count: b.count)
+      for j in stride(from: 1, through: b.count, by: 1) {
+        current[j] = min(previous[j] + 1, current[j - 1] + 1, previous[j - 1] + (a[i - 1] == b[j - 1] ? 0 : 1))
+      }
+      previous = current
+    }
+    let distance = a.isEmpty ? b.count : previous[b.count]
+    return Double(distance) / Double(max(a.count, b.count))
   }
 
   /// A diff as `git diff` would print it.

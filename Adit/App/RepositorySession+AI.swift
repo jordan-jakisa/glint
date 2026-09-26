@@ -24,7 +24,12 @@ extension RepositorySession {
     // Like the commit button: staged changes if there are any, else every
     // tracked change.
     let staged = !status.staged.isEmpty
-    let subject = commitMessage.components(separatedBy: "\n").first ?? ""
+    let lines = commitMessage.components(separatedBy: "\n")
+    let subject = lines.first ?? ""
+    // Anything typed below the subject is the user's own reason.
+    let userWhy = lines.dropFirst().joined(separator: "\n")
+    let recentSubjects = commits.prefix(10).map(\.summary)
+    let before = commitMessage
     let client = AIClient(provider: settings.provider, apiKey: key)
     let instructions = settings.instructions
     let followsRules = settings.followsRepositoryRules
@@ -42,7 +47,7 @@ extension RepositorySession {
         let rules = followsRules ? Self.rules(for: repository.url, workspace: workspaceRoot) : nil
         let prompt = CommitPrompt.build(
           diff: CommitPrompt.compress(CommitPrompt.patchText(diff)), subject: subject,
-          rules: rules, userInstructions: instructions)
+          rules: rules, userInstructions: instructions, recentSubjects: recentSubjects, userWhy: userWhy)
 
         var reply = ""
         let start = ContinuousClock.now
@@ -55,9 +60,16 @@ extension RepositorySession {
           reply += piece
           commitMessage = CommitPrompt.clean(reply)
         }
-        commitMessage = CommitPrompt.clean(reply)
-        if commitMessage.isEmpty {
-          alertMessage = "The model sent back an empty message. Try again, or pick another model."
+        let final = CommitPrompt.clean(reply)
+        if final.isEmpty || CommitPrompt.isWeak(final) {
+          // Weak messages are worse than none: put back what was there.
+          commitMessage = before
+          alertMessage = final.isEmpty
+            ? "The model sent back an empty message. Try again, or pick another model."
+            : "That one wasn't useful (\u{201C}\(final.components(separatedBy: "\n").first ?? final)\u{201D}). Try again, or pick another model."
+        } else {
+          commitMessage = final
+          generatedMessage = final
         }
       } catch is CancellationError {
       } catch let error as URLError where error.code == .cancelled {
