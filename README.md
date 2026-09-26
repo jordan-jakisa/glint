@@ -1,9 +1,13 @@
-# Adit
+<p align="center">
+  <img src="docs/assets/icon.png" width="128" height="128" alt="Adit icon: a timber-framed mine entrance with diff lines inside">
+</p>
 
-**A way in to every change.**
+<h1 align="center">Adit</h1>
+
+<p align="center"><strong>A way in to every change.</strong></p>
 
 A lightweight, native macOS git panel: see your changes, stage, commit. With
-AI-generated commit messages to come.
+AI-written commit messages from free models.
 
 An *adit* is the horizontal tunnel miners cut to enter and inspect a seam. Adit is
 the way in to look at your changes. It also expands to **A**I **D**iff
@@ -78,3 +82,4 @@ docs/               Architecture, decision log, and plans.
 - `docs/ARCHITECTURE.md` - layering and the stack, with reasons.
 - `docs/DECISIONS.md` - the decision log. Read before re-litigating a choice.
 - `docs/plans/` - one file per planned release.
+- `docs/BRAND.md` - name, icon, colors, and voice.
