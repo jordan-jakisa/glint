@@ -141,7 +141,7 @@ private struct WorkingTreeHeader: View {
           .truncationMode(.head)
           .textSelection(.enabled)
         HStack(spacing: 12) {
-          Text(staged ? "Staged" : "Not staged")
+          Text(staged ? "Staged" : "Unstaged")
           ChangeStats(additions: diff.additions, deletions: diff.deletions)
         }
         .font(.callout)

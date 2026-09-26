@@ -17,10 +17,10 @@ struct AditCommands: Commands {
     }
 
     CommandGroup(replacing: .newItem) {
-      Button("Open Repository…") { session?.chooseRepository() }
+      Button(AppCommand.openRepository.title) { session?.chooseRepository() }
         .shortcut(.openRepository)
         .disabled(session == nil)
-      Button("Switch Project…") { session?.isProjectSwitcherShown = true }
+      Button(AppCommand.switchProject.title) { session?.isProjectSwitcherShown = true }
         .shortcut(.switchProject)
         .disabled(!isReady)
     }
@@ -32,21 +32,21 @@ struct AditCommands: Commands {
       .shortcut(.toggleLayout)
       .disabled(!isReady)
 
-      Button("Reload") { session?.refresh() }
+      Button(AppCommand.reload.title) { session?.refresh() }
         .shortcut(.reload)
         .disabled(!isReady)
 
-      Button("Fetch") { session?.fetch() }
+      Button(AppCommand.fetch.title) { session?.fetch() }
         .shortcut(.fetch)
         .disabled(!isReady)
-      Button("Pull") { session?.pull() }
+      Button(AppCommand.pull.title) { session?.pull() }
         .shortcut(.pull)
         .disabled(!isReady)
-      Button("Push") { session?.push() }
+      Button(AppCommand.push.title) { session?.push() }
         .shortcut(.push)
         .disabled(!isReady)
 
-      Button("Write Commit Message with AI") {
+      Button(AppCommand.writeMessage.title) {
         session?.tab = .changes
         session?.generateCommitMessage()
       }
@@ -63,7 +63,7 @@ struct AditCommands: Commands {
         .shortcut(.openExternalTerminal)
         .disabled(!isReady)
 
-      Button("Switch Repository…") {
+      Button(AppCommand.switchRepository.title) {
         session?.tab = .changes
         session?.isRepositoryPickerShown = true
       }
@@ -77,7 +77,7 @@ struct AditCommands: Commands {
         }
       }
 
-      Button("Switch Branch…") {
+      Button(AppCommand.switchBranch.title) {
         session?.tab = .changes
         session?.isBranchPickerShown = true
       }
@@ -89,32 +89,32 @@ struct AditCommands: Commands {
 
     CommandMenu("Go") {
       Group {
-        Button("Next Item") { session?.selectNextItem() }
-        Button("Previous Item") { session?.selectPreviousItem() }
+        Button(AppCommand.nextItem.title) { session?.selectNextItem() }
+        Button(AppCommand.previousItem.title) { session?.selectPreviousItem() }
 
         Divider()
 
-        Button("Next File") { session?.nextFile() }
+        Button(AppCommand.nextFile.title) { session?.nextFile() }
           .shortcut(.nextFile)
-        Button("Previous File") { session?.previousFile() }
+        Button(AppCommand.previousFile.title) { session?.previousFile() }
           .shortcut(.previousFile)
 
         Divider()
 
-        Button("Next Hunk") { session?.nextHunk() }
-        Button("Previous Hunk") { session?.previousHunk() }
+        Button(AppCommand.nextHunk.title) { session?.nextHunk() }
+        Button(AppCommand.previousHunk.title) { session?.previousHunk() }
 
         Divider()
 
-        Button("Collapse or Expand File") { session?.toggleCurrentFileCollapsed() }
+        Button(AppCommand.toggleCollapsed.title) { session?.toggleCurrentFileCollapsed() }
 
         Divider()
 
-        Button("Stage or Unstage File") { session?.toggleSelectedStaged() }
-        Button("Stage or Unstage Hunk or Lines") { session?.stageAtCursor() }
-        Button("Stage All") { session?.stageAll() }
+        Button(AppCommand.toggleStaged.title) { session?.toggleSelectedStaged() }
+        Button(AppCommand.stagePartial.title) { session?.stageAtCursor() }
+        Button(AppCommand.stageAll.title) { session?.stageAll() }
           .shortcut(.stageAll)
-        Button("Unstage All") { session?.unstageAll() }
+        Button(AppCommand.unstageAll.title) { session?.unstageAll() }
           .shortcut(.unstageAll)
         Button("Discard All Changes…") { session?.requestDiscardAll() }
       }

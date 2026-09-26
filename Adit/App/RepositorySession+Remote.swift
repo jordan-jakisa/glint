@@ -14,7 +14,7 @@ extension RepositorySession {
   var suggestedSyncTitle: String {
     switch suggestedSync {
     case .pull: "Pull \(sync.behind)"
-    case .push: sync.upstream == nil ? "Publish" : "Push \(sync.ahead)"
+    case .push: sync.upstream == nil ? "Publish Branch" : "Push \(sync.ahead)"
     case .fetch: "Fetch"
     }
   }

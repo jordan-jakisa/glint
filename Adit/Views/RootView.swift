@@ -104,7 +104,7 @@ private struct WelcomeView: View {
         .font(.system(size: 34, weight: .semibold, design: .rounded))
       Text("A way in to every change.")
         .foregroundStyle(.secondary)
-      Button("Open a Repository…", action: open)
+      Button(AppCommand.openRepository.title, action: open)
         .keyboardShortcut(.defaultAction)
         .controlSize(.large)
         .padding(.top, 8)
