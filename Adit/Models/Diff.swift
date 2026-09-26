@@ -42,6 +42,13 @@ struct FileChange: Identifiable, Sendable {
   let deletions: Int
 
   var path: String { newPath ?? oldPath ?? "" }
+
+  /// The same change at a new position, after the diff's files are reordered.
+  func renumbered(_ newID: Int) -> FileChange {
+    FileChange(
+      id: newID, status: status, oldPath: oldPath, newPath: newPath, isBinary: isBinary, hunks: hunks,
+      additions: additions, deletions: deletions)
+  }
 }
 
 struct Hunk: Identifiable, Sendable {

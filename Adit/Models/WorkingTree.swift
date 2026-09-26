@@ -44,7 +44,7 @@ extension WorkingTreeStatus {
     guard !staged.contains(where: { $0.path == path }) else { return }
     let kind: ChangedFile.Kind = file.kind == .untracked ? .added : file.kind
     staged.append(ChangedFile(path: path, kind: kind))
-    staged.sort { $0.path < $1.path }
+    staged = FileOrder.current.sorted(staged, path: \.path)
   }
 
   mutating func markUnstaged(_ path: String) {
@@ -53,6 +53,6 @@ extension WorkingTreeStatus {
     guard !unstaged.contains(where: { $0.path == path }) else { return }
     let kind: ChangedFile.Kind = file.kind == .added ? .untracked : file.kind
     unstaged.append(ChangedFile(path: path, kind: kind))
-    unstaged.sort { $0.path < $1.path }
+    unstaged = FileOrder.current.sorted(unstaged, path: \.path)
   }
 }

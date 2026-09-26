@@ -106,6 +106,9 @@ actor GitRepository {
         result.unstaged.append(ChangedFile(path: path, kind: kind))
       }
     }
+    let order = FileOrder.current
+    result.staged = order.sorted(result.staged, path: \.path)
+    result.unstaged = order.sorted(result.unstaged, path: \.path)
     return result
   }
 
@@ -556,7 +559,10 @@ actor GitRepository {
     for index in 0..<count {
       files.append(try fileChange(diff: diff, index: index))
     }
-    return Diff(source: source, files: files)
+    // Most useful first (see FileOrder), renumbered so a file's id is still
+    // its position: the diff view relies on that.
+    let ordered = FileOrder.current.sorted(files, path: \.path).enumerated().map { $1.renumbered($0) }
+    return Diff(source: source, files: ordered)
   }
 
   private func fileChange(diff: OpaquePointer?, index: Int) throws -> FileChange {
