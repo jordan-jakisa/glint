@@ -5,6 +5,7 @@ struct AISettingsView: View {
   @Bindable private var settings = AISettings.shared
   @State private var keyDraft = ""
   @State private var keySaved = false
+  @State private var keyFailed = false
 
   var body: some View {
     Form {
@@ -27,9 +28,9 @@ struct AISettingsView: View {
         }
         HStack {
           Text(keyStatus)
-            .foregroundStyle(.secondary)
+            .foregroundStyle(keyFailed ? .red : .secondary)
           Spacer()
-          Link("Get a key", destination: settings.provider.keyURL)
+          Link("Get a Key", destination: settings.provider.keyURL)
         }
         .font(.callout)
       }
@@ -38,7 +39,7 @@ struct AISettingsView: View {
         HStack {
           Picker("Model", selection: Binding(get: { settings.modelID }, set: { settings.modelID = $0 })) {
             if settings.models.isEmpty {
-              Text(settings.isLoadingModels ? "Loading…" : "None found").tag(String?.none)
+              Text(settings.isLoadingModels ? "Loading…" : "No free models right now").tag(String?.none)
             }
             ForEach(settings.models) { Text($0.name).tag(Optional($0.id)) }
           }
@@ -75,10 +76,12 @@ struct AISettingsView: View {
     .onChange(of: settings.provider) {
       keyDraft = ""
       keySaved = false
+      keyFailed = false
     }
   }
 
   private var keyStatus: String {
+    if keyFailed { return "Couldn't save your key to the Keychain. Unlock your login keychain, then save again." }
     if settings.hasKey { return "Key saved in your Keychain." }
     if settings.keyUnchecked { return "Adit checks for a saved key the first time you write a message." }
     return "No key saved. Free models still need one."
@@ -86,7 +89,9 @@ struct AISettingsView: View {
 
   private func saveKey() {
     guard !keyDraft.isEmpty else { return }
-    settings.saveKey(keyDraft)
+    // On failure the draft stays, so you can save again without retyping.
+    keyFailed = !settings.saveKey(keyDraft)
+    guard !keyFailed else { return }
     keyDraft = ""
     keySaved = true
   }

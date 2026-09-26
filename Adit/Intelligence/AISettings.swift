@@ -75,11 +75,14 @@ final class AISettings {
     return key
   }
 
-  func saveKey(_ key: String) {
+  /// Saves the key to the Keychain. False if the Keychain refused it (a
+  /// locked keychain, a denied prompt); nothing is cached then.
+  func saveKey(_ key: String) -> Bool {
     let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
-    Keychain.setKey(trimmed, for: provider)
+    guard Keychain.setKey(trimmed, for: provider) else { return false }
     keyCache[provider] = trimmed.isEmpty ? nil : trimmed
     keyState[provider.rawValue] = !trimmed.isEmpty
+    return true
   }
 
   /// Ready to generate: switched on, with a key and a model. Never reads the
