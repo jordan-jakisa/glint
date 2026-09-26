@@ -20,7 +20,12 @@ struct DiffPane: View {
             "No changes", systemImage: "doc",
             description: Text("This commit doesn't change any files."))
         } else {
-          DiffScrollView(session: session, commitID: diff.commitID)
+          DiffTableView(
+            rows: session.rows, rowsVersion: session.rowsVersion, commitID: diff.commitID,
+            lineNumberDigits: session.lineNumberDigits, scroller: session.diffScroller,
+            toggleCollapsed: session.toggleCollapsed,
+            visibleRowsChanged: session.visibleRowsChanged,
+            didPaint: session.diffDidAppear)
         }
       }
     } else if session.selectedCommitID == nil {
@@ -30,36 +35,6 @@ struct DiffPane: View {
       // nothing rather than a spinner that would only flicker.
       Color.clear
     }
-  }
-}
-
-private struct DiffScrollView: View {
-  @Bindable var session: RepositorySession
-  let commitID: String
-
-  var body: some View {
-    let gutterWidth = DiffStyle.gutterWidth(digits: session.lineNumberDigits)
-    ScrollViewReader { proxy in
-      ScrollView {
-        LazyVStack(alignment: .leading, spacing: 0) {
-          ForEach(session.rows) { row in
-            DiffRowView(row: row, gutterWidth: gutterWidth, toggleCollapsed: session.toggleCollapsed)
-          }
-        }
-        .scrollTargetLayout()
-      }
-      .onScrollTargetVisibilityChange(idType: DiffRowID.self) { visible in
-        session.visibleRowsChanged(visible)
-      }
-      .onChange(of: session.scrollRequest) { _, request in
-        guard let request else { return }
-        proxy.scrollTo(request.target, anchor: .top)
-      }
-    }
-    .onAppear { session.diffDidAppear(commitID) }
-    // A new commit gets a new scroll view, which starts at the top. The id
-    // comes after onAppear so it fires once per commit, not once ever.
-    .id(commitID)
   }
 }
 
@@ -82,7 +57,7 @@ private struct CommitHeader: View {
       }
       HStack(spacing: 12) {
         Text(String(diff.commitID.prefix(10)))
-          .font(DiffStyle.font)
+          .font(.system(size: 12, design: .monospaced))
           .textSelection(.enabled)
         if let commit {
           Text(commit.authorName)

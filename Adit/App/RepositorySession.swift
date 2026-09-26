@@ -57,15 +57,12 @@ final class RepositorySession {
   /// The current diff, flattened for the lazy stack. Rebuilt only when the
   /// diff, layout, or collapsed files change, never while scrolling.
   private(set) var rows: [DiffRow] = []
+  /// Bumped with every rebuild, so the table can tell new rows from old
+  /// without comparing them.
+  private(set) var rowsVersion = 0
   private(set) var lineNumberDigits = 3
-  /// Bumped to ask the diff view to scroll. The serial makes a repeated jump to
-  /// the same target still count as a change.
-  private(set) var scrollRequest: ScrollRequest?
-
-  struct ScrollRequest: Equatable {
-    let target: DiffRowID
-    let serial: Int
-  }
+  /// Hands keyboard jumps straight to the table, skipping a SwiftUI update.
+  @ObservationIgnored let diffScroller = DiffScroller()
 
   // MARK: - Private state
 
@@ -79,7 +76,6 @@ final class RepositorySession {
   /// The reader's position in the diff: the top-most visible row, or the last
   /// place a keyboard jump landed. Not observed: it changes on every scroll.
   @ObservationIgnored private var cursor = DiffRowID.top
-  @ObservationIgnored private var scrollSerial = 0
 
   private nonisolated static let firstPageSize = 100
   private static let pageSize = 200
@@ -91,6 +87,7 @@ final class RepositorySession {
   }
 
   private func rebuildRows() {
+    rowsVersion += 1
     guard let diff else {
       rows = []
       return
@@ -351,8 +348,7 @@ final class RepositorySession {
 
   private func scroll(to target: DiffRowID) {
     cursor = target
-    scrollSerial += 1
-    scrollRequest = ScrollRequest(target: target, serial: scrollSerial)
+    diffScroller.scroll(to: target, rowsVersion: rowsVersion)
   }
 }
 

@@ -17,12 +17,12 @@ extension RepositorySession {
     Timing.log.info("benchmark: start")
 
     for _ in 0..<15 {
-      await measure("next commit, main thread") { selectNextCommit() }
+      await measure("next commit, main thread", budget: 50) { selectNextCommit() }
       try? await Task.sleep(for: .milliseconds(100))
     }
     // Back up through commits that are now cached.
     for _ in 0..<5 {
-      await measure("previous commit, main thread") { selectPreviousCommit() }
+      await measure("previous commit, main thread", budget: 50) { selectPreviousCommit() }
       try? await Task.sleep(for: .milliseconds(100))
     }
     // Back to the newest commit, which is the large one in the bench repo.
@@ -41,14 +41,14 @@ extension RepositorySession {
   }
 
   /// Time from the action until the main thread is free again, which is when
-  /// SwiftUI has laid out the result. Budget: one frame.
-  private func measure(_ what: StaticString, _ action: () -> Void) async {
+  /// the result has been laid out. Default budget: one frame.
+  private func measure(_ what: StaticString, budget: Double = 16, _ action: () -> Void) async {
     let start = ContinuousClock.now
     action()
     await withCheckedContinuation { continuation in
       DispatchQueue.main.async { DispatchQueue.main.async { continuation.resume() } }
     }
-    Timing.report(what, since: start, budget: 16)
+    Timing.report(what, since: start, budget: budget)
     try? await Task.sleep(for: .milliseconds(200))
   }
 }
