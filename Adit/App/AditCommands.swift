@@ -20,6 +20,9 @@ struct AditCommands: Commands {
       Button("Open Repository…") { session?.chooseRepository() }
         .shortcut(.openRepository)
         .disabled(session == nil)
+      Button("Switch Project…") { session?.isProjectSwitcherShown = true }
+        .shortcut(.switchProject)
+        .disabled(!isReady)
     }
 
     CommandGroup(before: .toolbar) {

@@ -7,8 +7,10 @@ struct RootView: View {
 
   var body: some View {
     content
-      .navigationTitle(title)
-      .navigationSubtitle(subtitle)
+      // The toolbar shows `ProjectTitle` in its place; an empty title keeps
+      // the toolbar's flexible space so the layout controls stay trailing.
+      .navigationTitle("")
+      .background(WindowTitle(title: title))
       .focusedSceneValue(\.session, session)
       .background(KeyMonitor(handle: session.handleKey))
       .onAppear { session.restoreLastRepository() }
@@ -62,6 +64,17 @@ struct RootView: View {
         }
       }
       .toolbar {
+        ToolbarItem(placement: .navigation) {
+          ProjectTitle(session: session)
+        }
+        ToolbarItem(placement: .primaryAction) {
+          Button {
+            session.isTerminalShown.toggle()
+          } label: {
+            Label("Terminal", systemImage: "apple.terminal")
+          }
+          .help(AppCommand.showTerminal.hint(session.isTerminalShown ? "Hide the terminal" : "Show the terminal"))
+        }
         ToolbarItem(placement: .primaryAction) {
           Picker("Layout", selection: $session.layout) {
             Text("Unified").tag(DiffLayout.unified)
@@ -86,15 +99,26 @@ struct RootView: View {
       : "This can't be undone."
   }
 
+  /// For the Window menu and Mission Control; the toolbar shows
+  /// `ProjectTitle` instead.
   private var title: String {
-    guard let info = session.info else { return "Adit" }
-    guard let workspace = session.workspace else { return info.name }
-    return "\(workspace.name) / \(info.name)"
+    session.projectURL?.lastPathComponent ?? "Adit"
   }
+}
 
-  private var subtitle: String {
-    guard let info = session.info else { return "" }
-    return info.branch ?? "detached HEAD"
+/// Names the window in the Window menu and Mission Control without drawing
+/// a title in the toolbar.
+private struct WindowTitle: NSViewRepresentable {
+  let title: String
+
+  func makeNSView(context: Context) -> NSView { NSView() }
+
+  func updateNSView(_ view: NSView, context: Context) {
+    DispatchQueue.main.async {
+      guard let window = view.window else { return }
+      window.title = title
+      window.titleVisibility = .hidden
+    }
   }
 }
 

@@ -30,6 +30,7 @@ final class RepositorySession {
   /// relative path, for the repository picker.
   internal(set) var repositorySummaries: [String: RepositorySummary] = [:]
   var isRepositoryPickerShown = false
+  var isProjectSwitcherShown = false
   /// The terminal panel under the diff (⌃`).
   var isTerminalShown = false
   /// Lists the other repositories' changes under the active one's.
@@ -338,7 +339,24 @@ final class RepositorySession {
 
   func chooseRepository() {
     guard let url = access.choose() else { return }
+    openProject(url)
+  }
+
+  /// The open project: the folder of repositories, or the repository.
+  var projectURL: URL? { workspace?.root ?? repositoryURL }
+
+  /// Opens a project from the title's switcher.
+  func openProject(_ url: URL) {
+    isProjectSwitcherShown = false
+    guard projectURL.map({ !Self.sameFolder($0, url) }) ?? true else { return }
     open(url, restoring: false, loading: Task { try await Self.load(url) })
+  }
+
+  /// Your recent projects, newest first, for the switcher.
+  func recentProjects() -> [URL] { access.recents() }
+
+  private static func sameFolder(_ a: URL, _ b: URL) -> Bool {
+    a.standardizedFileURL.resolvingSymlinksInPath().path == b.standardizedFileURL.resolvingSymlinksInPath().path
   }
 
   private func open(_ url: URL, restoring: Bool, loading: Task<Opened, Error>) {
@@ -355,7 +373,7 @@ final class RepositorySession {
       } catch {
         let message = "\(url.lastPathComponent): \(error)"
         if restoring {
-          access.forget()
+          access.forget(url)
           phase = .closed(message: "Couldn't reopen \(message)")
         } else if repository == nil {
           phase = .closed(message: "Couldn't open \(message)")

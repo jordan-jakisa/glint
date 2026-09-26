@@ -104,7 +104,7 @@ struct Shortcut: Codable, Hashable, Sendable {
 /// Every command that can have a key.
 enum AppCommand: String, CaseIterable, Identifiable, Sendable {
   case openRepository, reload, toggleLayout, showTerminal, openExternalTerminal
-  case switchRepository, switchBranch, writeMessage, commit
+  case switchProject, switchRepository, switchBranch, writeMessage, commit
   case fetch, pull, push
   case nextFile, previousFile, stageAll, unstageAll
   case nextItem, previousItem, nextHunk, previousHunk, toggleCollapsed, toggleStaged, stagePartial,
@@ -119,6 +119,7 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .toggleLayout: "Unified or split"
     case .showTerminal: "Show or hide the terminal"
     case .openExternalTerminal: "Open in your terminal app"
+    case .switchProject: "Switch project"
     case .switchRepository: "Switch repository"
     case .switchBranch: "Switch branch"
     case .writeMessage: "Write commit message with AI"
@@ -159,6 +160,7 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .toggleLayout: Shortcut("\\", command: true)
     case .showTerminal: Shortcut("t", command: true)
     case .openExternalTerminal: Shortcut("t", command: true, option: true)
+    case .switchProject: Shortcut("o", command: true, option: true)
     case .switchRepository: Shortcut("r", command: true, shift: true)
     case .switchBranch: Shortcut("b", command: true)
     case .writeMessage: Shortcut("g", command: true, option: true)
@@ -262,6 +264,16 @@ final class ShortcutStore {
   private func save() {
     defaults.set(try? JSONEncoder().encode(custom), forKey: Self.customKey)
     defaults.set(Array(cleared), forKey: Self.clearedKey)
+  }
+}
+
+extension AppCommand {
+  /// The key you've set for this command, as shown in menus, or "" if none.
+  @MainActor var keys: String { ShortcutStore.shared.shortcut(for: self)?.display ?? "" }
+
+  /// A tooltip that names the key you've set: "Switch project (⌥⌘O)".
+  @MainActor func hint(_ text: String) -> String {
+    keys.isEmpty ? text : "\(text) (\(keys))"
   }
 }
 
