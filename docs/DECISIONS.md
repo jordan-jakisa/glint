@@ -83,6 +83,15 @@ networking, no SSH). Adit's own thin wrapper in `Git/` covers exactly what v0.1
 uses. Cost accepted: about 5 MB of C source in the repo, and upgrades are a
 manual copy (steps in `Packages/Clibgit2/VENDORED.md`).
 
+## Terminal: SwiftTerm, pinned to 1.11 (2026-09-26)
+
+The built-in terminal panel uses SwiftTerm (MIT, maintained, used by several
+Mac terminal apps) through Swift Package Manager: writing a terminal emulator
+is out of scope. Pinned to 1.11.x on purpose: 1.12 and later add Metal shaders,
+which need Xcode's separate Metal Toolchain download to build, and 1.19 adds a
+build plugin Xcode asks you to trust. Revisit when the GPU renderer is worth
+that setup.
+
 ## Xcode project with a synchronized root group (2026-09-26)
 
 The project uses `PBXFileSystemSynchronizedRootGroup` (Xcode 16 and later), so

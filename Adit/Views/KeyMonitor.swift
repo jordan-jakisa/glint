@@ -1,4 +1,5 @@
 import AppKit
+@preconcurrency import SwiftTerm
 import SwiftUI
 
 /// Single-key commands (j, k, n, p, o, Space, s, c) for one window. They can't
@@ -43,6 +44,8 @@ struct KeyMonitor: NSViewRepresentable {
       guard modifiers.intersection([.command, .control, .option]).isEmpty else { return false }
       // Typing in the commit message, a search field, or a sheet: hands off.
       if let text = window.firstResponder as? NSTextView, text.isEditable { return false }
+      // Typing in the terminal panel belongs to the shell.
+      if window.firstResponder is TerminalView { return false }
       return window.attachedSheet == nil
     }
 

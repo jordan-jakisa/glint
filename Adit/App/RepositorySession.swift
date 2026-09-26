@@ -30,6 +30,8 @@ final class RepositorySession {
   /// relative path, for the repository picker.
   internal(set) var repositorySummaries: [String: RepositorySummary] = [:]
   var isRepositoryPickerShown = false
+  /// The terminal panel under the diff (⌃`).
+  var isTerminalShown = false
   /// Lists the other repositories' changes under the active one's.
   var showsAllRepositories = UserDefaults.standard.bool(forKey: "showsAllRepositories") {
     didSet { UserDefaults.standard.set(showsAllRepositories, forKey: "showsAllRepositories") }

@@ -7,14 +7,14 @@ struct GeneralSettingsView: View {
   var body: some View {
     Form {
       Section {
-        Picker("Open in Terminal uses", selection: $terminal) {
+        Picker("External terminal", selection: $terminal) {
           ForEach(TerminalApp.allCases) { app in
             Text(app.isInstalled ? app.name : "\(app.name) (not installed)")
               .tag(app)
               .disabled(!app.isInstalled)
           }
         }
-        Text("\u{2318}T opens the active repository there.")
+        Text("\u{2318}T shows Adit's own terminal. \u{2325}\u{2318}T opens the active repository in this app instead.")
           .font(.callout)
           .foregroundStyle(.secondary)
       }

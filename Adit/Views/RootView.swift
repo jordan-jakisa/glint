@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
   @State private var session = RepositorySession()
+  /// This window's terminals, one per repository, alive while hidden.
+  @State private var terminals = TerminalStore()
 
   var body: some View {
     content
@@ -48,7 +50,16 @@ struct RootView: View {
         SidebarView(session: session)
           .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 480)
       } detail: {
-        DiffPane(session: session)
+        if session.isTerminalShown, let folder = session.repositoryURL {
+          VSplitView {
+            DiffPane(session: session)
+              .frame(minHeight: 160)
+            TerminalPanel(folder: folder, store: terminals)
+              .frame(minHeight: 100, idealHeight: 240)
+          }
+        } else {
+          DiffPane(session: session)
+        }
       }
       .toolbar {
         ToolbarItem(placement: .primaryAction) {

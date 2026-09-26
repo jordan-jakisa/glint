@@ -33,6 +33,9 @@ extension RepositorySession {
     }
   }
 
+  /// The active repository's folder, for the terminal panel.
+  var repositoryURL: URL? { info?.url }
+
   /// Opens the active repository in your terminal app (⌘T).
   func openInTerminal() {
     guard let folder = repository?.url else { return }

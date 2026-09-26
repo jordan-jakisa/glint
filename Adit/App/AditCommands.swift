@@ -45,8 +45,14 @@ struct AditCommands: Commands {
       .keyboardShortcut("g", modifiers: [.command, .option])
       .disabled(!isReady)
 
-      Button("Open in Terminal") { session?.openInTerminal() }
-        .keyboardShortcut("t")
+      Button(session?.isTerminalShown == true ? "Hide Terminal" : "Show Terminal") {
+        session?.isTerminalShown.toggle()
+      }
+      .keyboardShortcut("t")
+      .disabled(!isReady)
+
+      Button("Open in \(TerminalApp.preferred.name)") { session?.openInTerminal() }
+        .keyboardShortcut("t", modifiers: [.command, .option])
         .disabled(!isReady)
 
       Button("Switch Repository…") {

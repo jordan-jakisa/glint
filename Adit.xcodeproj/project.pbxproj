@@ -8,6 +8,7 @@
 
 /* Begin PBXBuildFile section */
 		AD1700000000000000000010 /* Clibgit2 in Frameworks */ = {isa = PBXBuildFile; productRef = AD1700000000000000000011 /* Clibgit2 */; };
+		AD1700000000000000000032 /* SwiftTerm in Frameworks */ = {isa = PBXBuildFile; productRef = AD1700000000000000000031 /* SwiftTerm */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -56,6 +57,7 @@
 			buildActionMask = 2147483647;
 			files = (
 				AD1700000000000000000010 /* Clibgit2 in Frameworks */,
+				AD1700000000000000000032 /* SwiftTerm in Frameworks */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -108,6 +110,7 @@
 			name = Adit;
 			packageProductDependencies = (
 				AD1700000000000000000011 /* Clibgit2 */,
+				AD1700000000000000000031 /* SwiftTerm */,
 			);
 			productName = Adit;
 			productReference = AD1700000000000000000005 /* Adit.app */;
@@ -164,6 +167,7 @@
 			minimizedProjectReferenceProxies = 1;
 			packageReferences = (
 				AD1700000000000000000012 /* XCLocalSwiftPackageReference "Packages/Clibgit2" */,
+				AD1700000000000000000030 /* XCRemoteSwiftPackageReference "SwiftTerm" */,
 			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AD1700000000000000000003 /* Products */;
@@ -402,10 +406,26 @@
 		};
 /* End XCLocalSwiftPackageReference section */
 
+/* Begin XCRemoteSwiftPackageReference section */
+		AD1700000000000000000030 /* XCRemoteSwiftPackageReference "SwiftTerm" */ = {
+			isa = XCRemoteSwiftPackageReference;
+			repositoryURL = "https://github.com/migueldeicaza/SwiftTerm";
+			requirement = {
+				kind = upToNextMinorVersion;
+				minimumVersion = 1.11.2;
+			};
+		};
+/* End XCRemoteSwiftPackageReference section */
+
 /* Begin XCSwiftPackageProductDependency section */
 		AD1700000000000000000011 /* Clibgit2 */ = {
 			isa = XCSwiftPackageProductDependency;
 			productName = Clibgit2;
+		};
+		AD1700000000000000000031 /* SwiftTerm */ = {
+			isa = XCSwiftPackageProductDependency;
+			package = AD1700000000000000000030 /* XCRemoteSwiftPackageReference "SwiftTerm" */;
+			productName = SwiftTerm;
 		};
 /* End XCSwiftPackageProductDependency section */
 	};
