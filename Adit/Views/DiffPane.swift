@@ -152,10 +152,10 @@ private struct WorkingTreeHeader: View {
       DelayedSpinner(isActive: isLoading)
       if selectedLines > 0 {
         Button(staged ? "Unstage Lines" : "Stage Lines", action: stageLines)
-          .help("\(selectedLines) selected (S)")
+          .help(AppCommand.stagePartial.hint("\(selectedLines) selected"))
       }
       Button(buttonTitle, action: toggleStaged)
-        .help("Space")
+        .help(AppCommand.toggleStaged.hint(buttonTitle))
     }
     .padding(.horizontal, 16)
     .padding(.vertical, 10)

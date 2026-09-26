@@ -85,9 +85,9 @@ struct CommitPanel: View {
 
   private var commitHelp: String {
     if session.commitsTrackedChanges {
-      return "Nothing is staged, so this commits every change to tracked files (⌘↩)"
+      return AppCommand.commit.hint("Nothing is staged, so this commits every change to tracked files")
     }
-    return "⌘↩"
+    return AppCommand.commit.hint("Commit")
   }
 }
 
@@ -139,7 +139,7 @@ struct BranchBar: View {
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
-        .help("Switch repository (\u{21E7}\u{2318}R)")
+        .help(AppCommand.switchRepository.hint("Switch repository"))
         .popover(isPresented: $session.isRepositoryPickerShown, arrowEdge: .top) {
           RepositoryPicker(session: session)
         }
@@ -161,7 +161,7 @@ struct BranchBar: View {
         }
       }
       .buttonStyle(.borderless)
-      .help("Switch branch (⌘B)")
+      .help(AppCommand.switchBranch.hint("Switch branch"))
       .popover(isPresented: $session.isBranchPickerShown, arrowEdge: .top) {
         BranchPicker(session: session)
       }
@@ -242,7 +242,8 @@ private struct GenerateButton: View {
   private var help: String {
     if session.isGeneratingMessage { return "Stop writing" }
     guard settings.isReady, let model = settings.modelID else { return settings.setupHint }
-    return "Write the message with \(model) on \(settings.provider.name) (⌥⌘G). Sends your diff there."
+    return AppCommand.writeMessage.hint("Write the message with \(model) on \(settings.provider.name)")
+      + ". Sends your diff there."
   }
 }
 

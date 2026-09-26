@@ -24,7 +24,7 @@ struct GeneralSettingsView: View {
               .disabled(!app.isInstalled)
           }
         }
-        Text("\u{2318}T shows Adit's own terminal. \u{2325}\u{2318}T opens the active repository in this app instead.")
+        Text(terminalNote)
           .font(.callout)
           .foregroundStyle(.secondary)
       }
@@ -33,5 +33,14 @@ struct GeneralSettingsView: View {
     .frame(width: 520)
     .onChange(of: terminal) { TerminalApp.preferred = terminal }
     .onChange(of: fileOrder) { FileOrder.set(fileOrder) }
+  }
+
+  private var terminalNote: String {
+    let builtIn = AppCommand.showTerminal.keys
+    let external = AppCommand.openExternalTerminal.keys
+    return [
+      builtIn.isEmpty ? nil : "\(builtIn) shows Adit's own terminal.",
+      external.isEmpty ? nil : "\(external) opens the active repository in this app instead.",
+    ].compactMap { $0 }.joined(separator: " ")
   }
 }

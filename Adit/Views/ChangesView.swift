@@ -158,7 +158,7 @@ struct ChangeRow: View {
       Toggle("Staged", isOn: Binding(get: { staged }, set: setStaged))
         .toggleStyle(.checkbox)
         .labelsHidden()
-        .help(staged ? "Unstage (Space)" : "Stage (Space)")
+        .help(AppCommand.toggleStaged.hint(staged ? "Unstage" : "Stage"))
       ChangeKindBadge(kind: file.kind)
       Text(file.fileName)
         .lineLimit(1)
