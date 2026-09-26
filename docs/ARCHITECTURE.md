@@ -1,7 +1,8 @@
 # Architecture
 
 **Date:** 2026-09-26
-**Status:** Planned. Nothing below is built yet except the app shell.
+**Status:** Git access, history, and diff rendering are built. Staging and
+committing are next (see `docs/plans/v0.1-git-panel.md`).
 
 ## The one constraint that shapes everything
 
@@ -19,7 +20,8 @@ That rules out two things other tools do:
 ## Layering
 
 ```
-App/         SwiftUI scenes, window and menu configuration.
+App/         Scenes, menus, and RepositorySession: the per-window state that
+             talks to Git/ and hands Models/ values to the views.
 Views/       Presentation only. No git types cross into this layer.
 Models/      Value types: Commit, FileChange, Hunk, Line. Sendable structs.
 Git/         libgit2 wrapper. The only layer that knows libgit2 exists.
@@ -32,7 +34,8 @@ makes the views previewable and testable without a repository on disk.
 
 ## Git access
 
-**libgit2, via SwiftGit2.** libgit2 is the same library GitHub, GitKraken, and
+**libgit2, vendored from source** (`Packages/Clibgit2`, see `VENDORED.md`), with
+Adit's own thin wrapper in `Git/`. libgit2 is the same library GitHub, GitKraken, and
 Xcode's own source control use. It is C, in-process, and has no subprocess cost.
 
 Diff reading specifically uses libgit2's `git_diff` API with a configured
@@ -48,15 +51,22 @@ source of hard-to-reproduce crashes in a tool like this.
 
 ## Rendering the diff
 
-The naive SwiftUI approach, a `LazyVStack` of `Text` per line, falls over on large
-diffs. Plan:
+Measured, as planned. A SwiftUI `LazyVStack` of rows took 75 to 95 ms per commit
+switch against a 50 ms budget: it measured every row, and `NavigationSplitView`
+preference passes walked all of them.
 
-1. Start with `LazyVStack` and measure on a genuinely large diff, for example a
-   lockfile change or a vendored dependency bump.
-2. If it stutters, move to a single `NSTextView`-backed representable with a custom
-   `NSTextStorage` per pane, which is what fast native editors use.
+The diff body is now an `NSTableView` (`Views/DiffTableView.swift`) with a
+custom-drawn cell per row (`Views/DiffRowCell.swift`):
 
-Do not pre-optimize this. Measure first, on real diffs.
+- Only rows on screen exist. File headers float as group rows.
+- The font is monospaced, so row heights are arithmetic (characters per line
+  divided into the text length), not text layout. Non-ASCII lines fall back to
+  measuring.
+- Long lines wrap by character, so the arithmetic and the drawing agree.
+- Keyboard jumps reach the table through `DiffScroller`, skipping SwiftUI.
+
+SwiftUI still owns everything around the diff: the window, sidebar, header,
+and toolbar.
 
 ## Syntax highlighting
 

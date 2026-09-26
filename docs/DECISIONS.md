@@ -31,13 +31,21 @@ an established macOS diff viewer and anything optical reads as a clone of it.
 
 **Tagline:** "A way in to every change."
 
-## Scope: a viewer, not a git client (2026-09-26)
+## Scope: a fast git panel, not a full git client (2026-09-26, revised)
 
-Adit reads diffs and drafts commit messages. It does not do branching, remotes,
-rebasing, stashing, or merge conflict resolution. Tower, Fork, and Sourcetree
-already do those well, and competing with them means becoming slow.
+Revised the same day. The first version read "a viewer, not a git client":
+read diffs, draft messages, nothing else. Using it made clear that reading the
+diff is only half the loop; the other half is staging and committing, and
+leaving Adit for that defeats the point.
 
-The test for any proposed feature: does it make reading a diff or writing a message
+Adit now covers what Zed's git panel covers, borrowing its concepts without
+copying its design: working-tree changes, diffs, staging
+(files, hunks, lines), committing, branch switching, and push and pull. It
+still does not do rebase, merge, conflict resolution, stash, or history
+rewriting beyond amend. Tower, Fork, and Sourcetree do those, and competing
+with them means becoming slow.
+
+The test for any proposed feature: does it make the look, stage, commit loop
 faster? If not, it does not belong.
 
 ## Build order: viewer before AI (2026-09-26)

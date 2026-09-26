@@ -2,7 +2,8 @@
 
 **A way in to every change.**
 
-A lightweight, native macOS diff viewer for git, with AI-generated commit messages.
+A lightweight, native macOS git panel: see your changes, stage, commit. With
+AI-generated commit messages to come.
 
 An *adit* is the horizontal tunnel miners cut to enter and inspect a seam. Adit is
 the way in to look at your changes. It also expands to **A**I **D**iff
@@ -23,8 +24,9 @@ Speed is the product. If it is not instant it has failed.
 
 ## Status
 
-Pre-v0.1. The project builds and launches a placeholder window. No features yet.
-See `docs/plans/v0.1-diff-viewer.md` for what ships first.
+Pre-v0.1. Opens a repository, lists its history, and shows any commit's diff,
+unified or split. Staging and committing are next. See
+`docs/plans/v0.1-git-panel.md` for what ships first.
 
 ## Build
 

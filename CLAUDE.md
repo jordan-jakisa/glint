@@ -2,16 +2,18 @@
 
 Guidance for Claude Code working in this repository.
 
-Adit is a lightweight native macOS git diff viewer with AI-generated commit
-messages. SwiftUI, Swift 6 with complete strict concurrency, libgit2 via SwiftGit2.
-Bundle id `com.kerustudios.adit`. Pre-v0.1: the shell builds, no features yet.
+Adit is a lightweight native macOS git panel (changes, diffs, staging, commits),
+with AI-generated commit messages to come. SwiftUI, Swift 6 with complete strict
+concurrency, libgit2 vendored in `Packages/Clibgit2`. Bundle id
+`com.kerustudios.adit`. Pre-v0.1: history and diffs work; staging and committing
+are next.
 
 ## Read first
 
 - `docs/DECISIONS.md` - durable decisions and their evidence. Read before proposing
   a change to the name, scope, stack, or build order.
 - `docs/ARCHITECTURE.md` - layering, and why each stack choice was made.
-- `docs/plans/v0.1-diff-viewer.md` - what ships first, in order.
+- `docs/plans/v0.1-git-panel.md` - what ships first, in order.
 
 ## The constraint
 
