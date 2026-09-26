@@ -26,7 +26,7 @@ struct AISettingsView: View {
             .disabled(keyDraft.isEmpty)
         }
         HStack {
-          Text(settings.apiKey == nil ? "No key saved. Free models still need one." : "Key saved in your Keychain.")
+          Text(keyStatus)
             .foregroundStyle(.secondary)
           Spacer()
           Link("Get a key", destination: settings.provider.keyURL)
@@ -76,6 +76,12 @@ struct AISettingsView: View {
       keyDraft = ""
       keySaved = false
     }
+  }
+
+  private var keyStatus: String {
+    if settings.hasKey { return "Key saved in your Keychain." }
+    if settings.keyUnchecked { return "Adit checks for a saved key the first time you write a message." }
+    return "No key saved. Free models still need one."
   }
 
   private func saveKey() {

@@ -29,11 +29,19 @@ final class AISettings {
     didSet { defaults.set(followsRepositoryRules, forKey: "aiRepositoryRules") }
   }
 
+  /// Whether each provider has a key saved: true, false, or missing when
+  /// Adit hasn't checked yet (keys saved before this was tracked). Not
+  /// secret, so it lives in UserDefaults: checking it never touches the
+  /// Keychain, which on macOS can ask for your login password.
+  private(set) var keyState: [String: Bool] {
+    didSet { defaults.set(keyState, forKey: "aiKeyState") }
+  }
+
   private(set) var models: [AIModel] = []
   private(set) var isLoadingModels = false
   private(set) var modelsError: String?
-  /// Bumped when a key is saved, so views that show key state refresh.
-  private(set) var keyRevision = 0
+  /// Keys already read this launch, so the Keychain is asked at most once.
+  @ObservationIgnored private var keyCache: [AIProvider: String] = [:]
 
   private let defaults = UserDefaults.standard
 
@@ -43,6 +51,7 @@ final class AISettings {
     modelIDs = defaults.dictionary(forKey: "aiModels") as? [String: String] ?? [:]
     instructions = defaults.string(forKey: "aiInstructions") ?? ""
     followsRepositoryRules = defaults.object(forKey: "aiRepositoryRules") as? Bool ?? true
+    keyState = defaults.dictionary(forKey: "aiKeyState") as? [String: Bool] ?? [:]
   }
 
   var modelID: String? {
@@ -50,25 +59,39 @@ final class AISettings {
     set { modelIDs[provider.rawValue] = newValue }
   }
 
-  var apiKey: String? {
-    _ = keyRevision
-    return Keychain.key(for: provider)
+  var hasKey: Bool { keyState[provider.rawValue] == true }
+
+  /// A key may have been saved before Adit tracked it; the first real use
+  /// finds out.
+  var keyUnchecked: Bool { keyState[provider.rawValue] == nil }
+
+  /// Reads the key from the Keychain. Only call this when about to send a
+  /// request: it's the one place that can make macOS ask for permission.
+  func readKey() -> String? {
+    if let cached = keyCache[provider] { return cached }
+    let key = Keychain.key(for: provider).flatMap { $0.isEmpty ? nil : $0 }
+    keyState[provider.rawValue] = key != nil
+    keyCache[provider] = key
+    return key
   }
 
   func saveKey(_ key: String) {
-    Keychain.setKey(key, for: provider)
-    keyRevision += 1
+    let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
+    Keychain.setKey(trimmed, for: provider)
+    keyCache[provider] = trimmed.isEmpty ? nil : trimmed
+    keyState[provider.rawValue] = !trimmed.isEmpty
   }
 
-  /// Ready to generate: switched on, with a key and a model.
+  /// Ready to generate: switched on, with a key and a model. Never reads the
+  /// Keychain, so it's safe to check while drawing.
   var isReady: Bool {
-    isEnabled && apiKey?.isEmpty == false && modelID != nil
+    isEnabled && modelID != nil && (hasKey || keyUnchecked)
   }
 
   /// What's missing, in words, when not ready.
   var setupHint: String {
     if !isEnabled { return "Turn on AI commit messages in Settings (⌘,)." }
-    if apiKey?.isEmpty != false { return "Add your \(provider.name) API key in Settings (⌘,)." }
+    if !hasKey { return "Add your \(provider.name) API key in Settings (⌘,)." }
     return "Pick a free model in Settings (⌘,)."
   }
 

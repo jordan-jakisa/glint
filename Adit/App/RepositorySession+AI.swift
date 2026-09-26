@@ -12,8 +12,12 @@ extension RepositorySession {
       return
     }
     let settings = AISettings.shared
-    guard settings.isReady, let key = settings.apiKey, let model = settings.modelID else {
+    guard settings.isReady, let model = settings.modelID else {
       alertMessage = settings.setupHint
+      return
+    }
+    guard let key = settings.readKey() else {
+      alertMessage = "Adit couldn't read your \(settings.provider.name) key from the Keychain. Add it again in Settings (⌘,)."
       return
     }
     guard let repository else { return }
