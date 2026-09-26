@@ -398,3 +398,32 @@ import Testing
     #expect(branch.switchName == "feature/x")
   }
 }
+
+@Suite struct RemoteTests {
+  @Test func tracksAheadAndBehindThroughARealRemote() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n"])
+    let remote = FileManager.default.temporaryDirectory.appendingPathComponent("adit-remote-\(UUID().uuidString).git")
+    defer { try? FileManager.default.removeItem(at: remote) }
+    let git = SystemGit(directory: fixture.url)
+    _ = try await SystemGit(directory: FileManager.default.temporaryDirectory).run(["init", "--bare", "-q", remote.path])
+    _ = try await git.run(["remote", "add", "origin", remote.path])
+
+    let repository = try await GitRepository.open(at: fixture.url)
+    var sync = await repository.syncStatus()
+    #expect(sync.upstream == nil)
+    #expect(sync.hasRemotes)
+    #expect(await repository.defaultRemote() == "origin")
+
+    let branch = try #require(await repository.info().branch)
+    _ = try await git.run(["push", "-q", "--set-upstream", "origin", branch])
+    sync = await repository.syncStatus()
+    #expect(sync.upstream == "origin/\(branch)")
+    #expect(sync.ahead == 0 && sync.behind == 0)
+
+    try fixture.commit("Local only", files: ["a.txt": "2\n"])
+    sync = await repository.syncStatus()
+    #expect(sync.ahead == 1)
+    #expect(sync.behind == 0)
+  }
+}

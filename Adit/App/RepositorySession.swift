@@ -93,6 +93,15 @@ final class RepositorySession {
   }
   internal(set) var isSwitchingBranch = false
 
+  // MARK: Remotes
+
+  enum NetworkOperation: String {
+    case fetch = "Fetching", pull = "Pulling", push = "Pushing"
+  }
+
+  internal(set) var sync = SyncStatus.none
+  internal(set) var networkOperation: NetworkOperation?
+
   /// Changed lines selected in a working-tree diff, for line staging.
   internal(set) var selectedLineRows: [DiffRowID] = []
   /// Hands keyboard jumps straight to the table, skipping a SwiftUI update.
@@ -140,6 +149,7 @@ final class RepositorySession {
     let repository: GitRepository
     let info: RepositoryInfo
     let status: WorkingTreeStatus
+    let sync: SyncStatus
     let commits: [Commit]
     let firstChange: ChangeSelection?
     let firstDiff: Diff?
@@ -150,6 +160,7 @@ final class RepositorySession {
     let repository = try await GitRepository.open(at: url)
     let info = await repository.info()
     let status = try await repository.status()
+    let sync = await repository.syncStatus()
     let commits = try await repository.firstCommits(limit: firstPageSize)
     let firstChange = ChangeSelection.first(in: status)
     var firstDiff: Diff?
@@ -157,7 +168,7 @@ final class RepositorySession {
       firstDiff = try? await repository.workingTreeDiff(staged: firstChange.staged, path: firstChange.path)
     }
     return Opened(
-      repository: repository, info: info, status: status, commits: commits,
+      repository: repository, info: info, status: status, sync: sync, commits: commits,
       firstChange: firstChange, firstDiff: firstDiff)
   }
 
@@ -222,6 +233,7 @@ final class RepositorySession {
     info = opened.info
     status = opened.status
     commits = opened.commits
+    sync = opened.sync
     hasMoreCommits = opened.commits.count == Self.firstPageSize
     cache = DiffCache(capacity: 32)
     diffError = nil

@@ -119,9 +119,53 @@ struct BranchBar: View {
         BranchPicker(session: session)
       }
       Spacer()
+      SyncButton(session: session)
     }
     .font(.callout)
     .padding(.horizontal, 10)
     .padding(.vertical, 6)
+  }
+}
+
+/// Fetch, Pull, or Push, whichever fits, with the others in its menu.
+private struct SyncButton: View {
+  @Bindable var session: RepositorySession
+
+  var body: some View {
+    if let operation = session.networkOperation {
+      HStack(spacing: 4) {
+        ProgressView().controlSize(.mini)
+        Text(operation.rawValue + "…").foregroundStyle(.secondary)
+      }
+    } else {
+      Menu {
+        Button("Fetch", action: session.fetch)
+        Button("Pull", action: session.pull)
+        Button(session.sync.upstream == nil ? "Publish Branch" : "Push", action: session.push)
+      } label: {
+        Label(session.suggestedSyncTitle, systemImage: icon)
+      } primaryAction: {
+        session.runSuggestedSync()
+      }
+      .menuStyle(.borderedButton)
+      .controlSize(.small)
+      .fixedSize()
+      .help(help)
+    }
+  }
+
+  private var icon: String {
+    switch session.suggestedSync {
+    case .pull: "arrow.down"
+    case .push: "arrow.up"
+    case .fetch: "arrow.triangle.2.circlepath"
+    }
+  }
+
+  private var help: String {
+    guard let upstream = session.sync.upstream else {
+      return session.sync.hasRemotes ? "This branch isn't on a remote yet" : "No remote configured"
+    }
+    return "\(session.sync.ahead) ahead, \(session.sync.behind) behind \(upstream)"
   }
 }

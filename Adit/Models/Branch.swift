@@ -17,3 +17,15 @@ struct Branch: Identifiable, Hashable, Sendable {
     return String(name[name.index(after: slash)...])
   }
 }
+
+/// Where the current branch stands against its upstream.
+struct SyncStatus: Equatable, Sendable {
+  /// `origin/main`, or nil when the branch doesn't track anything.
+  let upstream: String?
+  let ahead: Int
+  let behind: Int
+  /// Whether the repository has any remote to push to at all.
+  let hasRemotes: Bool
+
+  static let none = SyncStatus(upstream: nil, ahead: 0, behind: 0, hasRemotes: false)
+}

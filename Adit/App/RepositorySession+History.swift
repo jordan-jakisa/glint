@@ -7,6 +7,7 @@ extension RepositorySession {
     guard let repository, !isLoadingMore else { return }
     Task {
       let info = await repository.info()
+      sync = await repository.syncStatus()
       let head = await repository.headCommitID()
       guard info != self.info || head != commits.first?.id else { return }
       guard let fresh = try? await repository.firstCommits(limit: Self.firstPageSize) else { return }

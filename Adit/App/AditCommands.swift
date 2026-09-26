@@ -28,6 +28,16 @@ struct AditCommands: Commands {
         .keyboardShortcut("r")
         .disabled(!isReady)
 
+      Button("Fetch") { session?.fetch() }
+        .keyboardShortcut("f", modifiers: [.command, .option])
+        .disabled(!isReady)
+      Button("Pull") { session?.pull() }
+        .keyboardShortcut("p", modifiers: [.command, .option])
+        .disabled(!isReady)
+      Button("Push") { session?.push() }
+        .keyboardShortcut("p", modifiers: [.command, .option, .shift])
+        .disabled(!isReady)
+
       Button("Switch Branch…") {
         session?.tab = .changes
         session?.isBranchPickerShown = true

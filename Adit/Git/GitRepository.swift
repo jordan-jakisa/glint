@@ -292,6 +292,45 @@ actor GitRepository {
     return local.sorted { $0.date > $1.date } + remote.sorted { $0.date > $1.date }
   }
 
+  /// Ahead and behind counts for the current branch against its upstream.
+  func syncStatus() -> SyncStatus {
+    var remotes = git_strarray()
+    let hasRemotes = git_remote_list(&remotes, handle) == 0 && remotes.count > 0
+    git_strarray_dispose(&remotes)
+
+    var head: OpaquePointer?
+    guard git_repository_head(&head, handle) == 0, let head else {
+      return SyncStatus(upstream: nil, ahead: 0, behind: 0, hasRemotes: hasRemotes)
+    }
+    defer { git_reference_free(head) }
+    var upstream: OpaquePointer?
+    guard git_branch_upstream(&upstream, head) == 0, let upstream else {
+      return SyncStatus(upstream: nil, ahead: 0, behind: 0, hasRemotes: hasRemotes)
+    }
+    defer { git_reference_free(upstream) }
+
+    var name: UnsafePointer<CChar>?
+    git_branch_name(&name, upstream)
+    var ahead = 0
+    var behind = 0
+    if let local = git_reference_target(head), let remote = git_reference_target(upstream) {
+      git_graph_ahead_behind(&ahead, &behind, handle, local, remote)
+    }
+    return SyncStatus(
+      upstream: name.map { String(cString: $0) }, ahead: ahead, behind: behind, hasRemotes: hasRemotes)
+  }
+
+  /// The remote to publish a new branch to: `origin` if there is one, else the
+  /// only remote. Nil when it's ambiguous or there are none.
+  func defaultRemote() -> String? {
+    var remotes = git_strarray()
+    guard git_remote_list(&remotes, handle) == 0 else { return nil }
+    defer { git_strarray_dispose(&remotes) }
+    let names = (0..<remotes.count).compactMap { remotes.strings[$0].map { String(cString: $0) } }
+    if names.contains("origin") { return "origin" }
+    return names.count == 1 ? names[0] : nil
+  }
+
   private func tipDate(_ reference: OpaquePointer?) -> Date {
     guard let target = git_reference_target(reference) else { return .distantPast }
     var commit: OpaquePointer?
