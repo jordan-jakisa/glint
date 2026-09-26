@@ -16,6 +16,10 @@ struct GlintCommands: Commands {
       Button("About Glint") { AboutPanel.show() }
     }
 
+    CommandGroup(replacing: .help) {
+      Button("Acknowledgements") { AboutPanel.showAcknowledgements() }
+    }
+
     CommandGroup(replacing: .newItem) {
       Button(AppCommand.openRepository.title) { session?.chooseRepository() }
         .shortcut(.openRepository)
