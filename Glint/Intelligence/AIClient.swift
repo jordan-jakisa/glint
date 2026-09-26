@@ -98,6 +98,40 @@ struct AIClient: Sendable {
     }
   }
 
+  enum KeyCheck: Equatable, Sendable {
+    /// The provider answered, so the key works.
+    case accepted
+    /// The provider refused the key.
+    case rejected
+    /// Couldn't tell: offline, rate limited, or the provider is down. The key
+    /// may be fine.
+    case unsure(String)
+  }
+
+  /// Asks for one token from `model`, just to see whether the key is taken.
+  func check(model: String) async -> KeyCheck {
+    var request = URLRequest(url: provider.chatCompletionsURL, timeoutInterval: 20)
+    request.httpMethod = "POST"
+    request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    for (field, value) in provider.extraHeaders { request.setValue(value, forHTTPHeaderField: field) }
+    let body: [String: Any] = [
+      "model": model, "max_tokens": 1, "messages": [["role": "user", "content": "Say ok."]],
+    ]
+    request.httpBody = try? JSONSerialization.data(withJSONObject: body)
+    do {
+      let (_, response) = try await URLSession.shared.data(for: request)
+      switch (response as? HTTPURLResponse)?.statusCode ?? 0 {
+      case 200..<300: return .accepted
+      case 401, 403: return .rejected
+      case 429: return .unsure("\(provider.name) is busy right now, so the key couldn't be checked. It's saved; you can carry on.")
+      default: return .unsure("\(provider.name) didn't answer properly, so the key couldn't be checked. It's saved; you can carry on.")
+      }
+    } catch {
+      return .unsure("Couldn't reach \(provider.name) to check the key. It's saved; you can carry on.")
+    }
+  }
+
   /// Free chat models a provider currently offers. The listings are public,
   /// so this works before you've added a key.
   static func freeModels(for provider: AIProvider) async throws -> [AIModel] {

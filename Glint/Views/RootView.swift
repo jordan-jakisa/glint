@@ -56,7 +56,11 @@ struct RootView: View {
   @ViewBuilder private var content: some View {
     switch session.phase {
     case .closed(let message):
-      WelcomeView(message: message, open: session.chooseRepository)
+      if OnboardingView.isDone || message != nil {
+        WelcomeView(message: message, open: session.chooseRepository)
+      } else {
+        OnboardingView(open: session.chooseRepository)
+      }
     case .opening:
       Color.clear
     case .ready:
