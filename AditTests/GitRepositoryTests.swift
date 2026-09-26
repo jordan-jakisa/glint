@@ -155,3 +155,51 @@ import Testing
     #expect(latin.hunks.first?.lines.first?.text == "caf\u{FFFD}")
   }
 }
+
+@Suite struct StatusTests {
+  @Test func splitsStagedUnstagedAndUntracked() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["tracked.txt": "one\n", "gone.txt": "bye\n"])
+    let repository = try await GitRepository.open(at: fixture.url)
+    #expect(try await repository.status().isClean)
+
+    try fixture.write("tracked.txt", "one\ntwo\n")
+    try fixture.write("new/untracked.txt", "hi\n")
+    try fixture.delete("gone.txt")
+    try fixture.write("staged.txt", "s\n")
+    try fixture.stage("staged.txt")
+
+    let status = try await repository.status()
+    #expect(status.staged == [ChangedFile(path: "staged.txt", kind: .added)])
+    #expect(
+      Set(status.unstaged) == [
+        ChangedFile(path: "tracked.txt", kind: .modified),
+        ChangedFile(path: "new/untracked.txt", kind: .untracked),
+        ChangedFile(path: "gone.txt", kind: .deleted),
+      ])
+  }
+
+  @Test func partlyStagedFileAppearsInBothGroups() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n"])
+    try fixture.write("a.txt", "1\n2\n")
+    try fixture.stage("a.txt")
+    try fixture.write("a.txt", "1\n2\n3\n")
+
+    let status = try await GitRepository.open(at: fixture.url).status()
+    #expect(status.staged.map(\.path) == ["a.txt"])
+    #expect(status.unstaged.map(\.path) == ["a.txt"])
+  }
+
+  @Test func seesIndexChangesMadeByOtherTools() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n"])
+    let repository = try await GitRepository.open(at: fixture.url)
+    #expect(try await repository.status().isClean)
+
+    // Another process stages a change after Adit has read the index.
+    try fixture.write("a.txt", "2\n")
+    try fixture.stage("a.txt")
+    #expect(try await repository.status().staged.map(\.path) == ["a.txt"])
+  }
+}

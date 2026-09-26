@@ -68,6 +68,74 @@ actor GitRepository {
     return Self.hex(oid)
   }
 
+  // MARK: - Working tree
+
+  /// Staged and unstaged changes, like `git status`. Untracked folders are
+  /// listed file by file; ignored files and submodules are left out.
+  func status() throws -> WorkingTreeStatus {
+    try reloadIndex()
+    var options = git_status_options()
+    git_status_options_init(&options, UInt32(GIT_STATUS_OPTIONS_VERSION))
+    options.show = GIT_STATUS_SHOW_INDEX_AND_WORKDIR
+    options.flags =
+      GIT_STATUS_OPT_INCLUDE_UNTRACKED.rawValue
+      | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS.rawValue
+      | GIT_STATUS_OPT_EXCLUDE_SUBMODULES.rawValue
+
+    var list: OpaquePointer?
+    try GitError.check(git_status_list_new(&list, handle, &options), "Couldn't read changes.")
+    defer { git_status_list_free(list) }
+
+    var result = WorkingTreeStatus.clean
+    for index in 0..<git_status_list_entrycount(list) {
+      guard let entry = git_status_byindex(list, index)?.pointee else { continue }
+      let flags = entry.status.rawValue
+      let delta = entry.index_to_workdir ?? entry.head_to_index
+      guard let delta, let cPath = delta.pointee.new_file.path ?? delta.pointee.old_file.path
+      else { continue }
+      let path = String(cString: cPath)
+
+      if flags & GIT_STATUS_CONFLICTED.rawValue != 0 {
+        result.unstaged.append(ChangedFile(path: path, kind: .conflicted))
+        continue
+      }
+      if let kind = Self.stagedKind(flags) {
+        result.staged.append(ChangedFile(path: path, kind: kind))
+      }
+      if let kind = Self.unstagedKind(flags) {
+        result.unstaged.append(ChangedFile(path: path, kind: kind))
+      }
+    }
+    return result
+  }
+
+  /// libgit2 caches the index. Other tools (the terminal, the editor) write it
+  /// too, so reread it from disk if it changed before trusting it.
+  private func reloadIndex() throws {
+    var index: OpaquePointer?
+    try GitError.check(git_repository_index(&index, handle), "Couldn't read the index.")
+    defer { git_index_free(index) }
+    try GitError.check(git_index_read(index, 0), "Couldn't read the index.")
+  }
+
+  private static func stagedKind(_ flags: UInt32) -> ChangedFile.Kind? {
+    if flags & GIT_STATUS_INDEX_NEW.rawValue != 0 { return .added }
+    if flags & GIT_STATUS_INDEX_DELETED.rawValue != 0 { return .deleted }
+    if flags & GIT_STATUS_INDEX_RENAMED.rawValue != 0 { return .renamed }
+    if flags & GIT_STATUS_INDEX_TYPECHANGE.rawValue != 0 { return .typeChanged }
+    if flags & GIT_STATUS_INDEX_MODIFIED.rawValue != 0 { return .modified }
+    return nil
+  }
+
+  private static func unstagedKind(_ flags: UInt32) -> ChangedFile.Kind? {
+    if flags & GIT_STATUS_WT_NEW.rawValue != 0 { return .untracked }
+    if flags & GIT_STATUS_WT_DELETED.rawValue != 0 { return .deleted }
+    if flags & GIT_STATUS_WT_RENAMED.rawValue != 0 { return .renamed }
+    if flags & GIT_STATUS_WT_TYPECHANGE.rawValue != 0 { return .typeChanged }
+    if flags & GIT_STATUS_WT_MODIFIED.rawValue != 0 { return .modified }
+    return nil
+  }
+
   // MARK: - Commits
 
   /// Starts a new walk from HEAD, newest first, and returns the first page.

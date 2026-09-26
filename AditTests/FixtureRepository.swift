@@ -80,6 +80,55 @@ final class FixtureRepository {
     return String(decoding: buffer.prefix(40).map { UInt8(bitPattern: $0) }, as: UTF8.self)
   }
 
+  /// Writes a file in the working tree without staging it.
+  func write(_ path: String, _ contents: String) throws {
+    let fileURL = url.appendingPathComponent(path)
+    try FileManager.default.createDirectory(
+      at: fileURL.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try Data(contents.utf8).write(to: fileURL)
+  }
+
+  func delete(_ path: String) throws {
+    try FileManager.default.removeItem(at: url.appendingPathComponent(path))
+  }
+
+  /// Stages one path the way `git add` would, through a separate index handle,
+  /// like another tool would.
+  func stage(_ path: String) throws {
+    var index: OpaquePointer?
+    try Self.check(git_repository_index(&index, repo))
+    defer { git_index_free(index) }
+    try Self.check(git_index_read(index, 1))
+    try Self.check(git_index_add_bypath(index, path))
+    try Self.check(git_index_write(index))
+  }
+
+  /// The staged contents of `path`, or nil if it isn't in the index.
+  func indexContents(_ path: String) throws -> String? {
+    var index: OpaquePointer?
+    try Self.check(git_repository_index(&index, repo))
+    defer { git_index_free(index) }
+    try Self.check(git_index_read(index, 1))
+    guard let entry = git_index_get_bypath(index, path, 0) else { return nil }
+    var oid = entry.pointee.id
+    var blob: OpaquePointer?
+    try Self.check(git_blob_lookup(&blob, repo, &oid))
+    defer { git_blob_free(blob) }
+    let size = Int(git_blob_rawsize(blob))
+    let bytes = UnsafeRawBufferPointer(start: git_blob_rawcontent(blob), count: size)
+    return String(decoding: bytes, as: UTF8.self)
+  }
+
+  /// Current HEAD commit message summary, or nil for an empty repository.
+  func headSummary() throws -> String? {
+    var oid = git_oid()
+    guard git_reference_name_to_id(&oid, repo, "HEAD") == 0 else { return nil }
+    var commit: OpaquePointer?
+    try Self.check(git_commit_lookup(&commit, repo, &oid))
+    defer { git_commit_free(commit) }
+    return git_commit_summary(commit).map { String(cString: $0) }
+  }
+
   private static func check(_ code: Int32) throws {
     guard code < 0 else { return }
     let message = git_error_last().flatMap { $0.pointee.message.map { String(cString: $0) } }
