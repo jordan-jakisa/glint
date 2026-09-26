@@ -1,8 +1,22 @@
 import Foundation
 
-/// Everything that changed in one commit, relative to its first parent.
-struct CommitDiff: Sendable {
-  let commitID: String
+/// Where a diff comes from.
+enum DiffSource: Hashable, Sendable {
+  /// One commit against its first parent.
+  case commit(String)
+  /// Uncommitted changes: HEAD to index when `staged`, index to working tree
+  /// otherwise. A nil `path` means every changed file.
+  case workingTree(staged: Bool, path: String?)
+
+  var commitID: String? {
+    if case .commit(let id) = self { return id }
+    return nil
+  }
+}
+
+/// A set of file changes, from a commit or from uncommitted work.
+struct Diff: Sendable {
+  let source: DiffSource
   let files: [FileChange]
 
   var additions: Int { files.reduce(0) { $0 + $1.additions } }
@@ -14,7 +28,7 @@ struct FileChange: Identifiable, Sendable {
     case added, deleted, modified, renamed, copied, typeChanged
   }
 
-  /// Position in the diff. Stable for the lifetime of one `CommitDiff`.
+  /// Position in the diff. Stable for the lifetime of one `Diff`.
   let id: Int
   let status: Status
   let oldPath: String?

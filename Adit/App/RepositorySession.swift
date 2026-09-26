@@ -36,7 +36,7 @@ final class RepositorySession {
     return commits.first { $0.id == selectedCommitID }
   }
 
-  private(set) var diff: CommitDiff? {
+  private(set) var diff: Diff? {
     didSet { rebuildRows() }
   }
   private(set) var diffError: String?
@@ -103,7 +103,7 @@ final class RepositorySession {
     let repository: GitRepository
     let info: RepositoryInfo
     let commits: [Commit]
-    let firstDiff: CommitDiff?
+    let firstDiff: Diff?
   }
 
   @concurrent
@@ -111,7 +111,7 @@ final class RepositorySession {
     let repository = try await GitRepository.open(at: url)
     let info = await repository.info()
     let commits = try await repository.firstCommits(limit: firstPageSize)
-    var firstDiff: CommitDiff?
+    var firstDiff: Diff?
     if let head = commits.first {
       firstDiff = try? await repository.diff(commitID: head.id)
     }
@@ -174,7 +174,7 @@ final class RepositorySession {
     commits = opened.commits
     hasMoreCommits = opened.commits.count == Self.firstPageSize
     cache = DiffCache(capacity: 32)
-    if let firstDiff = opened.firstDiff { cache[firstDiff.commitID] = firstDiff }
+    if let firstDiff = opened.firstDiff, let id = firstDiff.source.commitID { cache[id] = firstDiff }
     diff = nil
     diffError = nil
     phase = .ready
@@ -285,8 +285,8 @@ final class RepositorySession {
   }
 
   /// Called by the diff view once the selected diff is on screen.
-  func diffDidAppear(_ commitID: String) {
-    guard let start = diffRequestedAt, commitID == selectedCommitID else { return }
+  func diffDidAppear(_ source: DiffSource) {
+    guard let start = diffRequestedAt, source == diff?.source else { return }
     diffRequestedAt = nil
     let lines = diff?.files.reduce(0) { $0 + $1.additions + $1.deletions } ?? 0
     if lines > 10_000 {
@@ -356,12 +356,12 @@ final class RepositorySession {
 /// Commits are immutable, so an entry never goes stale.
 private struct DiffCache {
   let capacity: Int
-  private var entries: [String: CommitDiff] = [:]
+  private var entries: [String: Diff] = [:]
   private var order: [String] = []
 
   init(capacity: Int) { self.capacity = capacity }
 
-  subscript(id: String) -> CommitDiff? {
+  subscript(id: String) -> Diff? {
     get { entries[id] }
     set {
       guard let newValue else { return }

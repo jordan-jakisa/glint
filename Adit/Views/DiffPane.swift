@@ -12,7 +12,7 @@ struct DiffPane: View {
     } else if let diff = session.diff {
       VStack(spacing: 0) {
         CommitHeader(
-          commit: session.commits.first { $0.id == diff.commitID },
+          commit: session.commits.first { $0.id == diff.source.commitID },
           diff: diff, isLoading: session.isLoadingDiff)
         Divider()
         if diff.files.isEmpty {
@@ -21,7 +21,7 @@ struct DiffPane: View {
             description: Text("This commit doesn't change any files."))
         } else {
           DiffTableView(
-            rows: session.rows, rowsVersion: session.rowsVersion, commitID: diff.commitID,
+            rows: session.rows, rowsVersion: session.rowsVersion, source: diff.source,
             lineNumberDigits: session.lineNumberDigits, scroller: session.diffScroller,
             toggleCollapsed: session.toggleCollapsed,
             visibleRowsChanged: session.visibleRowsChanged,
@@ -40,13 +40,13 @@ struct DiffPane: View {
 
 private struct CommitHeader: View {
   let commit: Commit?
-  let diff: CommitDiff
+  let diff: Diff
   let isLoading: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 4) {
       HStack(alignment: .firstTextBaseline) {
-        Text(commit?.summary ?? diff.commitID)
+        Text(commit?.summary ?? "")
           .font(.headline)
           .lineLimit(2)
           .textSelection(.enabled)
@@ -56,7 +56,7 @@ private struct CommitHeader: View {
         }
       }
       HStack(spacing: 12) {
-        Text(String(diff.commitID.prefix(10)))
+        Text(String((diff.source.commitID ?? "").prefix(10)))
           .font(.system(size: 12, design: .monospaced))
           .textSelection(.enabled)
         if let commit {

@@ -50,7 +50,7 @@ import Testing
 }
 
 @Suite struct DiffRowTests {
-  private func sampleDiff() -> CommitDiff {
+  private func sampleDiff() -> Diff {
     let lines = [
       DiffLine(kind: .context, oldNumber: 9, newNumber: 9, text: "a"),
       DiffLine(kind: .deletion, oldNumber: 10, newNumber: nil, text: "b"),
@@ -59,8 +59,8 @@ import Testing
     let hunk = Hunk(
       id: 0, header: "@@ -9,2 +9,2 @@", oldStart: 9, oldCount: 2, newStart: 9, newCount: 2,
       lines: lines)
-    return CommitDiff(
-      commitID: "abc",
+    return Diff(
+      source: .commit("abc"),
       files: [
         FileChange(
           id: 0, status: .modified, oldPath: "f", newPath: "f", isBinary: false, hunks: [hunk],

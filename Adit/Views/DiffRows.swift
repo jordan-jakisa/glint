@@ -45,7 +45,7 @@ struct DiffRow: Identifiable, Sendable {
   let id: DiffRowID
   let content: Content
 
-  static func build(_ diff: CommitDiff, layout: DiffLayout, collapsed: Set<Int>) -> [DiffRow] {
+  static func build(_ diff: Diff, layout: DiffLayout, collapsed: Set<Int>) -> [DiffRow] {
     var rows: [DiffRow] = []
     for file in diff.files {
       let isCollapsed = collapsed.contains(file.id)
@@ -76,7 +76,7 @@ struct DiffRow: Identifiable, Sendable {
   }
 
   /// Digits in the largest line number, so the gutters fit without jitter.
-  static func lineNumberDigits(_ diff: CommitDiff) -> Int {
+  static func lineNumberDigits(_ diff: Diff) -> Int {
     var largest = 0
     for file in diff.files {
       for hunk in file.hunks {

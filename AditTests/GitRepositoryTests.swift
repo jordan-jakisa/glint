@@ -203,3 +203,51 @@ import Testing
     #expect(try await repository.status().staged.map(\.path) == ["a.txt"])
   }
 }
+
+@Suite struct WorkingTreeDiffTests {
+  @Test func unstagedStagedAndUntracked() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n2\n3\n", "b.txt": "b\n"])
+    try fixture.write("a.txt", "1\ntwo\n3\n")
+    try fixture.stage("a.txt")
+    try fixture.write("a.txt", "1\ntwo\n3\nfour\n")
+    try fixture.write("new.txt", "fresh\n")
+    let repository = try await GitRepository.open(at: fixture.url)
+
+    let staged = try await repository.workingTreeDiff(staged: true, path: "a.txt")
+    #expect(staged.source == .workingTree(staged: true, path: "a.txt"))
+    let stagedLines = staged.files.flatMap(\.hunks).flatMap(\.lines).filter { $0.kind != .context }
+    #expect(stagedLines.map(\.text) == ["2", "two"])
+
+    let unstaged = try await repository.workingTreeDiff(staged: false, path: "a.txt")
+    #expect(unstaged.files.count == 1)
+    let added = unstaged.files[0].hunks.flatMap(\.lines).filter { $0.kind == .addition }
+    #expect(added.map(\.text) == ["four"])
+    #expect(added.map(\.newNumber) == [4])
+
+    let untracked = try await repository.workingTreeDiff(staged: false, path: "new.txt")
+    #expect(untracked.files.first?.status == .added)
+    #expect(untracked.files.first?.hunks.first?.lines.map(\.text) == ["fresh"])
+
+    let everything = try await repository.workingTreeDiff(staged: false, path: nil)
+    #expect(Set(everything.files.map(\.path)) == ["a.txt", "new.txt"])
+  }
+
+  @Test func stagedDiffInAnEmptyRepository() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.write("first.txt", "hello\n")
+    try fixture.stage("first.txt")
+    let diff = try await GitRepository.open(at: fixture.url).workingTreeDiff(staged: true, path: nil)
+    #expect(diff.files.map(\.path) == ["first.txt"])
+    #expect(diff.files.first?.status == .added)
+  }
+
+  @Test func pathWithSpecialCharactersMatchesExactly() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["[x]*.txt": "1\n", "ax.txt": "1\n"])
+    try fixture.write("[x]*.txt", "2\n")
+    try fixture.write("ax.txt", "2\n")
+    let diff = try await GitRepository.open(at: fixture.url).workingTreeDiff(staged: false, path: "[x]*.txt")
+    #expect(diff.files.map(\.path) == ["[x]*.txt"])
+  }
+}

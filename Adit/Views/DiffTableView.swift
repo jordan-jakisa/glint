@@ -9,12 +9,12 @@ import SwiftUI
 struct DiffTableView: NSViewRepresentable {
   let rows: [DiffRow]
   let rowsVersion: Int
-  let commitID: String
+  let source: DiffSource
   let lineNumberDigits: Int
   let scroller: DiffScroller
   let toggleCollapsed: (Int) -> Void
   let visibleRowsChanged: ([DiffRowID]) -> Void
-  let didPaint: (String) -> Void
+  let didPaint: (DiffSource) -> Void
 
   func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -60,13 +60,13 @@ struct DiffTableView: NSViewRepresentable {
     private weak var scrollView: NSScrollView?
     private var rows: [DiffRow] = []
     private var version = -1
-    private var commitID = ""
+    private var source: DiffSource?
     private var metrics = DiffMetrics(lineNumberDigits: 3)
     private var heights: [CGFloat] = []
     private var heightsWidth: CGFloat = -1
     private var toggleCollapsed: (Int) -> Void = { _ in }
     private var visibleRowsChanged: ([DiffRowID]) -> Void = { _ in }
-    private var didPaint: (String) -> Void = { _ in }
+    private var didPaint: (DiffSource) -> Void = { _ in }
     private var observers: [NSObjectProtocol] = []
 
     func attach(table: NSTableView, scrollView: NSScrollView) {
@@ -93,19 +93,19 @@ struct DiffTableView: NSViewRepresentable {
       guard let table else { return }
 
       if view.rowsVersion != version {
-        let isNewCommit = view.commitID != commitID
+        let isNewSource = view.source != source
         rows = view.rows
         version = view.rowsVersion
-        commitID = view.commitID
+        source = view.source
         metrics = DiffMetrics(lineNumberDigits: view.lineNumberDigits)
         heightsWidth = -1
         table.reloadData()
-        if isNewCommit {
+        if isNewSource {
           scroll(toY: 0)
           // Runs after this pass's display commit, so it marks the frame the
           // new diff is actually in.
-          let commitID = view.commitID
-          DispatchQueue.main.async { [weak self] in self?.didPaint(commitID) }
+          let source = view.source
+          DispatchQueue.main.async { [weak self] in self?.didPaint(source) }
         }
       }
 

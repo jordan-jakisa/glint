@@ -188,7 +188,7 @@ actor GitRepository {
 
   /// The diff of one commit against its first parent, or against an empty
   /// tree for a root commit.
-  func diff(commitID: String) throws -> CommitDiff {
+  func diff(commitID: String) throws -> Diff {
     // A newer request usually supersedes this one while it waits its turn on
     // the actor. Skip the work rather than build a diff nobody will see.
     try Task.checkCancellation()
@@ -213,25 +213,80 @@ actor GitRepository {
     }
     defer { if let parentTree { git_tree_free(parentTree) } }
 
-    var options = git_diff_options()
-    git_diff_options_init(&options, UInt32(GIT_DIFF_OPTIONS_VERSION))
-    options.context_lines = 3
-    // Rename and copy detection (git_diff_find_similar) is deliberately not
-    // run: it is the expensive part of diffing. Renames show as delete + add.
-
+    var options = Self.diffOptions()
     var diff: OpaquePointer?
     try GitError.check(
       git_diff_tree_to_tree(&diff, handle, parentTree, tree, &options),
       "Couldn't diff \(commitID).")
     defer { git_diff_free(diff) }
+    return try makeDiff(diff, source: .commit(commitID))
+  }
 
+  /// Uncommitted changes: staged (HEAD to index) or unstaged (index to working
+  /// tree, untracked files included as all-new). `path` limits it to one file.
+  func workingTreeDiff(staged: Bool, path: String?) throws -> Diff {
+    try reloadIndex()
+    var options = Self.diffOptions()
+    if !staged {
+      options.flags |=
+        GIT_DIFF_INCLUDE_UNTRACKED.rawValue | GIT_DIFF_RECURSE_UNTRACKED_DIRS.rawValue
+        | GIT_DIFF_SHOW_UNTRACKED_CONTENT.rawValue
+    }
+    if path != nil { options.flags |= GIT_DIFF_DISABLE_PATHSPEC_MATCH.rawValue }
+
+    let diff = try withPathspec(path, &options) { options -> OpaquePointer? in
+      var diff: OpaquePointer?
+      if staged {
+        var headTree: OpaquePointer?
+        defer { if let headTree { git_tree_free(headTree) } }
+        if git_repository_head_unborn(handle) != 1 {
+          try GitError.check(git_revparse_single(&headTree, handle, "HEAD^{tree}"), "Couldn't read HEAD.")
+        }
+        try GitError.check(
+          git_diff_tree_to_index(&diff, handle, headTree, nil, &options), "Couldn't diff staged changes.")
+      } else {
+        try GitError.check(
+          git_diff_index_to_workdir(&diff, handle, nil, &options), "Couldn't diff changes.")
+      }
+      return diff
+    }
+    defer { git_diff_free(diff) }
+    return try makeDiff(diff, source: .workingTree(staged: staged, path: path))
+  }
+
+  private static func diffOptions() -> git_diff_options {
+    var options = git_diff_options()
+    git_diff_options_init(&options, UInt32(GIT_DIFF_OPTIONS_VERSION))
+    options.context_lines = 3
+    // Rename and copy detection (git_diff_find_similar) is deliberately not
+    // run: it is the expensive part of diffing. Renames show as delete + add.
+    return options
+  }
+
+  /// Runs `body` with `options.pathspec` set to `path`, keeping the C string
+  /// alive for the call.
+  private func withPathspec<T>(
+    _ path: String?, _ options: inout git_diff_options, _ body: (inout git_diff_options) throws -> T
+  ) rethrows -> T {
+    guard let path else { return try body(&options) }
+    return try path.withCString { cPath in
+      var strings: [UnsafeMutablePointer<CChar>?] = [UnsafeMutablePointer(mutating: cPath)]
+      return try strings.withUnsafeMutableBufferPointer { buffer in
+        options.pathspec = git_strarray(strings: buffer.baseAddress, count: 1)
+        defer { options.pathspec = git_strarray() }
+        return try body(&options)
+      }
+    }
+  }
+
+  private func makeDiff(_ diff: OpaquePointer?, source: DiffSource) throws -> Diff {
     let count = git_diff_num_deltas(diff)
     var files: [FileChange] = []
     files.reserveCapacity(count)
     for index in 0..<count {
       files.append(try fileChange(diff: diff, index: index))
     }
-    return CommitDiff(commitID: commitID, files: files)
+    return Diff(source: source, files: files)
   }
 
   private func fileChange(diff: OpaquePointer?, index: Int) throws -> FileChange {
