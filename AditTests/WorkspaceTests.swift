@@ -159,3 +159,19 @@ import Testing
     #expect(session.selectedChange == ChangeSelection(staged: false, path: "page.txt"))
   }
 }
+
+@Suite struct WorkspaceRulesTests {
+  @Test func fallsBackToTheWorkspaceFolder() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("adit-wsrules-\(UUID().uuidString)")
+    let repo = root.appendingPathComponent("api")
+    try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    #expect(RepositorySession.rules(for: repo, workspace: root) == nil)
+    try Data("Workspace rules\n".utf8).write(to: root.appendingPathComponent("CLAUDE.md"))
+    #expect(RepositorySession.rules(for: repo, workspace: root) == "Workspace rules")
+    try Data("Repository rules\n".utf8).write(to: repo.appendingPathComponent("AGENTS.md"))
+    #expect(RepositorySession.rules(for: repo, workspace: root) == "Repository rules")
+    #expect(RepositorySession.rules(for: repo, workspace: nil) == "Repository rules")
+  }
+}

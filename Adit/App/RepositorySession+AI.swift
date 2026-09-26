@@ -28,6 +28,7 @@ extension RepositorySession {
     let client = AIClient(provider: settings.provider, apiKey: key)
     let instructions = settings.instructions
     let followsRules = settings.followsRepositoryRules
+    let workspaceRoot = workspace?.root
     Timing.writes.notice("generate commit message with \(settings.provider.rawValue, privacy: .public)/\(model, privacy: .public)")
 
     messageTask = Task {
@@ -38,7 +39,7 @@ extension RepositorySession {
           alertMessage = "There's nothing to describe yet. Change something first."
           return
         }
-        let rules = followsRules ? Self.repositoryRules(in: repository.url) : nil
+        let rules = followsRules ? Self.rules(for: repository.url, workspace: workspaceRoot) : nil
         let prompt = CommitPrompt.build(
           diff: CommitPrompt.compress(CommitPrompt.patchText(diff)), subject: subject,
           rules: rules, userInstructions: instructions)
@@ -64,6 +65,13 @@ extension RepositorySession {
         alertMessage = "Couldn't write the message.\n\n\(error)"
       }
     }
+  }
+
+  /// The repository's rules file, or else the workspace folder's: a project
+  /// split across repositories often keeps one AGENTS.md or CLAUDE.md above
+  /// them all.
+  nonisolated static func rules(for repository: URL, workspace: URL?) -> String? {
+    repositoryRules(in: repository) ?? workspace.flatMap { repositoryRules(in: $0) }
   }
 
   /// The repository's own conventions for agents, from the first rules file
