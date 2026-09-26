@@ -374,3 +374,27 @@ import Testing
     await #expect(throws: GitError.self) { _ = try await repository.undoLastCommit() }
   }
 }
+
+@Suite struct BranchTests {
+  @Test func listsBranchesAndSwitches() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n"])
+    let git = SystemGit(directory: fixture.url)
+    _ = try await git.run(["branch", "feature"])
+    let repository = try await GitRepository.open(at: fixture.url)
+
+    var branches = try await repository.branches()
+    #expect(Set(branches.map(\.name)) == ["feature", branches.first { $0.isCurrent }!.name])
+    #expect(branches.filter(\.isCurrent).count == 1)
+
+    _ = try await git.run(["switch", "feature"])
+    branches = try await repository.branches()
+    #expect(branches.first { $0.isCurrent }?.name == "feature")
+    #expect(await repository.info().branch == "feature")
+  }
+
+  @Test func remoteBranchSwitchNameDropsTheRemote() {
+    let branch = Branch(name: "origin/feature/x", isRemote: true, isCurrent: false, date: .now)
+    #expect(branch.switchName == "feature/x")
+  }
+}

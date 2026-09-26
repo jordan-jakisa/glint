@@ -85,6 +85,14 @@ final class RepositorySession {
   /// without comparing them.
   private(set) var rowsVersion = 0
   private(set) var lineNumberDigits = 3
+  // MARK: Branches
+
+  internal(set) var branches: [Branch] = []
+  var isBranchPickerShown = false {
+    didSet { if isBranchPickerShown, !oldValue { loadBranches() } }
+  }
+  internal(set) var isSwitchingBranch = false
+
   /// Changed lines selected in a working-tree diff, for line staging.
   internal(set) var selectedLineRows: [DiffRowID] = []
   /// Hands keyboard jumps straight to the table, skipping a SwiftUI update.

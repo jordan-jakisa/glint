@@ -28,6 +28,13 @@ struct AditCommands: Commands {
         .keyboardShortcut("r")
         .disabled(!isReady)
 
+      Button("Switch Branch…") {
+        session?.tab = .changes
+        session?.isBranchPickerShown = true
+      }
+      .keyboardShortcut("b")
+      .disabled(!isReady)
+
       Divider()
     }
 

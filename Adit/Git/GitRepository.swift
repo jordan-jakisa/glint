@@ -262,6 +262,44 @@ actor GitRepository {
     return message
   }
 
+  // MARK: - Branches
+
+  /// Local branches, then remote branches that have no local counterpart,
+  /// each group newest first. Remote HEAD pointers are left out.
+  func branches() throws -> [Branch] {
+    var iterator: OpaquePointer?
+    try GitError.check(git_branch_iterator_new(&iterator, handle, GIT_BRANCH_ALL), "Couldn't list branches.")
+    defer { git_branch_iterator_free(iterator) }
+
+    var local: [Branch] = []
+    var remote: [Branch] = []
+    var reference: OpaquePointer?
+    var type = GIT_BRANCH_LOCAL
+    while git_branch_next(&reference, &type, iterator) == 0 {
+      defer { git_reference_free(reference) }
+      var cName: UnsafePointer<CChar>?
+      guard git_branch_name(&cName, reference) == 0, let cName else { continue }
+      let name = String(cString: cName)
+      if name.hasSuffix("/HEAD") { continue }
+      let isRemote = type == GIT_BRANCH_REMOTE
+      let branch = Branch(
+        name: name, isRemote: isRemote, isCurrent: !isRemote && git_branch_is_head(reference) == 1,
+        date: tipDate(reference))
+      if isRemote { remote.append(branch) } else { local.append(branch) }
+    }
+    let localNames = Set(local.map(\.name))
+    remote.removeAll { localNames.contains($0.switchName) }
+    return local.sorted { $0.date > $1.date } + remote.sorted { $0.date > $1.date }
+  }
+
+  private func tipDate(_ reference: OpaquePointer?) -> Date {
+    guard let target = git_reference_target(reference) else { return .distantPast }
+    var commit: OpaquePointer?
+    guard git_commit_lookup(&commit, handle, target) == 0 else { return .distantPast }
+    defer { git_commit_free(commit) }
+    return Date(timeIntervalSince1970: TimeInterval(git_commit_time(commit)))
+  }
+
   // MARK: - Commits
 
   /// Starts a new walk from HEAD, newest first, and returns the first page.

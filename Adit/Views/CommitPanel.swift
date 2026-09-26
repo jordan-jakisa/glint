@@ -90,7 +90,7 @@ private struct LastCommitRow: View {
   }
 }
 
-/// `repo / branch`. The branch picker and sync buttons arrive in later steps.
+/// `repo / branch`. The branch opens the branch picker.
 struct BranchBar: View {
   @Bindable var session: RepositorySession
 
@@ -100,9 +100,24 @@ struct BranchBar: View {
         .foregroundStyle(.secondary)
       Text(session.info?.name ?? "")
         .foregroundStyle(.secondary)
-      Text("/").foregroundStyle(.tertiary)
-      Text(session.info?.branch ?? "detached HEAD")
         .lineLimit(1)
+      Text("/").foregroundStyle(.tertiary)
+      Button {
+        session.isBranchPickerShown.toggle()
+      } label: {
+        HStack(spacing: 2) {
+          Text(session.info?.branch ?? "detached HEAD")
+            .lineLimit(1)
+          Image(systemName: "chevron.down")
+            .font(.caption2)
+            .foregroundStyle(.secondary)
+        }
+      }
+      .buttonStyle(.borderless)
+      .help("Switch branch (⌘B)")
+      .popover(isPresented: $session.isBranchPickerShown, arrowEdge: .top) {
+        BranchPicker(session: session)
+      }
       Spacer()
     }
     .font(.callout)
