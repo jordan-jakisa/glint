@@ -7,6 +7,9 @@ struct GitError: Error, Sendable, CustomStringConvertible {
 
   var description: String { message }
 
+  /// The folder isn't inside a git repository at all.
+  var isNotARepository: Bool { code == GIT_ENOTFOUND.rawValue }
+
   /// Turns a libgit2 return code into a thrown error. Anything below zero is a
   /// failure.
   static func check(_ code: Int32, _ context: @autoclosure () -> String) throws {

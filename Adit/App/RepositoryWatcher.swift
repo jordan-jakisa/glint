@@ -13,6 +13,9 @@ final class RepositoryWatcher {
     var head = false
     /// When the first event of this burst arrived.
     var firstEventAt = ContinuousClock.now
+    /// Every path that mattered, with what kind of change it was, so a
+    /// workspace can tell which repository each belongs to.
+    var paths: [String: Kind] = [:]
   }
 
   /// FSEvents' own coalescing window. Together with `debounce` this is most of
@@ -20,7 +23,7 @@ final class RepositoryWatcher {
   private static let latency: CFTimeInterval = 0.05
   private static let debounce: Duration = .milliseconds(30)
 
-  private let root: String
+  let root: String
   private let onChange: (Change) -> Void
   // Touched from deinit, which only runs once nothing else holds the watcher.
   nonisolated(unsafe) private var stream: FSEventStreamRef?
@@ -67,13 +70,15 @@ final class RepositoryWatcher {
   private func received(_ paths: [String]) {
     var change = pending ?? Change()
     for path in paths {
-      switch Self.classify(path, root: root) {
+      let kind = Self.classify(path, root: root)
+      switch kind {
       case .workingTree: change.workingTree = true
       case .head:
         change.head = true
         change.workingTree = true
-      case .ignored: break
+      case .ignored: continue
       }
+      if change.paths[path] != .head { change.paths[path] = kind }
     }
     guard change.workingTree || change.head else { return }
     pending = change

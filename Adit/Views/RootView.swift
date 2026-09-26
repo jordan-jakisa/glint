@@ -5,7 +5,7 @@ struct RootView: View {
 
   var body: some View {
     content
-      .navigationTitle(session.info?.name ?? "Adit")
+      .navigationTitle(title)
       .navigationSubtitle(subtitle)
       .focusedSceneValue(\.session, session)
       .background(KeyMonitor(handle: session.handleKey))
@@ -73,6 +73,12 @@ struct RootView: View {
     return untracked
       ? "Edits to tracked files can't be undone. New files go to the Trash."
       : "This can't be undone."
+  }
+
+  private var title: String {
+    guard let info = session.info else { return "Adit" }
+    guard let workspace = session.workspace else { return info.name }
+    return "\(workspace.name) / \(info.name)"
   }
 
   private var subtitle: String {

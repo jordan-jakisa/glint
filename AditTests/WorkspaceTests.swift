@@ -50,3 +50,42 @@ import Testing
     #expect(RepositoryDiscovery.repositories(in: root).isEmpty)
   }
 }
+
+@Suite struct WorkspaceOpeningTests {
+  @Test func folderOfRepositoriesOpensAsAWorkspace() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("adit-wsopen-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for name in ["backend", "frontend"] {
+      _ = try await SystemGit(directory: root).run(["init", "-q", "-b", "main", name])
+    }
+    try Data("x\n".utf8).write(to: root.appendingPathComponent("frontend/new.txt"))
+
+    let opened = try await RepositorySession.load(root)
+    let workspace = try #require(opened.workspace)
+    #expect(workspace.repositories.map(\.relativePath) == ["backend", "frontend"])
+    #expect(opened.repository.url.standardizedFileURL.lastPathComponent == "backend")
+
+    // Reopening lands on the repository used last.
+    WorkspaceMemory.remember("frontend", in: root)
+    let reopened = try await RepositorySession.load(root)
+    #expect(reopened.repository.url.lastPathComponent == "frontend")
+    #expect(reopened.status.unstaged.map(\.path) == ["new.txt"])
+  }
+
+  @Test func folderWithNoRepositoriesSaysSo() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("adit-wsnone-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("docs"), withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    await #expect(throws: GitError.self) { _ = try await RepositorySession.load(root) }
+  }
+
+  @Test func summaryCountsAPartlyStagedFileOnce() {
+    let summary = RepositorySummary(
+      branch: "main",
+      status: WorkingTreeStatus(
+        staged: [ChangedFile(path: "a", kind: .modified)],
+        unstaged: [ChangedFile(path: "a", kind: .modified), ChangedFile(path: "b", kind: .untracked)]))
+    #expect(summary.changeCount == 2)
+  }
+}

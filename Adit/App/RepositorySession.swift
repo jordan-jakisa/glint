@@ -23,6 +23,9 @@ final class RepositorySession {
 
   private(set) var phase: Phase = .closed(message: nil)
   internal(set) var info: RepositoryInfo?
+  /// Set when the opened folder holds several repositories; `repository` is
+  /// then the active one.
+  internal(set) var workspace: Workspace?
   /// Shown as an alert: failures of actions the user asked for.
   var alertMessage: String?
   /// Files waiting for the user to confirm a discard.
@@ -116,6 +119,9 @@ final class RepositorySession {
   @ObservationIgnored var repository: GitRepository?
   @ObservationIgnored var access = RepositoryAccess()
   @ObservationIgnored var watcher: RepositoryWatcher?
+  /// Unsent commit messages per repository, kept while you switch between
+  /// the repositories of a workspace.
+  @ObservationIgnored var messageDrafts: [URL: String] = [:]
   @ObservationIgnored var isLoadingMore = false
   @ObservationIgnored var diffTask: Task<Void, Never>?
   @ObservationIgnored var prefetchTask: Task<Void, Never>?
@@ -150,6 +156,7 @@ final class RepositorySession {
 
   /// Everything the first frame needs, loaded in one go off the main actor.
   struct Opened: Sendable {
+    let workspace: Workspace?
     let repository: GitRepository
     let info: RepositoryInfo
     let status: WorkingTreeStatus
@@ -159,20 +166,52 @@ final class RepositorySession {
     let firstDiff: Diff?
   }
 
+  /// Opens the repository containing `url`. A folder that isn't inside one
+  /// but holds several opens as a workspace, on the repository used last.
+  /// `workspace` is passed when switching within one that's already open.
   @concurrent
-  nonisolated static func load(_ url: URL) async throws -> Opened {
-    let repository = try await GitRepository.open(at: url)
+  nonisolated static func load(_ url: URL, in known: Workspace? = nil) async throws -> Opened {
+    var workspace = known
+    let repository: GitRepository
+    do {
+      repository = try await GitRepository.open(at: url)
+    } catch let error as GitError where error.isNotARepository && known == nil {
+      let searchStart = ContinuousClock.now
+      let found = RepositoryDiscovery.repositories(in: url)
+      Timing.report("find repositories", since: searchStart, budget: 50)
+      guard !found.isEmpty else {
+        throw GitError(
+          code: error.code,
+          message: "\(url.lastPathComponent) isn't a git repository, and there are none inside it.")
+      }
+      let root = url.standardizedFileURL
+      let last = WorkspaceMemory.activeRepository(in: root)
+      let active = found.first { $0.relativePath == last } ?? found[0]
+      workspace = Workspace(root: root, repositories: found)
+      repository = try await GitRepository.open(at: active.url)
+    }
+    // Each stage is timed: opening is the launch budget's biggest share.
+    var mark = ContinuousClock.now
+    func stage(_ name: StaticString) {
+      Timing.report(name, since: mark, budget: 50)
+      mark = .now
+    }
     let info = await repository.info()
+    stage("open: info")
     let status = try await repository.status()
+    stage("open: status")
     let sync = await repository.syncStatus()
+    stage("open: ahead and behind")
     let commits = try await repository.firstCommits(limit: firstPageSize)
+    stage("open: first commits")
     let firstChange = ChangeSelection.first(in: status)
     var firstDiff: Diff?
     if let firstChange {
       firstDiff = try? await repository.workingTreeDiff(staged: firstChange.staged, path: firstChange.path)
     }
+    stage("open: first diff")
     return Opened(
-      repository: repository, info: info, status: status, sync: sync, commits: commits,
+      workspace: workspace, repository: repository, info: info, status: status, sync: sync, commits: commits,
       firstChange: firstChange, firstDiff: firstDiff)
   }
 
@@ -213,7 +252,7 @@ final class RepositorySession {
     Task {
       do {
         let opened = try await loading.value
-        access.adopt(opened.repository.url)
+        access.adopt(opened.workspace?.root ?? opened.repository.url)
         install(opened)
       } catch {
         let message = "\(url.lastPathComponent): \(error)"
@@ -229,10 +268,19 @@ final class RepositorySession {
     }
   }
 
-  private func install(_ opened: Opened) {
+  func install(_ opened: Opened, selecting preferred: ChangeSelection? = nil) {
     diffTask?.cancel()
     prefetchTask?.cancel()
     statusTask?.cancel()
+    messageTask?.cancel()
+    messageTask = nil
+    if let current = repository?.url { messageDrafts[current] = commitMessage }
+    commitMessage = messageDrafts[opened.repository.url] ?? ""
+    isAmending = false
+    workspace = opened.workspace
+    if let workspace, let active = workspace.repositories.first(where: { $0.url.standardizedFileURL == opened.repository.url.standardizedFileURL }) {
+      WorkspaceMemory.remember(active.relativePath, in: workspace.root)
+    }
     repository = opened.repository
     info = opened.info
     status = opened.status
@@ -242,9 +290,12 @@ final class RepositorySession {
     cache = DiffCache(capacity: 32)
     diffError = nil
     phase = .ready
-    watcher = RepositoryWatcher(url: opened.repository.url) { [weak self] change in
-      if change.head { self?.refreshHistory() }
-      if change.workingTree { self?.refreshWorkingTree(changedAt: change.firstEventAt) }
+    // A workspace is watched once, from its folder; events are routed to the
+    // repository they belong to.
+    if watcher == nil || watcher?.root != (opened.workspace?.root ?? opened.repository.url).standardizedFileURL.path {
+      watcher = RepositoryWatcher(url: opened.workspace?.root ?? opened.repository.url) { [weak self] change in
+        self?.filesChanged(change)
+      }
     }
 
     // Show the preloaded diff directly, so it paints with the window.
@@ -256,6 +307,13 @@ final class RepositorySession {
     isLoadingDiff = false
     // The first diff paints with the window; the launch budget covers it.
     diffRequestedAt = nil
+    // Switching repositories from a file in the all-repositories list lands
+    // on that file.
+    if let preferred, preferred != selectedChange,
+      (preferred.staged ? status.staged : status.unstaged).contains(where: { $0.path == preferred.path })
+    {
+      selectedChange = preferred
+    }
     if Self.isBenchmarking { Task { await runBenchmark() } }
   }
 
