@@ -61,6 +61,7 @@ extension RepositorySession {
         commitMessage = ""
         // Done typing: hand the keys back to j, k and Space.
         messageFocusRequest = false
+        acknowledge { $0.justCommitted = true } until: { $0.justCommitted = false }
         aiNote = nil
         isAmending = false
       } catch {

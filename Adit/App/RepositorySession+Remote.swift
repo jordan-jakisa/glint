@@ -58,14 +58,32 @@ extension RepositorySession {
     Timing.writes.notice("git \(arguments.joined(separator: " "), privacy: .public)")
     let git = SystemGit(directory: repository.url)
     networkOperation = operation
+    syncOutcome = nil
+    let (ahead, behind) = (sync.ahead, sync.behind)
     Task {
       defer { networkOperation = nil }
       do {
         _ = try await git.run(arguments)
+        let outcome: SyncOutcome =
+          switch operation {
+          case .fetch: .fetched
+          case .pull: .pulled(behind)
+          case .push: .pushed(ahead)
+          }
+        acknowledge { $0.syncOutcome = outcome } until: { $0.syncOutcome = nil }
       } catch {
         alert = UserAlert("Couldn't \(operation.verb)", error: error)
       }
       refresh()
+    }
+  }
+
+  /// Shows a small acknowledgement for two seconds, then takes it away.
+  func acknowledge(_ show: (RepositorySession) -> Void, until hide: @escaping (RepositorySession) -> Void) {
+    show(self)
+    Task { [weak self] in
+      try? await Task.sleep(for: .seconds(2))
+      if let self { hide(self) }
     }
   }
 }

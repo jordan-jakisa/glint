@@ -21,9 +21,7 @@ struct CommitPanel: View {
         if let size = session.commitSize, !session.isAmending {
           CommitSizeLabel(size: size)
         }
-        if session.isCommitting {
-          ProgressView().controlSize(.small)
-        }
+        DelayedSpinner(isActive: session.isCommitting)
         Button(session.commitButtonTitle, action: session.commit)
           .shortcut(.commit)
           .disabled(!session.canCommit)
@@ -32,8 +30,9 @@ struct CommitPanel: View {
       .controlSize(.small)
       .padding(.horizontal, 10)
       .padding(.vertical, 6)
-      if let note = session.aiNote {
-        Text(note)
+      // Kept while AI is on, so a note arriving doesn't push the list up.
+      if AISettings.shared.isEnabled || session.aiNote != nil {
+        Text(session.aiNote ?? " ")
           .font(.caption)
           .foregroundStyle(.secondary)
           .lineLimit(1)
@@ -44,7 +43,7 @@ struct CommitPanel: View {
       }
       if let last = session.lastCommit {
         Divider()
-        LastCommitRow(commit: last, undo: session.undoLastCommit)
+        LastCommitRow(commit: last, justCommitted: session.justCommitted, undo: session.undoLastCommit)
       }
     }
     .onChange(of: session.messageFocusRequest, initial: true) { _, request in
@@ -93,10 +92,16 @@ struct CommitPanel: View {
 
 private struct LastCommitRow: View {
   let commit: Commit
+  let justCommitted: Bool
   let undo: () -> Void
 
   var body: some View {
     HStack(spacing: 6) {
+      if justCommitted {
+        Label("Committed \(commit.shortID)", systemImage: "checkmark")
+          .foregroundStyle(.secondary)
+          .fixedSize()
+      }
       Text(commit.summary)
         .lineLimit(1)
         .truncationMode(.tail)
@@ -180,30 +185,41 @@ private struct SyncButton: View {
   @Bindable var session: RepositorySession
 
   var body: some View {
-    if let operation = session.networkOperation {
-      HStack(spacing: 4) {
-        ProgressView().controlSize(.mini)
-        Text(operation.rawValue + "…").foregroundStyle(.secondary)
-      }
-    } else {
-      Menu {
+    // One control throughout: while git works it's disabled and says what's
+    // happening, then says how it went for a moment.
+    Menu {
         Button("Fetch", action: session.fetch)
         Button("Pull", action: session.pull)
         Button(session.sync.upstream == nil ? "Publish Branch" : "Push", action: session.push)
       } label: {
-        Label(session.suggestedSyncTitle, systemImage: icon)
+        Label(title, systemImage: icon)
       } primaryAction: {
         session.runSuggestedSync()
       }
       .menuStyle(.borderedButton)
       .controlSize(.small)
       .fixedSize()
+      .disabled(session.networkOperation != nil)
       .help(help)
+  }
+
+  private var title: String {
+    if let operation = session.networkOperation { return operation.rawValue + "…" }
+    switch session.syncOutcome {
+    case .pushed(let count): return count > 0 ? "Pushed \(count)" : "Pushed"
+    case .pulled(let count): return count > 0 ? "Pulled \(count)" : "Pulled"
+    case .fetched where session.sync.behind == 0: return "Up to date"
+    default: return session.suggestedSyncTitle
     }
   }
 
   private var icon: String {
-    switch session.suggestedSync {
+    if session.networkOperation == nil, let outcome = session.syncOutcome,
+      outcome != .fetched || session.sync.behind == 0
+    {
+      return "checkmark"
+    }
+    return switch session.suggestedSync {
     case .pull: "arrow.down"
     case .push: "arrow.up"
     case .fetch: "arrow.triangle.2.circlepath"

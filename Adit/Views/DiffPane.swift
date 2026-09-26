@@ -182,7 +182,7 @@ private struct CommitHeader: View {
       HStack(alignment: .firstTextBaseline) {
         Text(commit?.summary ?? "")
           .font(.headline)
-          .lineLimit(2)
+          .lineLimit(2, reservesSpace: true)
           .textSelection(.enabled)
         Spacer(minLength: 12)
         DelayedSpinner(isActive: isLoading)

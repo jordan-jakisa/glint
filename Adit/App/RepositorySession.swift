@@ -159,6 +159,15 @@ final class RepositorySession {
 
   internal(set) var sync = SyncStatus.none
   internal(set) var networkOperation: NetworkOperation?
+  /// How the last fetch, pull, or push went, shown on the sync button for a
+  /// moment afterwards.
+  internal(set) var syncOutcome: SyncOutcome?
+  /// True for a moment after a commit, so the last-commit row can say so.
+  internal(set) var justCommitted = false
+
+  enum SyncOutcome: Equatable {
+    case fetched, pulled(Int), pushed(Int)
+  }
 
   /// Changed lines selected in a working-tree diff, for line staging.
   internal(set) var selectedLineRows: [DiffRowID] = []
