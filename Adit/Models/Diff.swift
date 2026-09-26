@@ -21,6 +21,23 @@ enum DiffSource: Hashable, Sendable {
 struct Diff: Sendable {
   let source: DiffSource
   let files: [FileChange]
+  /// False for the first screenful of a very large diff, shown while the
+  /// rest is still being built.
+  var isComplete = true
+
+  /// The leading files up to about `lines` changed lines, marked
+  /// incomplete, or the whole diff when it's small enough. For painting the
+  /// first screen of a huge diff before the rest.
+  func firstScreen(lines budget: Int) -> Diff {
+    var count = 0
+    var files: [FileChange] = []
+    for file in self.files {
+      if count >= budget { return Diff(source: source, files: files, isComplete: false) }
+      files.append(file)
+      count += file.additions + file.deletions
+    }
+    return self
+  }
 
   var additions: Int { files.reduce(0) { $0 + $1.additions } }
   var deletions: Int { files.reduce(0) { $0 + $1.deletions } }
@@ -89,6 +106,34 @@ struct DiffLine: Sendable, Equatable {
   let oldNumber: Int?
   let newNumber: Int?
   let text: String
+  /// Width in monospaced columns with tabs expanded to 4, or -1 when the line
+  /// has non-ASCII text and has to be measured. Counted once, when the diff
+  /// is built off the main thread, so row heights are pure arithmetic.
+  let columns: Int
+
+  init(kind: Kind, oldNumber: Int?, newNumber: Int?, text: String) {
+    self.kind = kind
+    self.oldNumber = oldNumber
+    self.newNumber = newNumber
+    self.text = text
+    self.columns = Self.columns(of: text)
+  }
+
+  static let tabWidth = 4
+
+  static func columns(of text: String) -> Int {
+    var columns = 0
+    for byte in text.utf8 {
+      if byte == UInt8(ascii: "\t") {
+        columns += tabWidth - columns % tabWidth
+      } else if byte < 0x80 {
+        columns += 1
+      } else {
+        return -1
+      }
+    }
+    return columns
+  }
 }
 
 /// One row of the split view. Either side can be empty.

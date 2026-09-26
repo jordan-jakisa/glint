@@ -97,7 +97,7 @@ final class RepositorySession {
     // Set.remove of a missing member still counts as a set. Without this check
     // every hunk jump rebuilt every row and reloaded the whole table.
     didSet {
-      guard collapsedFiles != oldValue else { return }
+      guard collapsedFiles != oldValue, !suppressRowsRebuild else { return }
       let changed = collapsedFiles.symmetricDifference(oldValue)
       rebuildRows(changed.count == 1 ? .file(changed.first!) : .all)
     }
@@ -163,6 +163,8 @@ final class RepositorySession {
   @ObservationIgnored var summaryTask: Task<Void, Never>?
   @ObservationIgnored var isLoadingMore = false
   @ObservationIgnored var diffTask: Task<Void, Never>?
+  @ObservationIgnored var rowsTask: Task<Void, Never>?
+  @ObservationIgnored var suppressRowsRebuild = false
   @ObservationIgnored var prefetchTask: Task<Void, Never>?
   @ObservationIgnored var statusTask: Task<Void, Never>?
   @ObservationIgnored var statusRefreshQueued = false
@@ -184,14 +186,59 @@ final class RepositorySession {
   }
 
   private func rebuildRows(_ change: RowsChange) {
-    rowsChange = change
-    rowsVersion += 1
+    rowsTask?.cancel()
     guard let diff else {
+      rowsChange = change
+      rowsVersion += 1
       rows = []
       return
     }
-    rows = DiffRow.build(diff, layout: layout, collapsed: collapsedFiles)
-    lineNumberDigits = DiffRow.lineNumberDigits(diff)
+    let lineCount = diff.files.reduce(0) { $0 + $1.additions + $1.deletions }
+    guard lineCount > Self.backgroundRowsThreshold else {
+      rowsChange = change
+      rowsVersion += 1
+      rows = DiffRow.build(diff, layout: layout, collapsed: collapsedFiles)
+      lineNumberDigits = DiffRow.lineNumberDigits(diff)
+      return
+    }
+    // A very large diff (a vendored library, a lockfile rewrite) takes tens of
+    // milliseconds to flatten; do it off the main thread and keep showing the
+    // previous rows meanwhile.
+    let layout = self.layout
+    let collapsed = collapsedFiles
+    rowsTask = Task {
+      let built = await Task.detached(priority: .userInitiated) {
+        (DiffRow.build(diff, layout: layout, collapsed: collapsed), DiffRow.lineNumberDigits(diff))
+      }.value
+      guard !Task.isCancelled, self.diff?.source == diff.source, self.layout == layout,
+        self.collapsedFiles == collapsed
+      else { return }
+      rowsChange = change
+      rowsVersion += 1
+      rows = built.0
+      lineNumberDigits = built.1
+    }
+  }
+
+  /// Diffs past this many changed lines get their rows built in the
+  /// background.
+  private static let backgroundRowsThreshold = 20_000
+  /// Past this many changed lines, only the first screen's files open
+  /// expanded; the rest show as headers you can expand. Sizing 200,000 rows
+  /// blocked the main thread for over a second.
+  static let collapseThreshold = 50_000
+
+  /// Shows a complete diff. A huge one arriving fresh (not a live reload of
+  /// the same one) opens with files past the first screen collapsed.
+  func showComplete(_ complete: Diff, fresh: Bool) {
+    let total = complete.files.reduce(0) { $0 + $1.additions + $1.deletions }
+    if fresh, total > Self.collapseThreshold {
+      let visible = complete.firstScreen(lines: 5_000).files.count
+      suppressRowsRebuild = true
+      collapsedFiles = Set(visible..<complete.files.count)
+      suppressRowsRebuild = false
+    }
+    diff = complete
   }
 
   // MARK: - Opening
@@ -406,8 +453,18 @@ final class RepositorySession {
       return
     }
     if case .commit(let id) = source, let cached = cache[id] {
-      diff = cached
-      isLoadingDiff = false
+      let first = cached.firstScreen(lines: 5_000)
+      diff = first
+      isLoadingDiff = !first.isComplete
+      if !first.isComplete {
+        // A huge cached diff: paint its first screen now, the rest next.
+        diffTask = Task {
+          await Task.yield()
+          guard !Task.isCancelled, selectedSource == source else { return }
+          showComplete(cached, fresh: true)
+          isLoadingDiff = false
+        }
+      }
       prefetch(after: id)
       return
     }
@@ -416,20 +473,32 @@ final class RepositorySession {
     isLoadingDiff = true
     diffTask = Task {
       do {
-        let loaded: Diff
+        // Big commits and branches show their first screenful first; the
+        // rest follows in place.
+        let firstScreen = 5_000
+        var loaded: Diff
         switch source {
         case .commit(let id):
-          loaded = try await repository.diff(commitID: id)
-          cache[id] = loaded
+          loaded = try await repository.diff(commitID: id, lineBudget: firstScreen)
         case .workingTree(let staged, let path):
           loaded = try await repository.workingTreeDiff(staged: staged, path: path)
         case .branch:
-          let (branchDiff, comparison) = try await repository.branchDiff()
+          let (branchDiff, comparison) = try await repository.branchDiff(lineBudget: firstScreen)
           loaded = branchDiff
           branchComparison = comparison
         }
         guard !Task.isCancelled, selectedSource == source else { return }
         diff = loaded
+        if !loaded.isComplete {
+          switch source {
+          case .commit(let id): loaded = try await repository.diff(commitID: id)
+          case .branch: loaded = try await repository.branchDiff().0
+          case .workingTree: break
+          }
+          guard !Task.isCancelled, selectedSource == source else { return }
+          showComplete(loaded, fresh: !inPlace)
+        }
+        if case .commit(let id) = source { cache[id] = loaded }
         isLoadingDiff = false
         if case .commit(let id) = source { prefetch(after: id) }
       } catch is CancellationError {
@@ -447,11 +516,10 @@ final class RepositorySession {
     guard let start = diffRequestedAt, source == diff?.source else { return }
     diffRequestedAt = nil
     let lines = diff?.files.reduce(0) { $0 + $1.additions + $1.deletions } ?? 0
-    if lines > 10_000 {
-      Timing.report("select to diff painted (large diff)", since: start, budget: 100)
-    } else {
-      Timing.report("select to diff painted", since: start, budget: 50)
-    }
+    let ms = Timing.milliseconds(since: start)
+    let budget: Double = lines > 10_000 ? 100 : 50
+    Timing.log.info(
+      "select to diff painted: \(ms, format: .fixed(precision: 1)) ms (\(lines) lines, \(self.rows.count) rows, budget \(budget, format: .fixed(precision: 0)) ms, \(ms <= budget ? "ok" : "OVER BUDGET", privacy: .public))")
   }
 
   /// Single-key commands from `KeyMonitor`. Returns false for keys it doesn't

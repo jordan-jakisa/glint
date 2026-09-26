@@ -367,13 +367,13 @@ struct DiffMetrics {
     case .hunkHeader: return Self.hunkHeaderHeight
     case .note: return Self.noteHeight
     case .line(let line):
-      let lines = Self.wrappedLines(line.text, width: textWidth(rowWidth: width, split: false))
+      let lines = Self.wrappedLines(line, width: textWidth(rowWidth: width, split: false))
       return CGFloat(lines) * Self.lineHeight + 2 * Self.verticalPadding
     case .split(let pair):
       let width = textWidth(rowWidth: width, split: true)
       let lines = max(
-        pair.left.map { Self.wrappedLines($0.text, width: width) } ?? 1,
-        pair.right.map { Self.wrappedLines($0.text, width: width) } ?? 1)
+        pair.left.map { Self.wrappedLines($0, width: width) } ?? 1,
+        pair.right.map { Self.wrappedLines($0, width: width) } ?? 1)
       return CGFloat(lines) * Self.lineHeight + 2 * Self.verticalPadding
     }
   }
@@ -381,19 +381,10 @@ struct DiffMetrics {
   /// How many lines `text` wraps to at `width`. Plain ASCII, the common case,
   /// is pure arithmetic. Anything else is measured, because wide characters
   /// and fallback fonts break the one-advance assumption.
-  static func wrappedLines(_ text: String, width: CGFloat) -> Int {
+  static func wrappedLines(_ line: DiffLine, width: CGFloat) -> Int {
+    guard line.columns >= 0 else { return measuredLines(line.text, width: width) }
     let perLine = max(1, Int(width / advance))
-    var columns = 0
-    for byte in text.utf8 {
-      if byte == UInt8(ascii: "\t") {
-        columns += tabWidth - columns % tabWidth
-      } else if byte < 0x80 {
-        columns += 1
-      } else {
-        return measuredLines(text, width: width)
-      }
-    }
-    return max(1, (columns + perLine - 1) / perLine)
+    return max(1, (line.columns + perLine - 1) / perLine)
   }
 
   private static func measuredLines(_ text: String, width: CGFloat) -> Int {

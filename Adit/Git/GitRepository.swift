@@ -403,7 +403,7 @@ actor GitRepository {
 
   /// The diff of one commit against its first parent, or against an empty
   /// tree for a root commit.
-  func diff(commitID: String) throws -> Diff {
+  func diff(commitID: String, lineBudget: Int? = nil) throws -> Diff {
     // A newer request usually supersedes this one while it waits its turn on
     // the actor. Skip the work rather than build a diff nobody will see.
     try Task.checkCancellation()
@@ -434,7 +434,7 @@ actor GitRepository {
       git_diff_tree_to_tree(&diff, handle, parentTree, tree, &options),
       "Couldn't diff \(commitID).")
     defer { git_diff_free(diff) }
-    return try makeDiff(diff, source: .commit(commitID))
+    return try makeDiff(diff, source: .commit(commitID), lineBudget: lineBudget)
   }
 
   /// Uncommitted changes: staged (HEAD to index) or unstaged (index to working
@@ -500,7 +500,7 @@ actor GitRepository {
   /// the merge base's tree against the working tree, so uncommitted work
   /// and untracked files are included, like reviewing a pull request before
   /// it's opened.
-  func branchDiff() throws -> (Diff, BranchComparison) {
+  func branchDiff(lineBudget: Int? = nil) throws -> (Diff, BranchComparison) {
     guard let base = branchBase() else {
       throw GitError(code: -1, message: "There's no main or master branch to compare this branch with.")
     }
@@ -533,7 +533,7 @@ actor GitRepository {
 
     let comparison = BranchComparison(
       base: base.name, branch: info().branch, ahead: ahead, mergeBase: String(Self.hex(mergeBase).prefix(7)))
-    return (try makeDiff(diff, source: .branch), comparison)
+    return (try makeDiff(diff, source: .branch, lineBudget: lineBudget), comparison)
   }
 
   /// The size of what a commit would contain: the staged changes, or with
@@ -592,17 +592,31 @@ actor GitRepository {
     }
   }
 
-  private func makeDiff(_ diff: OpaquePointer?, source: DiffSource) throws -> Diff {
+  /// Builds the files of a diff in the most useful order (see FileOrder).
+  /// With `lineBudget`, stops once that many changed lines are built and
+  /// marks the diff incomplete: paths come cheaply from the deltas, but
+  /// building every line of a 200k-line diff takes a third of a second.
+  private func makeDiff(_ diff: OpaquePointer?, source: DiffSource, lineBudget: Int? = nil) throws -> Diff {
     let count = git_diff_num_deltas(diff)
+    let entries = FileOrder.current.sorted(
+      (0..<count).map { index -> (index: Int, path: String) in
+        let delta = git_diff_get_delta(diff, index).pointee
+        let path = (delta.new_file.path ?? delta.old_file.path).map { String(cString: $0) } ?? ""
+        return (index, path)
+      }, path: \.path)
     var files: [FileChange] = []
     files.reserveCapacity(count)
-    for index in 0..<count {
-      files.append(try fileChange(diff: diff, index: index))
+    var lines = 0
+    for (position, entry) in entries.enumerated() {
+      if let lineBudget, lines >= lineBudget {
+        return Diff(source: source, files: files, isComplete: false)
+      }
+      // A file's id is its position, which the diff view relies on.
+      let file = try fileChange(diff: diff, index: entry.index).renumbered(position)
+      files.append(file)
+      lines += file.additions + file.deletions
     }
-    // Most useful first (see FileOrder), renumbered so a file's id is still
-    // its position: the diff view relies on that.
-    let ordered = FileOrder.current.sorted(files, path: \.path).enumerated().map { $1.renumbered($0) }
-    return Diff(source: source, files: ordered)
+    return Diff(source: source, files: files)
   }
 
   private func fileChange(diff: OpaquePointer?, index: Int) throws -> FileChange {

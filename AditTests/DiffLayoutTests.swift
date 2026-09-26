@@ -140,3 +140,24 @@ import Testing
     #expect(status.unstaged.isEmpty)
   }
 }
+
+@Suite struct FirstScreenTests {
+  private func file(_ id: Int, lines: Int) -> FileChange {
+    FileChange(id: id, status: .modified, oldPath: "f\(id)", newPath: "f\(id)", isBinary: false, hunks: [], additions: lines, deletions: 0)
+  }
+
+  @Test func takesLeadingFilesUpToTheBudget() {
+    let diff = Diff(source: .commit("x"), files: [file(0, lines: 400), file(1, lines: 400), file(2, lines: 400)])
+    let first = diff.firstScreen(lines: 500)
+    #expect(first.files.map(\.id) == [0, 1])
+    #expect(!first.isComplete)
+    #expect(diff.firstScreen(lines: 5_000).isComplete)
+  }
+
+  @Test func countsColumnsForArithmeticHeights() {
+    #expect(DiffLine.columns(of: "abc") == 3)
+    #expect(DiffLine.columns(of: "\tx") == 5)
+    #expect(DiffLine.columns(of: "ab\tx") == 5)
+    #expect(DiffLine.columns(of: "caf\u{E9}") == -1)
+  }
+}

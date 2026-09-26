@@ -533,3 +533,28 @@ import Testing
     #expect(Set(more.unstaged) == [ChangedFile(path: "new/x.txt", kind: .untracked), ChangedFile(path: "c.txt", kind: .deleted)])
   }
 }
+
+@Suite struct LargeDiffTests {
+  @Test func firstScreenStopsAtTheLineBudgetInFileOrder() async throws {
+    let fixture = try FixtureRepository()
+    var files: [String: String?] = [:]
+    for n in 0..<30 { files["src/file\(n).swift"] = String(repeating: "line \(n)\n", count: 100) }
+    files["package-lock.json"] = String(repeating: "lock\n", count: 5_000)
+    let id = try fixture.commit("Big", files: files)
+    let repository = try await GitRepository.open(at: fixture.url)
+
+    let first = try await repository.diff(commitID: id, lineBudget: 1_000)
+    #expect(!first.isComplete)
+    #expect(first.files.count == 10)
+    #expect(first.files.allSatisfy { $0.path.hasPrefix("src/") })
+    #expect(first.files.map(\.id) == Array(0..<10))
+
+    let full = try await repository.diff(commitID: id)
+    #expect(full.isComplete)
+    #expect(full.files.count == 31)
+    #expect(full.files.last?.path == "package-lock.json")
+    // The first screen is a prefix of the whole diff, so swapping it in
+    // keeps the reader's place.
+    #expect(full.files.prefix(10).map(\.path) == first.files.map(\.path))
+  }
+}
