@@ -51,7 +51,7 @@ struct RepositoryPicker: View {
         Text("\(count)")
           .font(.caption.monospacedDigit())
           .padding(.horizontal, 6)
-          .padding(.vertical, 1)
+          .padding(.vertical, 2)
           .background(.orange.opacity(0.2), in: Capsule())
       }
       if index < 9 {
@@ -61,7 +61,7 @@ struct RepositoryPicker: View {
       }
     }
     .padding(.horizontal, 12)
-    .padding(.vertical, 5)
+    .padding(.vertical, 6)
     .contentShape(Rectangle())
   }
 }

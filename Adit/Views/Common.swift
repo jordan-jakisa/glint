@@ -93,3 +93,10 @@ struct ChangeStats: View {
     .accessibilityLabel("\(additions) added, \(deletions) removed")
   }
 }
+
+extension View {
+  /// At least 22 pt to click, for small icon-only buttons.
+  func hitTarget() -> some View {
+    frame(minWidth: 22, minHeight: 22).contentShape(Rectangle())
+  }
+}

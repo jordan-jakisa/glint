@@ -37,12 +37,12 @@ private struct CommitRow: View {
   let commit: Commit
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 3) {
+    VStack(alignment: .leading, spacing: 2) {
       Text(commit.summary)
         .lineLimit(1)
       HStack(spacing: 6) {
         Text(commit.shortID)
-          .font(.system(size: 11, design: .monospaced))
+          .font(.caption.monospaced())
         Text(commit.authorName)
           .lineLimit(1)
         Spacer(minLength: 4)
@@ -76,7 +76,7 @@ private struct BranchRow: View {
   let base: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 3) {
+    VStack(alignment: .leading, spacing: 2) {
       Label("All changes on \(branch ?? "this branch")", systemImage: "arrow.triangle.branch")
         .lineLimit(1)
       Text("Compared with \(base), uncommitted work included")

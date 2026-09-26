@@ -189,7 +189,7 @@ private struct CommitHeader: View {
       }
       HStack(spacing: 12) {
         Text(String((diff.source.commitID ?? "").prefix(10)))
-          .font(.system(size: 12, design: .monospaced))
+          .monospaced()
           .textSelection(.enabled)
         if let commit {
           Text(commit.authorName)
@@ -227,7 +227,7 @@ private struct BranchHeader: View {
           if let comparison {
             Text(comparison.ahead == 1 ? "1 commit" : "\(comparison.ahead) commits")
             Text("since \(comparison.mergeBase)")
-              .font(.system(size: 12, design: .monospaced))
+              .monospaced()
           }
           Text("plus uncommitted work")
           Text(diff.files.count == 1 ? "1 file" : "\(diff.files.count) files")

@@ -95,13 +95,13 @@ private struct WelcomeView: View {
   let open: () -> Void
 
   var body: some View {
-    VStack(spacing: 14) {
+    VStack(spacing: 12) {
       Image(nsImage: NSApp.applicationIconImage)
         .resizable()
         .frame(width: 112, height: 112)
         .accessibilityHidden(true)
       Text("Adit")
-        .font(.system(size: 34, weight: .semibold, design: .rounded))
+        .font(.largeTitle.weight(.semibold))
       Text("A way in to every change.")
         .foregroundStyle(.secondary)
       Button(AppCommand.openRepository.title, action: open)

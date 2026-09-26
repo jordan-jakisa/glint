@@ -103,6 +103,7 @@ private struct LastCommitRow: View {
       Spacer(minLength: 4)
       Button(action: undo) {
         Image(systemName: "arrow.uturn.backward")
+          .hitTarget()
       }
       .buttonStyle(.borderless)
       .help("Undo this commit and keep its changes staged")
@@ -232,8 +233,10 @@ private struct GenerateButton: View {
         openSettings()
       }
     } label: {
-      Image(systemName: session.isGeneratingMessage ? "stop.circle" : "sparkles")
+      // Sparkles pulse while writing; the tooltip says a click stops it.
+      Image(systemName: "sparkles")
         .symbolEffect(.pulse, isActive: session.isGeneratingMessage)
+        .hitTarget()
     }
     .buttonStyle(.borderless)
     .help(help)
