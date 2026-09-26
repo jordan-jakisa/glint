@@ -117,9 +117,25 @@ So the sandbox is off, and Adit splits git work by what it needs:
 Cost accepted: Adit can read anything the user can, and Mac App Store
 distribution is off the table (it requires the sandbox).
 
-## Open question: where the AI runs (undecided)
+## AI commit messages: hosted free models first (2026-09-26)
 
-A hosted model API is simpler and better at writing prose. A local model keeps code
-on the machine, which some users will require. Undecided, and not needed until
-v0.2. Whichever ships first, the privacy behaviour is stated plainly in the UI and
-never silent.
+Decides the earlier open question "where the AI runs" for now: hosted, starting
+with providers that offer free models, all through one OpenAI-compatible chat
+completions client. OpenCode Zen, Vercel AI Gateway, and OpenRouter, in that
+order. Only their free models are listed (zero-priced, or named as free where a
+provider's listing has no prices).
+
+Borrowed from Zed's git panel, which uses its language-model providers for this
+(not ACP; ACP runs agents in Zed's agent panel): staged diff if anything is
+staged, else every change; the diff squeezed to 20 KB; the user's subject line
+kept; the repository's agent rules file sent along; the reply streamed into the
+message box. Zed's code is GPL, so the prompt and truncation are written fresh,
+not copied.
+
+Privacy, as the architecture notes require: off until switched on in Settings,
+nothing sent until you press the button, the provider named on the button, and
+each provider's note about free-tier data use shown next to the model picker.
+Keys live in the Keychain.
+
+A local model is still open, for people who can't send code anywhere. ACP
+agents (opencode, Claude Code, Gemini CLI) are the other candidate for later.

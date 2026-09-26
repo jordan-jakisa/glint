@@ -26,7 +26,8 @@ Speed is the product. If it is not instant it has failed.
 
 Pre-v0.1. Shows your uncommitted changes and any commit's diff, unified or
 split; stages files, hunks, or single lines; commits, amends, and undoes; switches
-branches; fetches, pulls, and pushes. AI commit messages are next. See
+branches; fetches, pulls, and pushes; writes commit messages with free models
+from OpenCode Zen, Vercel AI Gateway, or OpenRouter (set up in Settings). See
 `docs/plans/v0.1-git-panel.md`.
 
 ## Keys
@@ -41,6 +42,7 @@ branches; fetches, pulls, and pushes. AI commit messages are next. See
 | `s` | Stage or unstage the selected lines, or the hunk at the top |
 | `c` | Write the commit message (Escape leaves it) |
 | `⌘↩` | Commit |
+| `⌥⌘G` | Write the commit message with AI |
 | `⌘B` | Switch branch |
 | `⌥⌘F` / `⌥⌘P` / `⌥⇧⌘P` | Fetch / pull / push |
 | `⌥⌘S` / `⌥⌘U` | Stage all / unstage all |

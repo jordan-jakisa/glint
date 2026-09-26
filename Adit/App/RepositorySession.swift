@@ -35,6 +35,8 @@ final class RepositorySession {
     didSet { if isAmending, !oldValue { prefillAmendMessage() } }
   }
   internal(set) var isCommitting = false
+  /// Writing a message with AI. Observed so the button can show Stop.
+  internal(set) var messageTask: Task<Void, Never>?
   /// Bumped to move keyboard focus into the commit message.
   internal(set) var commitFocusRequest = 0
 

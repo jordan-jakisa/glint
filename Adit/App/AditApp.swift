@@ -15,5 +15,9 @@ struct AditApp: App {
     .commands {
       AditCommands()
     }
+
+    Settings {
+      AISettingsView()
+    }
   }
 }

@@ -25,7 +25,8 @@ App/         Scenes, menus, and RepositorySession: the per-window state that
 Views/       Presentation only. No git types cross into this layer.
 Models/      Value types: Commit, FileChange, Hunk, Line. Sendable structs.
 Git/         libgit2 wrapper. The only layer that knows libgit2 exists.
-Intelligence/  Commit-message generation. Talks to a model API.
+Intelligence/  Commit-message generation: providers, prompt, streaming client,
+               settings, Keychain.
 ```
 
 The rule that keeps this honest: `Views/` imports `Models/` but never `Git/`. Git
@@ -75,13 +76,22 @@ first paint: diff structure appears immediately, colour arrives when ready.
 
 ## Commit-message generation
 
-A diff goes out to a model API, a message comes back. Design notes:
+Built in `Intelligence/`. A diff goes out to a model API, a message streams back
+into the box.
 
-- The user's code leaves the machine. This must be explicit, opt-in per invocation
-  at first, and never silent. Say so plainly in the UI.
-- Large diffs exceed context. Summarize per file, then summarize the summaries.
-- The output is a draft in an editable field, never committed automatically.
-- The API key lives in the Keychain, not in `UserDefaults` and not in the repo.
+- `AIProvider`: OpenCode Zen, Vercel AI Gateway, OpenRouter. All speak OpenAI
+  chat completions; each has its own rule for spotting free models in its
+  public `/models` listing.
+- `CommitPrompt`: the prompt, the diff rendered as a patch, squeezed to 20 KB
+  (long lines clipped, then trailing hunks of the biggest files left out), and
+  cleanup of replies (reasoning blocks, code fences).
+- `AIClient`: streams server-sent events.
+- `AISettings` and `Keychain`: provider and model in UserDefaults, keys in the
+  Keychain.
+
+The user's code leaves the machine, so it's off until switched on, sends only on
+request, and says where it's going. The output is a draft in an editable field,
+never committed automatically.
 
 ## Sandbox
 

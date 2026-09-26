@@ -38,6 +38,13 @@ struct AditCommands: Commands {
         .keyboardShortcut("p", modifiers: [.command, .option, .shift])
         .disabled(!isReady)
 
+      Button("Write Commit Message with AI") {
+        session?.tab = .changes
+        session?.generateCommitMessage()
+      }
+      .keyboardShortcut("g", modifiers: [.command, .option])
+      .disabled(!isReady)
+
       Button("Switch Branch…") {
         session?.tab = .changes
         session?.isBranchPickerShown = true

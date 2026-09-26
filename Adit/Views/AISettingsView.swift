@@ -1,0 +1,87 @@
+import SwiftUI
+
+/// Settings, AI tab: pick a provider and one of its free models.
+struct AISettingsView: View {
+  @Bindable private var settings = AISettings.shared
+  @State private var keyDraft = ""
+  @State private var keySaved = false
+
+  var body: some View {
+    Form {
+      Section {
+        Toggle("Write commit messages with AI", isOn: $settings.isEnabled)
+        Text("When you ask for a message, Adit sends your diff (up to 20 KB) to the provider below. Nothing is sent until you press the sparkle button.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+
+      Section("Provider") {
+        Picker("Provider", selection: $settings.provider) {
+          ForEach(AIProvider.allCases) { Text($0.name).tag($0) }
+        }
+        HStack {
+          SecureField("API key", text: $keyDraft)
+            .onSubmit(saveKey)
+          Button(keySaved ? "Saved" : "Save", action: saveKey)
+            .disabled(keyDraft.isEmpty)
+        }
+        HStack {
+          Text(settings.apiKey == nil ? "No key saved. Free models still need one." : "Key saved in your Keychain.")
+            .foregroundStyle(.secondary)
+          Spacer()
+          Link("Get a key", destination: settings.provider.keyURL)
+        }
+        .font(.callout)
+      }
+
+      Section("Free model") {
+        HStack {
+          Picker("Model", selection: Binding(get: { settings.modelID }, set: { settings.modelID = $0 })) {
+            if settings.models.isEmpty {
+              Text(settings.isLoadingModels ? "Loading…" : "None found").tag(String?.none)
+            }
+            ForEach(settings.models) { Text($0.name).tag(Optional($0.id)) }
+          }
+          Button {
+            settings.loadModels()
+          } label: {
+            Image(systemName: "arrow.clockwise")
+          }
+          .buttonStyle(.borderless)
+          .help("Reload the free models")
+        }
+        if let error = settings.modelsError {
+          Text(error).font(.callout).foregroundStyle(.red)
+        }
+        Text(settings.provider.privacyNote)
+          .font(.callout)
+          .foregroundStyle(.secondary)
+      }
+
+      Section("How to write them") {
+        Toggle("Follow the repository's AGENTS.md or CLAUDE.md", isOn: $settings.followsRepositoryRules)
+        TextField(
+          "Your own instructions, like \u{201C}use conventional commits\u{201D}", text: $settings.instructions,
+          axis: .vertical
+        )
+        .lineLimit(3...6)
+      }
+    }
+    .formStyle(.grouped)
+    .frame(width: 520)
+    .onAppear {
+      if settings.models.isEmpty { settings.loadModels() }
+    }
+    .onChange(of: settings.provider) {
+      keyDraft = ""
+      keySaved = false
+    }
+  }
+
+  private func saveKey() {
+    guard !keyDraft.isEmpty else { return }
+    settings.saveKey(keyDraft)
+    keyDraft = ""
+    keySaved = true
+  }
+}

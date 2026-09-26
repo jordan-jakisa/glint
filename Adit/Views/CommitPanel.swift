@@ -12,6 +12,7 @@ struct CommitPanel: View {
       Divider()
       messageEditor
       HStack(spacing: 8) {
+        GenerateButton(session: session)
         Toggle("Amend", isOn: $session.isAmending)
           .toggleStyle(.checkbox)
           .disabled(session.lastCommit == nil)
@@ -167,5 +168,34 @@ private struct SyncButton: View {
       return session.sync.hasRemotes ? "This branch isn't on a remote yet" : "No remote configured"
     }
     return "\(session.sync.ahead) ahead, \(session.sync.behind) behind \(upstream)"
+  }
+}
+
+/// Writes the message with the free model picked in Settings. Without setup,
+/// it opens Settings instead.
+private struct GenerateButton: View {
+  @Bindable var session: RepositorySession
+  @Environment(\.openSettings) private var openSettings
+  private let settings = AISettings.shared
+
+  var body: some View {
+    Button {
+      if settings.isReady || session.isGeneratingMessage {
+        session.generateCommitMessage()
+      } else {
+        openSettings()
+      }
+    } label: {
+      Image(systemName: session.isGeneratingMessage ? "stop.circle" : "sparkles")
+        .symbolEffect(.pulse, isActive: session.isGeneratingMessage)
+    }
+    .buttonStyle(.borderless)
+    .help(help)
+  }
+
+  private var help: String {
+    if session.isGeneratingMessage { return "Stop writing" }
+    guard settings.isReady, let model = settings.modelID else { return settings.setupHint }
+    return "Write the message with \(model) on \(settings.provider.name) (⌥⌘G). Sends your diff there."
   }
 }
