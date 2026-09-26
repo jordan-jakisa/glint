@@ -30,6 +30,10 @@ final class RepositorySession {
   /// relative path, for the repository picker.
   internal(set) var repositorySummaries: [String: RepositorySummary] = [:]
   var isRepositoryPickerShown = false
+  /// Lists the other repositories' changes under the active one's.
+  var showsAllRepositories = UserDefaults.standard.bool(forKey: "showsAllRepositories") {
+    didSet { UserDefaults.standard.set(showsAllRepositories, forKey: "showsAllRepositories") }
+  }
   /// Shown as an alert: failures of actions the user asked for.
   var alertMessage: String?
   /// Files waiting for the user to confirm a discard.

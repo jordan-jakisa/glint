@@ -8,7 +8,7 @@ struct ChangesView: View {
     VStack(spacing: 0) {
       toolbar
       Divider()
-      if session.status.isClean {
+      if session.status.isClean && session.otherRepositoryChanges.isEmpty {
         ContentUnavailableView(
           "No changes to commit", systemImage: "checkmark.circle",
           description: Text("Edit a file and it shows up here."))
@@ -62,7 +62,7 @@ struct ChangesView: View {
               row(file, staged: true)
             }
           } header: {
-            GroupHeader(title: "Staged", count: session.status.staged.count) {
+            GroupHeader(title: groupTitle("Staged"), count: session.status.staged.count) {
               session.selectedChange = ChangeSelection(staged: true, path: nil)
             }
           }
@@ -73,8 +73,30 @@ struct ChangesView: View {
               row(file, staged: false)
             }
           } header: {
-            GroupHeader(title: "Changes", count: session.status.unstaged.count) {
+            GroupHeader(title: groupTitle("Changes"), count: session.status.unstaged.count) {
               session.selectedChange = ChangeSelection(staged: false, path: nil)
+            }
+          }
+        }
+        // Other repositories, read-only here: picking a file switches to its
+        // repository and opens it there.
+        ForEach(session.otherRepositoryChanges, id: \.repository.id) { group in
+          Section {
+            ForEach(group.files, id: \.self) { file in
+              Button {
+                session.switchRepository(to: group.repository, selecting: file)
+              } label: {
+                OtherRepositoryRow(path: file.path ?? "", kind: group.kinds[file.path ?? ""] ?? .modified)
+              }
+              .buttonStyle(.plain)
+            }
+          } header: {
+            HStack {
+              Text("\(group.repository.relativePath) \(group.files.count)")
+              Spacer()
+              Button("Switch") { session.switchRepository(to: group.repository) }
+                .buttonStyle(.link)
+                .font(.caption)
             }
           }
         }
@@ -83,6 +105,13 @@ struct ChangesView: View {
         if let selection, selection.path != nil { proxy.scrollTo(selection) }
       }
     }
+  }
+
+  /// In the all-repositories view, the active repository's groups say whose
+  /// they are.
+  private func groupTitle(_ group: String) -> String {
+    guard session.showsAllRepositories, session.workspace != nil, let name = session.info?.name else { return group }
+    return "\(name) \u{00B7} \(group)"
   }
 
   private func row(_ file: ChangedFile, staged: Bool) -> some View {
@@ -182,5 +211,28 @@ struct ChangeKindBadge: View {
     case .deleted, .conflicted: .red
     case .renamed: .blue
     }
+  }
+}
+
+/// A changed file in a repository that isn't the active one.
+private struct OtherRepositoryRow: View {
+  let path: String
+  let kind: ChangedFile.Kind
+
+  var body: some View {
+    HStack(spacing: 6) {
+      Color.clear.frame(width: 14)
+      ChangeKindBadge(kind: kind)
+      Text((path as NSString).lastPathComponent)
+        .lineLimit(1)
+      Text((path as NSString).deletingLastPathComponent)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.head)
+      Spacer(minLength: 0)
+    }
+    .foregroundStyle(.secondary)
+    .contentShape(Rectangle())
+    .help("Switch to this repository and open \(path)")
   }
 }

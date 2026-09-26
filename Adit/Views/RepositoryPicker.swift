@@ -12,6 +12,10 @@ struct RepositoryPicker: View {
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 6)
+      Toggle("Show every repository's changes", isOn: $session.showsAllRepositories)
+        .toggleStyle(.checkbox)
+        .padding(.horizontal, 12)
+        .padding(.bottom, 6)
       Divider()
       ForEach(Array((session.workspace?.repositories ?? []).enumerated()), id: \.element.id) { index, repository in
         Button {

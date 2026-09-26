@@ -47,7 +47,7 @@ struct CommitPanel: View {
       .padding(.top, 6)
       .overlay(alignment: .topLeading) {
         if session.commitMessage.isEmpty {
-          Text("Enter commit message")
+          Text(placeholder)
             .foregroundStyle(.tertiary)
             .padding(.horizontal, 11)
             .padding(.top, 6)
@@ -58,6 +58,12 @@ struct CommitPanel: View {
         messageFocused = false
         return .handled
       }
+  }
+
+  /// In a workspace, says which repository the commit goes to.
+  private var placeholder: String {
+    guard session.workspace != nil, let name = session.info?.name else { return "Enter commit message" }
+    return "Commit message for \(name)"
   }
 
   private var commitHelp: String {

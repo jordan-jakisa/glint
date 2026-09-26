@@ -124,3 +124,38 @@ import Testing
     #expect(session.commitMessage == "api draft")
   }
 }
+
+@MainActor
+@Suite struct AllRepositoriesTests {
+  @Test func listsOtherRepositoriesAndOpensTheirFiles() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("adit-wsall-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for name in ["api", "web"] {
+      _ = try await SystemGit(directory: root).run(["init", "-q", "-b", "main", name])
+    }
+    try Data("1\n".utf8).write(to: root.appendingPathComponent("web/page.txt"))
+    WorkspaceMemory.remember("api", in: root)
+
+    let session = RepositorySession()
+    let previous = session.showsAllRepositories
+    defer { session.showsAllRepositories = previous }
+    session.install(try await RepositorySession.load(root))
+    await session.summaryTask?.value
+
+    session.showsAllRepositories = false
+    #expect(session.otherRepositoryChanges.isEmpty)
+    session.showsAllRepositories = true
+    let groups = session.otherRepositoryChanges
+    #expect(groups.map(\.repository.relativePath) == ["web"])
+    #expect(groups.first?.files == [ChangeSelection(staged: false, path: "page.txt")])
+
+    // Picking that file switches to web and lands on it.
+    let web = try #require(groups.first?.repository)
+    session.install(
+      try await RepositorySession.load(web.url, in: session.workspace),
+      selecting: ChangeSelection(staged: false, path: "page.txt"))
+    #expect(session.activeWorkspaceRepository?.relativePath == "web")
+    #expect(session.selectedChange == ChangeSelection(staged: false, path: "page.txt"))
+  }
+}

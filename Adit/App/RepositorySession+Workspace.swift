@@ -9,6 +9,30 @@ extension RepositorySession {
     return workspace.repositories.first { $0.url.standardizedFileURL == url }
   }
 
+  /// The other repositories with changes, in workspace order, for the
+  /// all-repositories view. Empty unless that view is on.
+  var otherRepositoryChanges: [(repository: WorkspaceRepository, files: [ChangeSelection], kinds: [String: ChangedFile.Kind])] {
+    guard showsAllRepositories, let workspace else { return [] }
+    let active = activeWorkspaceRepository?.relativePath
+    return workspace.repositories.compactMap { repository in
+      guard repository.relativePath != active, let summary = repositorySummaries[repository.relativePath],
+        summary.changeCount > 0
+      else { return nil }
+      // One row per file: its unstaged change if it has one, else its staged one.
+      var files: [ChangeSelection] = []
+      var kinds: [String: ChangedFile.Kind] = [:]
+      for file in summary.status.unstaged {
+        files.append(ChangeSelection(staged: false, path: file.path))
+        kinds[file.path] = file.kind
+      }
+      for file in summary.status.staged where kinds[file.path] == nil {
+        files.append(ChangeSelection(staged: true, path: file.path))
+        kinds[file.path] = file.kind
+      }
+      return (repository, files, kinds)
+    }
+  }
+
   /// A dot beside the repository name says another repository has changes.
   var otherRepositoriesHaveChanges: Bool {
     let active = activeWorkspaceRepository?.relativePath
