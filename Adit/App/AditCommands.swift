@@ -59,6 +59,7 @@ struct AditCommands: Commands {
           .keyboardShortcut("s", modifiers: [.command, .option])
         Button("Unstage All") { session?.unstageAll() }
           .keyboardShortcut("u", modifiers: [.command, .option])
+        Button("Discard All Changes…") { session?.requestDiscardAll() }
       }
       .disabled(!isReady)
     }

@@ -149,6 +149,42 @@ extension RepositorySession {
     selectedChange = all[min(max(index + offset, 0), all.count - 1)]
   }
 
+  // MARK: - Discarding
+
+  /// Asks before discarding: the one action here that can lose work.
+  func requestDiscard(_ paths: [String]) {
+    let files = status.unstaged.filter { paths.contains($0.path) && $0.kind != .conflicted }
+    guard !files.isEmpty else { return }
+    pendingDiscard = files
+  }
+
+  func requestDiscardAll() {
+    requestDiscard(status.unstaged.map(\.path))
+  }
+
+  func confirmDiscard() {
+    guard let files = pendingDiscard, let repository else { return }
+    pendingDiscard = nil
+    let tracked = files.filter { $0.kind != .untracked }.map(\.path)
+    let untracked = files.filter { $0.kind == .untracked }.map { repository.url.appendingPathComponent($0.path) }
+    var next = status
+    next.unstaged.removeAll { file in files.contains { $0.path == file.path } }
+    apply(next, reloadDiff: false)
+    Task {
+      do {
+        try await repository.discard(tracked)
+        // Untracked files aren't in git at all, so git can't bring them back.
+        // The Trash can.
+        for url in untracked {
+          try FileManager.default.trashItem(at: url, resultingItemURL: nil)
+        }
+      } catch {
+        alertMessage = "\(error)"
+      }
+      refreshWorkingTree()
+    }
+  }
+
   // MARK: - Files
 
   func revealInFinder(_ path: String) {

@@ -25,6 +25,8 @@ final class RepositorySession {
   internal(set) var info: RepositoryInfo?
   /// Shown as an alert: failures of actions the user asked for.
   var alertMessage: String?
+  /// Files waiting for the user to confirm a discard.
+  var pendingDiscard: [ChangedFile]?
 
   /// Each tab keeps its own selection; switching tabs shows that tab's diff.
   var tab: Tab = .changes {

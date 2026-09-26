@@ -13,8 +13,20 @@ struct RootView: View {
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         session.refresh()
       }
+      .confirmationDialog(
+        discardTitle,
+        isPresented: Binding(
+          get: { session.pendingDiscard != nil },
+          set: { if !$0 { session.pendingDiscard = nil } }),
+        titleVisibility: .visible
+      ) {
+        Button("Discard", role: .destructive, action: session.confirmDiscard)
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text(discardMessage)
+      }
       .alert(
-        "Couldn't open that folder",
+        "That didn't work",
         isPresented: Binding(
           get: { session.alertMessage != nil },
           set: { if !$0 { session.alertMessage = nil } })
@@ -49,6 +61,18 @@ struct RootView: View {
         }
       }
     }
+  }
+
+  private var discardTitle: String {
+    guard let files = session.pendingDiscard else { return "" }
+    return files.count == 1 ? "Discard changes to \(files[0].fileName)?" : "Discard \(files.count) changes?"
+  }
+
+  private var discardMessage: String {
+    let untracked = session.pendingDiscard?.contains { $0.kind == .untracked } ?? false
+    return untracked
+      ? "Edits to tracked files can't be undone. New files go to the Trash."
+      : "This can't be undone."
   }
 
   private var subtitle: String {

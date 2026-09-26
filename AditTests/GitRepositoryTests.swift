@@ -312,3 +312,23 @@ import Testing
     await #expect(throws: GitError.self) { try await repository.stage(["a.txt"]) }
   }
 }
+
+@Suite struct DiscardTests {
+  @Test func restoresTrackedFilesAndKeepsStagedChanges() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n", "b.txt": "b\n"])
+    try fixture.write("a.txt", "staged\n")
+    try fixture.stage("a.txt")
+    try fixture.write("a.txt", "unstaged on top\n")
+    try fixture.delete("b.txt")
+    let repository = try await GitRepository.open(at: fixture.url)
+
+    try await repository.discard(["a.txt", "b.txt"])
+    let a = try String(contentsOf: fixture.url.appendingPathComponent("a.txt"), encoding: .utf8)
+    #expect(a == "staged\n")
+    #expect(FileManager.default.fileExists(atPath: fixture.url.appendingPathComponent("b.txt").path))
+    let status = try await repository.status()
+    #expect(status.unstaged.isEmpty)
+    #expect(status.staged.map(\.path) == ["a.txt"])
+  }
+}

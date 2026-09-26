@@ -155,6 +155,20 @@ actor GitRepository {
     }
   }
 
+  /// Throws away unstaged changes to tracked files by restoring them from the
+  /// index, like `git restore`. Staged changes are kept. Untracked files
+  /// aren't touched here: the caller moves those to the Trash.
+  func discard(_ paths: [String]) throws {
+    guard !paths.isEmpty else { return }
+    try reloadIndex()
+    let strings = CStringArray(paths)
+    var options = git_checkout_options()
+    git_checkout_options_init(&options, UInt32(GIT_CHECKOUT_OPTIONS_VERSION))
+    options.checkout_strategy = GIT_CHECKOUT_FORCE.rawValue | GIT_CHECKOUT_DISABLE_PATHSPEC_MATCH.rawValue
+    options.paths = strings.array
+    try GitError.check(git_checkout_index(handle, nil, &options), "Couldn't discard changes.")
+  }
+
   /// Runs `body` on the freshly read index, then writes it back. Another git
   /// process holding `index.lock` gets a few quick retries before giving up.
   private func withIndex(_ body: (OpaquePointer) throws -> Void) throws {

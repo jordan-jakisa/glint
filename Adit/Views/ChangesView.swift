@@ -35,6 +35,9 @@ struct ChangesView: View {
           .disabled(session.status.unstaged.isEmpty)
         Button("Unstage All", action: session.unstageAll)
           .disabled(session.status.staged.isEmpty)
+        Divider()
+        Button("Discard All Changes…", action: session.requestDiscardAll)
+          .disabled(session.status.unstaged.isEmpty)
       } label: {
         Text(session.status.unstaged.isEmpty && !session.status.staged.isEmpty ? "Unstage All" : "Stage All")
       } primaryAction: {
@@ -86,6 +89,9 @@ struct ChangesView: View {
       .tag(ChangeSelection(staged: staged, path: file.path))
       .contextMenu {
         Button(staged ? "Unstage" : "Stage") { session.setStaged(file.path, !staged) }
+        if !staged, file.kind != .conflicted {
+          Button("Discard Changes…") { session.requestDiscard([file.path]) }
+        }
         Divider()
         Button("Reveal in Finder") { session.revealInFinder(file.path) }
         Button("Copy Path") { session.copyPath(file.path) }
