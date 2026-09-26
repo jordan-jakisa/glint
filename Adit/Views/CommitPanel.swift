@@ -47,7 +47,11 @@ struct CommitPanel: View {
         LastCommitRow(commit: last, undo: session.undoLastCommit)
       }
     }
-    .onChange(of: session.commitFocusRequest) { messageFocused = true }
+    .onChange(of: session.messageFocusRequest, initial: true) { _, request in
+      guard let request else { return }
+      messageFocused = request
+      session.messageFocusRequest = nil
+    }
   }
 
   private var messageEditor: some View {

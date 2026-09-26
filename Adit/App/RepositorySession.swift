@@ -61,7 +61,10 @@ final class RepositorySession {
   /// Writing a message with AI. Observed so the button can show Stop.
   internal(set) var messageTask: Task<Void, Never>?
   /// Bumped to move keyboard focus into the commit message.
-  internal(set) var commitFocusRequest = 0
+  /// Focus to give the message box, or take from it, next time the commit
+  /// panel is on screen. The panel clears it once done, so a request made
+  /// while switching to Changes isn't lost.
+  var messageFocusRequest: Bool?
 
   /// Each tab keeps its own selection; switching tabs shows that tab's diff.
   var tab: Tab = .changes {
@@ -574,7 +577,7 @@ final class RepositorySession {
       toggleSelectedStaged()
     case .focusCommitMessage:
       tab = .changes
-      commitFocusRequest += 1
+      messageFocusRequest = true
     case .stagePartial:
       guard isPartialStagingAvailable else { return false }
       stageAtCursor()

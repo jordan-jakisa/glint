@@ -59,6 +59,8 @@ extension RepositorySession {
           generatedMessage = nil
         }
         commitMessage = ""
+        // Done typing: hand the keys back to j, k and Space.
+        messageFocusRequest = false
         aiNote = nil
         isAmending = false
       } catch {
