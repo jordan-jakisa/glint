@@ -23,6 +23,20 @@ extension RepositorySession {
     return commitsTrackedChanges ? "Commit Tracked" : "Commit"
   }
 
+  /// Remeasures what Commit would take. Runs after every status change;
+  /// cheap, since it counts lines without building patches.
+  func refreshCommitSize() {
+    guard let repository else { return }
+    let trackedOnly = commitsTrackedChanges
+    guard !status.staged.isEmpty || trackedOnly else {
+      commitSize = nil
+      return
+    }
+    Task {
+      commitSize = try? await repository.commitSize(trackedOnly: trackedOnly)
+    }
+  }
+
   /// Commits with system git, so hooks and signing run like in the terminal.
   func commit() {
     guard canCommit, let repository else { return }

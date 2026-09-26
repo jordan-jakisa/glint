@@ -48,6 +48,8 @@ final class RepositorySession {
     didSet { if isAmending, !oldValue { prefillAmendMessage() } }
   }
   internal(set) var isCommitting = false
+  /// Size of what Commit would take right now, shown in the commit box.
+  internal(set) var commitSize: ChangeSize?
   /// Writing a message with AI. Observed so the button can show Stop.
   internal(set) var messageTask: Task<Void, Never>?
   /// Bumped to move keyboard focus into the commit message.

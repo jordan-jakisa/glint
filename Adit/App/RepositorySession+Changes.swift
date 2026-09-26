@@ -34,6 +34,7 @@ extension RepositorySession {
     let old = status
     status = fresh
     updateActiveSummary()
+    refreshCommitSize()
     let previousSelection = selectedChange
     reconcileChangeSelection(previous: old)
     // A file on screen may have changed without its status changing, so the

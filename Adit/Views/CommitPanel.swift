@@ -18,6 +18,9 @@ struct CommitPanel: View {
           .disabled(session.lastCommit == nil)
           .help("Replace the last commit instead of adding a new one")
         Spacer()
+        if let size = session.commitSize, !session.isAmending {
+          CommitSizeLabel(size: size)
+        }
         if session.isCommitting {
           ProgressView().controlSize(.small)
         }
@@ -226,5 +229,21 @@ private struct GenerateButton: View {
     if session.isGeneratingMessage { return "Stop writing" }
     guard settings.isReady, let model = settings.modelID else { return settings.setupHint }
     return "Write the message with \(model) on \(settings.provider.name) (⌥⌘G). Sends your diff there."
+  }
+}
+
+/// What the commit would contain, so a big one is visible before it's made.
+private struct CommitSizeLabel: View {
+  let size: ChangeSize
+
+  var body: some View {
+    HStack(spacing: 4) {
+      Text(size.files == 1 ? "1 file" : "\(size.files) files")
+      Text("+\(size.additions)").foregroundStyle(.green)
+      Text("-\(size.deletions)").foregroundStyle(.red)
+    }
+    .font(.caption.monospacedDigit())
+    .foregroundStyle(.secondary)
+    .help("What this commit would contain")
   }
 }

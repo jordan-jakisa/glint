@@ -25,6 +25,13 @@ struct ChangedFile: Identifiable, Hashable, Sendable {
   }
 }
 
+/// How big a commit would be.
+struct ChangeSize: Equatable, Sendable {
+  let files: Int
+  let additions: Int
+  let deletions: Int
+}
+
 /// What `git status` reports, split the way the Changes tab shows it.
 struct WorkingTreeStatus: Equatable, Sendable {
   var staged: [ChangedFile]
