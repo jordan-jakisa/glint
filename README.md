@@ -24,9 +24,28 @@ Speed is the product. If it is not instant it has failed.
 
 ## Status
 
-Pre-v0.1. Opens a repository, lists its history, and shows any commit's diff,
-unified or split. Staging and committing are next. See
-`docs/plans/v0.1-git-panel.md` for what ships first.
+Pre-v0.1. Shows your uncommitted changes and any commit's diff, unified or
+split; stages files, hunks, or single lines; commits, amends, and undoes; switches
+branches; fetches, pulls, and pushes. AI commit messages are next. See
+`docs/plans/v0.1-git-panel.md`.
+
+## Keys
+
+| Key | Does |
+|---|---|
+| `j` / `k` | Next / previous file or commit |
+| `n` / `p` | Next / previous hunk |
+| `⌘↓` / `⌘↑` | Next / previous file in the diff |
+| `o` | Collapse or expand the file |
+| Space | Stage or unstage the selected file |
+| `s` | Stage or unstage the selected lines, or the hunk at the top |
+| `c` | Write the commit message (Escape leaves it) |
+| `⌘↩` | Commit |
+| `⌘B` | Switch branch |
+| `⌥⌘F` / `⌥⌘P` / `⌥⇧⌘P` | Fetch / pull / push |
+| `⌥⌘S` / `⌥⌘U` | Stage all / unstage all |
+| `⌘\` | Unified or split |
+| `⌘R` | Reload |
 
 ## Build
 

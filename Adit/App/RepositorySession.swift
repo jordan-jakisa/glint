@@ -66,7 +66,9 @@ final class RepositorySession {
   internal(set) var diffError: String?
   internal(set) var isLoadingDiff = false
   internal(set) var collapsedFiles: Set<Int> = [] {
-    didSet { rebuildRows() }
+    // Set.remove of a missing member still counts as a set. Without this check
+    // every hunk jump rebuilt every row and reloaded the whole table.
+    didSet { if collapsedFiles != oldValue { rebuildRows() } }
   }
 
   /// Unified or split. Remembered between launches.

@@ -5,8 +5,8 @@ Guidance for Claude Code working in this repository.
 Adit is a lightweight native macOS git panel (changes, diffs, staging, commits),
 with AI-generated commit messages to come. SwiftUI, Swift 6 with complete strict
 concurrency, libgit2 vendored in `Packages/Clibgit2`. Bundle id
-`com.kerustudios.adit`. Pre-v0.1: history and diffs work; staging and committing
-are next.
+`com.kerustudios.adit`. Pre-v0.1: changes, staging (files, hunks, lines),
+commits, branches, and push/pull work. AI commit messages are next.
 
 ## Read first
 

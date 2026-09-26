@@ -167,7 +167,15 @@ struct DiffTableView: NSViewRepresentable {
     }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
-      PlainRowView()
+      // Reused like cells. Building a fresh row view per row made every jump
+      // to an unseen part of the diff pay for a screenful of new views.
+      let identifier = NSUserInterfaceItemIdentifier("PlainRowView")
+      if let reused = tableView.makeView(withIdentifier: identifier, owner: nil) as? PlainRowView {
+        return reused
+      }
+      let rowView = PlainRowView()
+      rowView.identifier = identifier
+      return rowView
     }
 
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
@@ -270,6 +278,16 @@ final class DiffScroller {
 
 /// No selection or group-row styling: every row draws its own background.
 private final class PlainRowView: NSTableRowView {
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    // One layer per row, with the cell drawn into it, instead of a layer for
+    // the row and another for its cell: half the layers to commit per frame.
+    wantsLayer = true
+    canDrawSubviewsIntoLayer = true
+  }
+
+  required init?(coder: NSCoder) { fatalError("not used") }
+
   override func drawBackground(in dirtyRect: NSRect) {}
   override func drawSelection(in dirtyRect: NSRect) {}
 
@@ -358,11 +376,7 @@ struct DiffMetrics {
   }
 
   private static func measuredLines(_ text: String, width: CGFloat) -> Int {
-    let bounds = NSAttributedString(string: displayText(text), attributes: codeAttributes)
-      .boundingRect(
-        with: NSSize(width: textDrawWidth(width), height: .greatestFiniteMagnitude),
-        options: [.usesLineFragmentOrigin])
-    return max(1, Int(ceil(bounds.height / lineHeight - 0.01)))
+    CodeText.lineCount(displayText(text), width: textDrawWidth(width))
   }
 
   /// Width handed to the text system. A whole number of columns plus a sliver,
@@ -389,14 +403,4 @@ struct DiffMetrics {
     return result
   }
 
-  static let codeAttributes = textAttributes(.labelColor)
-  static let secondaryAttributes = textAttributes(.secondaryLabelColor)
-
-  static func textAttributes(_ color: NSColor) -> [NSAttributedString.Key: Any] {
-    let paragraph = NSMutableParagraphStyle()
-    paragraph.lineBreakMode = .byCharWrapping
-    paragraph.minimumLineHeight = lineHeight
-    paragraph.maximumLineHeight = lineHeight
-    return [.font: font, .foregroundColor: color, .paragraphStyle: paragraph]
-  }
 }

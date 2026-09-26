@@ -169,30 +169,33 @@ final class DiffRowCell: NSView {
   }
 
   private func drawNumber(_ number: Int?, rightEdge: CGFloat) {
-    guard let number else { return }
+    guard let number, let context = NSGraphicsContext.current?.cgContext else { return }
     let text = String(number)
-    (text as NSString).draw(
+    CodeText.drawSingleLine(
+      text, color: .secondaryLabelColor,
       at: NSPoint(x: rightEdge - CGFloat(text.count) * DiffMetrics.advance, y: DiffMetrics.verticalPadding),
-      withAttributes: DiffMetrics.secondaryAttributes)
+      in: context)
   }
 
   private func drawCode(_ line: DiffLine, x: CGFloat, width: CGFloat) {
+    guard let context = NSGraphicsContext.current?.cgContext else { return }
     let marker: String
     switch line.kind {
     case .addition: marker = "+"
     case .deletion: marker = "-"
-    case .context, .noNewline: marker = " "
+    case .context, .noNewline: marker = ""
     }
-    (marker as NSString).draw(
-      at: NSPoint(x: x + (DiffMetrics.markerWidth - DiffMetrics.advance) / 2, y: DiffMetrics.verticalPadding),
-      withAttributes: DiffMetrics.secondaryAttributes)
-
-    let attributes = line.kind == .noNewline ? DiffMetrics.secondaryAttributes : DiffMetrics.codeAttributes
-    NSAttributedString(string: DiffMetrics.displayText(line.text), attributes: attributes).draw(
-      with: NSRect(
-        x: x + DiffMetrics.markerWidth, y: DiffMetrics.verticalPadding,
-        width: DiffMetrics.textDrawWidth(width), height: bounds.height),
-      options: [.usesLineFragmentOrigin])
+    if !marker.isEmpty {
+      CodeText.drawSingleLine(
+        marker, color: .secondaryLabelColor,
+        at: NSPoint(x: x + (DiffMetrics.markerWidth - DiffMetrics.advance) / 2, y: DiffMetrics.verticalPadding),
+        in: context)
+    }
+    CodeText.draw(
+      DiffMetrics.displayText(line.text),
+      color: line.kind == .noNewline ? .secondaryLabelColor : .labelColor,
+      at: NSPoint(x: x + DiffMetrics.markerWidth, y: DiffMetrics.verticalPadding),
+      width: DiffMetrics.textDrawWidth(width), in: context)
   }
 
   // MARK: - Colors
