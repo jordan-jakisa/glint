@@ -25,14 +25,6 @@ struct ChangesView: View {
 
   private var toolbar: some View {
     HStack(spacing: 8) {
-      Button {
-        session.selectedChange = ChangeSelection(staged: session.status.unstaged.isEmpty, path: nil)
-      } label: {
-        Label("View All", systemImage: "plusminus")
-      }
-      .buttonStyle(.borderless)
-      .disabled(session.status.isClean)
-      .help("Show every change in one diff")
       Spacer()
       Menu {
         Button("Stage All", action: session.stageAll)
