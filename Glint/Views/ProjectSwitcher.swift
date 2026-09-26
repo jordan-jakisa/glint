@@ -37,7 +37,6 @@ struct ProjectSwitcher: View {
   @State private var projects: [URL] = []
   @State private var query = ""
   @State private var highlighted = 0
-  @State private var keys: Any?
   @FocusState private var searchFocused: Bool
 
   var body: some View {
@@ -88,19 +87,8 @@ struct ProjectSwitcher: View {
       // The open project is first; Return goes to the one before it.
       highlighted = projects.count > 1 ? 1 : 0
       searchFocused = true
-      keys = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-        switch event.keyCode {
-        case 125: move(1)
-        case 126: move(-1)
-        default: return event
-        }
-        return nil
-      }
     }
-    .onDisappear {
-      if let keys { NSEvent.removeMonitor(keys) }
-      keys = nil
-    }
+    .arrowKeys(move: move)
   }
 
   private var matches: [URL] {
@@ -139,9 +127,7 @@ struct ProjectSwitcher: View {
     .padding(.vertical, 2)
     .padding(.horizontal, 4)
     .contentShape(Rectangle())
-    .listRowBackground(
-      highlighted ? RoundedRectangle(cornerRadius: 5).fill(Color.accentColor.opacity(0.2)).padding(.horizontal, 6) : nil
-    )
+    .highlighted(highlighted)
     .help(url.path)
   }
 }

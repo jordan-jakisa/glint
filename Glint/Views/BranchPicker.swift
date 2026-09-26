@@ -1,10 +1,12 @@
 import SwiftUI
 
-/// Type to filter; Return switches to the top match, or creates a branch when
+/// Type to filter, ↑ and ↓ to pick, Return to switch; creates a branch when
 /// nothing matches.
 struct BranchPicker: View {
   @Bindable var session: RepositorySession
   @State private var query = ""
+  /// The row Return picks: the create row when shown, then the matches.
+  @State private var highlighted = 0
   @FocusState private var searchFocused: Bool
 
   var body: some View {
@@ -14,6 +16,7 @@ struct BranchPicker: View {
         .focused($searchFocused)
         .padding(10)
         .onSubmit(submit)
+        .onChange(of: query) { highlighted = 0 }
       Divider()
       List {
         if canCreate {
@@ -23,6 +26,7 @@ struct BranchPicker: View {
             Label("Create branch \u{201C}\(trimmedQuery)\u{201D}", systemImage: "plus")
           }
           .buttonStyle(.plain)
+          .highlighted(highlighted == 0)
         }
         if matches.isEmpty, !canCreate, !trimmedQuery.isEmpty {
           Text(
@@ -31,7 +35,7 @@ struct BranchPicker: View {
               : "No branch matches \u{201C}\(trimmedQuery)\u{201D}.")
             .foregroundStyle(.secondary)
         }
-        ForEach(matches) { branch in
+        ForEach(Array(matches.enumerated()), id: \.element.id) { index, branch in
           Button {
             session.switchBranch(to: branch)
           } label: {
@@ -49,6 +53,7 @@ struct BranchPicker: View {
             .contentShape(Rectangle())
           }
           .buttonStyle(.plain)
+          .highlighted(highlighted == index + (canCreate ? 1 : 0))
         }
       }
       .listStyle(.plain)
@@ -58,6 +63,7 @@ struct BranchPicker: View {
       }
     }
     .frame(width: 340, height: 360)
+    .arrowKeys(move: move)
     .onAppear { searchFocused = true }
   }
 
@@ -73,11 +79,19 @@ struct BranchPicker: View {
       && !session.branches.contains { $0.name == trimmedQuery || $0.switchName == trimmedQuery }
   }
 
+  private var rowCount: Int { matches.count + (canCreate ? 1 : 0) }
+
+  private func move(_ step: Int) {
+    guard rowCount > 0 else { return }
+    highlighted = (highlighted + step + rowCount) % rowCount
+  }
+
   private func submit() {
-    if let first = matches.first {
-      session.switchBranch(to: first)
-    } else if canCreate {
+    if canCreate, highlighted == 0 {
       session.createBranch(named: trimmedQuery)
+    } else {
+      let index = highlighted - (canCreate ? 1 : 0)
+      if matches.indices.contains(index) { session.switchBranch(to: matches[index]) }
     }
   }
 }

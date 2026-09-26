@@ -100,3 +100,42 @@ extension View {
     frame(minWidth: 22, minHeight: 22).contentShape(Rectangle())
   }
 }
+
+/// ↑ and ↓ (and optionally Return) for a popover list, even while its search
+/// field has focus. The monitor lives only while the popover is on screen.
+private struct ArrowKeys: ViewModifier {
+  let move: (Int) -> Void
+  let choose: (() -> Void)?
+  @State private var monitor: Any?
+
+  func body(content: Content) -> some View {
+    content
+      .onAppear {
+        monitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+          switch event.keyCode {
+          case 125: move(1)
+          case 126: move(-1)
+          case 36, 76 where choose != nil: choose?()
+          default: return event
+          }
+          return nil
+        }
+      }
+      .onDisappear {
+        if let monitor { NSEvent.removeMonitor(monitor) }
+        monitor = nil
+      }
+  }
+}
+
+extension View {
+  func arrowKeys(move: @escaping (Int) -> Void, choose: (() -> Void)? = nil) -> some View {
+    modifier(ArrowKeys(move: move, choose: choose))
+  }
+
+  /// The row Return will pick, in a popover list.
+  func highlighted(_ isOn: Bool) -> some View {
+    listRowBackground(
+      isOn ? RoundedRectangle(cornerRadius: 5).fill(Color.accentColor.opacity(0.2)).padding(.horizontal, 6) : nil)
+  }
+}
