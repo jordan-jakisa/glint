@@ -24,6 +24,13 @@ struct BranchPicker: View {
           }
           .buttonStyle(.plain)
         }
+        if matches.isEmpty, !canCreate, !trimmedQuery.isEmpty {
+          Text(
+            trimmedQuery.contains(" ")
+              ? "Branch names can't have spaces."
+              : "No branch matches \u{201C}\(trimmedQuery)\u{201D}.")
+            .foregroundStyle(.secondary)
+        }
         ForEach(matches) { branch in
           Button {
             session.switchBranch(to: branch)

@@ -30,12 +30,18 @@ struct DiffPane: View {
             hunkAction: session.stageHunk)
         }
       }
+    } else if session.tab == .changes, session.status.isClean {
+      CaughtUpView(session: session)
     } else if session.tab == .changes {
       ContentUnavailableView(
-        "No changes to commit", systemImage: "checkmark.circle",
-        description: Text("Your working tree matches the last commit."))
+        "Pick a file", systemImage: "doc.text",
+        description: Text(
+          "Press \(AppCommand.nextItem.keys) to start. \(AppCommand.toggleStaged.keys) stages a file, "
+            + "\(AppCommand.stagePartial.keys) stages a hunk."))
     } else if session.selectedCommitID == nil {
-      ContentUnavailableView("Pick a commit", systemImage: "list.bullet")
+      ContentUnavailableView(
+        "Pick a commit", systemImage: "list.bullet",
+        description: Text("Choose one on the left, or press \(AppCommand.nextItem.keys)."))
     } else {
       // First load for this window. It lands within a frame or two, so show
       // nothing rather than a spinner that would only flicker.
@@ -75,6 +81,46 @@ struct DiffPane: View {
     case .branch: "This branch doesn't change anything yet."
     }
   }
+}
+
+/// A clean working tree: what's left to do with the remote, if anything.
+private struct CaughtUpView: View {
+  let session: RepositorySession
+
+  var body: some View {
+    let sync = session.sync
+    if sync.behind > 0 {
+      ContentUnavailableView {
+        Label(commits(sync.behind) + " to pull", systemImage: "arrow.down.circle")
+      } description: {
+        Text("Everything here is committed. \(sync.upstream ?? "The remote") has new work.")
+      } actions: {
+        Button("Pull", action: session.pull)
+      }
+    } else if sync.ahead > 0 {
+      ContentUnavailableView {
+        Label(commits(sync.ahead) + " to push", systemImage: "arrow.up.circle")
+      } description: {
+        Text("Everything's committed. Push when you're ready.")
+      } actions: {
+        Button("Push", action: session.push)
+      }
+    } else if sync.upstream == nil, sync.hasRemotes, session.info?.branch != nil {
+      ContentUnavailableView {
+        Label("Not published yet", systemImage: "arrow.up.circle")
+      } description: {
+        Text("Everything's committed. Publish the branch to share it.")
+      } actions: {
+        Button("Publish Branch", action: session.push)
+      }
+    } else {
+      ContentUnavailableView(
+        "All caught up", systemImage: "checkmark.circle",
+        description: Text(sync.upstream == nil ? "Everything's committed." : "Everything's committed and pushed."))
+    }
+  }
+
+  private func commits(_ count: Int) -> String { count == 1 ? "1 commit" : "\(count) commits" }
 }
 
 private struct WorkingTreeHeader: View {

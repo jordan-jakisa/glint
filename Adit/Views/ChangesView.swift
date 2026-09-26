@@ -9,10 +9,13 @@ struct ChangesView: View {
       toolbar
       Divider()
       if session.status.isClean && session.otherRepositoryChanges.isEmpty {
-        ContentUnavailableView(
-          "No changes to commit", systemImage: "checkmark.circle",
-          description: Text("Edit a file and it shows up here."))
-          .frame(maxHeight: .infinity)
+        // The diff pane says where things stand; this only says why it's empty.
+        Text("No changes. Edit a file and it shows up here.")
+          .font(.callout)
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+          .padding(.horizontal, 16)
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
       } else {
         list
       }

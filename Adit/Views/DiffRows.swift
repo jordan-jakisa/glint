@@ -45,6 +45,16 @@ struct DiffRow: Identifiable, Sendable {
   let id: DiffRowID
   let content: Content
 
+  /// Why a file with no hunks is in the diff at all.
+  static func emptyNote(_ status: FileChange.Status) -> String {
+    switch status {
+    case .added, .deleted: "Empty file."
+    case .renamed: "Renamed, with no changes inside."
+    case .copied: "Copied, with no changes inside."
+    case .modified, .typeChanged: "Only the file's mode changed."
+    }
+  }
+
   static func build(_ diff: Diff, layout: DiffLayout, collapsed: Set<Int>) -> [DiffRow] {
     var rows: [DiffRow] = []
     for file in diff.files {
@@ -55,7 +65,7 @@ struct DiffRow: Identifiable, Sendable {
       if file.isBinary {
         rows.append(DiffRow(id: .note(file.id), content: .note("Binary file, not shown.")))
       } else if file.hunks.isEmpty {
-        rows.append(DiffRow(id: .note(file.id), content: .note("No content changes.")))
+        rows.append(DiffRow(id: .note(file.id), content: .note(Self.emptyNote(file.status))))
       }
 
       for hunk in file.hunks {
