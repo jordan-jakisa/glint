@@ -4,7 +4,8 @@ import Foundation
 extension RepositorySession {
   /// Rereads `git status`, then reloads the selected working-tree diff in
   /// place. Calls that arrive while one is running collapse into one rerun.
-  func refreshWorkingTree() {
+  /// `changedAt` is when the file watcher first saw the change, for timing.
+  func refreshWorkingTree(changedAt: ContinuousClock.Instant? = nil) {
     guard let repository else { return }
     if statusTask != nil {
       statusRefreshQueued = true
@@ -16,6 +17,10 @@ extension RepositorySession {
       if let fresh {
         Timing.report("status", since: start, budget: 50)
         apply(fresh)
+        if let changedAt {
+          // Plus FSEvents' 50 ms latency before the watcher hears about it.
+          Timing.report("file event to list updated", since: changedAt, budget: 150)
+        }
       }
       statusTask = nil
       if statusRefreshQueued {

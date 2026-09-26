@@ -103,3 +103,18 @@ import Testing
     #expect(DiffRowID.hunk(0, 5) < .file(1))
   }
 }
+
+@Suite struct RepositoryWatcherTests {
+  @Test func classifiesPaths() {
+    let root = "/repo"
+    #expect(RepositoryWatcher.classify("/repo/src/a.swift", root: root) == .workingTree)
+    #expect(RepositoryWatcher.classify("/repo/.gitignore", root: root) == .workingTree)
+    #expect(RepositoryWatcher.classify("/repo/.git/index", root: root) == .workingTree)
+    #expect(RepositoryWatcher.classify("/repo/.git/HEAD", root: root) == .head)
+    #expect(RepositoryWatcher.classify("/repo/.git/refs/heads/main", root: root) == .head)
+    #expect(RepositoryWatcher.classify("/repo/.git/packed-refs", root: root) == .head)
+    #expect(RepositoryWatcher.classify("/repo/.git/objects/ab/cdef", root: root) == .ignored)
+    #expect(RepositoryWatcher.classify("/repo/.git/index.lock", root: root) == .ignored)
+    #expect(RepositoryWatcher.classify("/repo/.git/logs/HEAD", root: root) == .ignored)
+  }
+}

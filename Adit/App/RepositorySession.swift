@@ -80,6 +80,7 @@ final class RepositorySession {
 
   @ObservationIgnored var repository: GitRepository?
   @ObservationIgnored var access = RepositoryAccess()
+  @ObservationIgnored var watcher: RepositoryWatcher?
   @ObservationIgnored var isLoadingMore = false
   @ObservationIgnored var diffTask: Task<Void, Never>?
   @ObservationIgnored var prefetchTask: Task<Void, Never>?
@@ -202,6 +203,10 @@ final class RepositorySession {
     cache = DiffCache(capacity: 32)
     diffError = nil
     phase = .ready
+    watcher = RepositoryWatcher(url: opened.repository.url) { [weak self] change in
+      if change.head { self?.refreshHistory() }
+      if change.workingTree { self?.refreshWorkingTree(changedAt: change.firstEventAt) }
+    }
 
     // Show the preloaded diff directly, so it paints with the window.
     tab = .changes
