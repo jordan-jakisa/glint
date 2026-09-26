@@ -150,7 +150,7 @@ final class RepositorySession {
     Task {
       do {
         let opened = try await loading.value
-        access.adopt(url)
+        access.adopt(opened.repository.url)
         install(opened)
       } catch {
         let message = "\(url.lastPathComponent): \(error)"

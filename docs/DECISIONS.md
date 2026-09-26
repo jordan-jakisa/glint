@@ -58,7 +58,7 @@ The diff viewer ships first, with no AI at all. Three reasons:
 3. Generating a message needs the staged diff anyway, so the reading layer has to
    be built and correct regardless.
 
-## libgit2, not subprocess git (2026-09-26)
+## libgit2, not subprocess git, for reads (2026-09-26)
 
 Each `Process` spawn costs roughly 10-30ms before git starts working, and listing
 commits plus diffing files means dozens of calls per screen. In-process libgit2 via
@@ -95,11 +95,27 @@ Signing is ad-hoc (`CODE_SIGN_IDENTITY = "-"`) so the project builds with no
 developer team configured. A real team and notarization get added when there is
 something worth distributing.
 
-## Sandboxed, with user-selected file access (2026-09-26)
+## Not sandboxed; system git for writes and network (2026-09-26, revised)
 
-Enabled rather than disabled, despite being more work (security-scoped bookmarks
-are needed to remember repositories across launches). A tool that reads source code
-should be able to touch the repositories the user chose and nothing else.
+Revised the same day. The app started sandboxed with user-selected file access,
+so it could touch only the repositories the user picked. That stopped working
+once Adit took on push and pull: a sandboxed app can't read `~/.ssh`, the SSH
+agent, `~/.gitconfig`, or credential helpers, and every process it starts
+inherits the sandbox. The alternative, rebuilding libgit2 with its own HTTPS and
+SSH stacks and asking for `~/.ssh` through an open panel, was a lot of work for
+partial agent and `~/.ssh/config` support.
+
+So the sandbox is off, and Adit splits git work by what it needs:
+
+- **libgit2, in-process:** everything read often and fast. Status, history,
+  diffs, and index writes (stage, unstage, hunk and line staging, discard).
+- **System git, as a subprocess:** commit, branch switching, fetch, pull, push.
+  These are rare, so the 10 to 30 ms spawn cost doesn't matter, and they then
+  behave exactly like the terminal: same keys, agent, config, credential
+  helpers, signing, and hooks.
+
+Cost accepted: Adit can read anything the user can, and Mac App Store
+distribution is off the table (it requires the sandbox).
 
 ## Open question: where the AI runs (undecided)
 

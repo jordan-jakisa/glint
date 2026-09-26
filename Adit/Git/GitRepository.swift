@@ -22,24 +22,27 @@ actor GitRepository {
     git_repository_free(handle)
   }
 
-  /// Opens the repository at exactly `url`, without searching parent folders.
-  /// The sandbox only grants access to the folder the user picked, so a
-  /// repository found by walking upward could not be read anyway.
+  /// Opens the repository containing `url`. Picking a subfolder of a
+  /// repository opens the repository itself, like `git` in a terminal.
   @concurrent
   static func open(at url: URL) async throws -> GitRepository {
     _ = LibGit2.initialized
     var repo: OpaquePointer?
     let code = url.withUnsafeFileSystemRepresentation { path in
-      git_repository_open_ext(
-        &repo, path, GIT_REPOSITORY_OPEN_NO_SEARCH.rawValue, nil)
+      git_repository_open_ext(&repo, path, 0, nil)
     }
     if code == GIT_ENOTFOUND.rawValue {
       throw GitError(
         code: code,
-        message: "\(url.lastPathComponent) isn't a git repository. Pick the folder that contains .git.")
+        message: "\(url.lastPathComponent) isn't inside a git repository.")
     }
     try GitError.check(code, "Couldn't open \(url.path).")
-    return GitRepository(url: url, handle: repo!)
+    guard let workdir = git_repository_workdir(repo) else {
+      git_repository_free(repo)
+      throw GitError(code: -1, message: "\(url.lastPathComponent) is a bare repository, with no files to show.")
+    }
+    let root = URL(fileURLWithPath: String(cString: workdir), isDirectory: true)
+    return GitRepository(url: root.standardizedFileURL, handle: repo!)
   }
 
   // MARK: - Repository

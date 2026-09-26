@@ -18,6 +18,13 @@ import Testing
     #expect(info.branch == "main" || info.branch == "master")
   }
 
+  @Test func opensTheRepositoryAboveASubfolder() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("First", files: ["sub/dir/a.txt": "a\n"])
+    let repository = try await GitRepository.open(at: fixture.url.appendingPathComponent("sub/dir"))
+    #expect(repository.url.resolvingSymlinksInPath() == fixture.url.resolvingSymlinksInPath())
+  }
+
   @Test func rejectsAFolderThatIsNotARepository() async throws {
     let folder = FileManager.default.temporaryDirectory
       .appendingPathComponent("adit-not-a-repo-\(UUID().uuidString)")

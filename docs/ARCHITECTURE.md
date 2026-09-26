@@ -85,8 +85,7 @@ A diff goes out to a model API, a message comes back. Design notes:
 
 ## Sandbox
 
-The app is sandboxed with `files.user-selected.read-write`. The user picks a
-repository through an open panel, which grants access to that folder. Persisting
-access across launches needs security-scoped bookmarks. This is more work than
-disabling the sandbox, and it is the right posture for a tool that reads source
-code: the app can touch the repositories the user chose and nothing else.
+Off. Push, pull, and commits need the user's real keys, agent, git config,
+credential helpers, and hooks, none of which a sandboxed app can reach. See the
+decision log. libgit2 handles reads and index writes; system git handles
+commit, branch switching, and network operations.
