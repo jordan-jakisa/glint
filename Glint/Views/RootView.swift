@@ -2,8 +2,6 @@ import SwiftUI
 
 struct RootView: View {
   @State private var session = RepositorySession()
-  /// This window's terminals, one per repository, alive while hidden.
-  @State private var terminals = TerminalStore()
   @Environment(\.openSettings) private var openSettings
 
   var body: some View {
@@ -68,7 +66,7 @@ struct RootView: View {
         SidebarView(session: session)
           .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 480)
       } detail: {
-        DiffAndTerminal(session: session, terminals: terminals)
+        DiffAndTerminal(session: session)
           .modifier(DiffToolbar(session: session))
       }
       .toolbar(removing: .title)
@@ -133,7 +131,6 @@ private struct WelcomeView: View {
 /// and your scroll position stays put.
 private struct DiffAndTerminal: View {
   let session: RepositorySession
-  let terminals: TerminalStore
   @AppStorage("terminalHeight") private var terminalHeight = 240.0
   @State private var dragStart: Double?
 
@@ -144,7 +141,7 @@ private struct DiffAndTerminal: View {
           .frame(maxHeight: .infinity)
         if session.isTerminalShown, let folder = session.repositoryURL {
           divider(in: geometry.size.height)
-          TerminalPanel(folder: folder, store: terminals)
+          TerminalPanel(folder: folder, store: session.terminals) { session.isTerminalShown = false }
             .frame(height: clamped(terminalHeight, in: geometry.size.height))
         }
       }

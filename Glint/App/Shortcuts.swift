@@ -103,7 +103,7 @@ struct Shortcut: Codable, Hashable, Sendable {
 
 /// Every command that can have a key.
 enum AppCommand: String, CaseIterable, Identifiable, Sendable {
-  case openRepository, reload, toggleLayout, showTerminal, openExternalTerminal
+  case openRepository, reload, toggleLayout, showTerminal, newTerminalTab, closeTerminalTab, openExternalTerminal
   case switchProject, switchRepository, switchBranch, writeMessage, commit
   case fetch, pull, push
   case nextFile, previousFile, stageAll, unstageAll
@@ -119,6 +119,8 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .reload: "Reload"
     case .toggleLayout: "Show Split or Unified Diff"
     case .showTerminal: "Show or Hide Terminal"
+    case .newTerminalTab: "New Terminal Tab"
+    case .closeTerminalTab: "Close Terminal Tab"
     case .openExternalTerminal: "Open in Terminal App"
     case .switchProject: "Switch Project…"
     case .switchRepository: "Switch Repository…"
@@ -160,6 +162,8 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .reload: Shortcut("r", command: true)
     case .toggleLayout: Shortcut("\\", command: true)
     case .showTerminal: Shortcut("t", command: true)
+    case .newTerminalTab: Shortcut("t", command: true, shift: true)
+    case .closeTerminalTab: Shortcut("w", command: true, option: true)
     case .openExternalTerminal: Shortcut("t", command: true, option: true)
     case .switchProject: Shortcut("o", command: true, option: true)
     case .switchRepository: Shortcut("r", command: true, shift: true)

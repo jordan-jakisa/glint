@@ -31,6 +31,9 @@ final class RepositorySession {
   internal(set) var repositorySummaries: [String: RepositorySummary] = [:]
   var isRepositoryPickerShown = false
   var isProjectSwitcherShown = false
+  /// This window's terminal tabs, per repository, alive while hidden.
+  @ObservationIgnored let terminals = TerminalStore()
+
   /// The terminal panel under the diff. Remembered between launches.
   var isTerminalShown = UserDefaults.standard.bool(forKey: "terminalShown") {
     didSet { UserDefaults.standard.set(isTerminalShown, forKey: "terminalShown") }

@@ -58,6 +58,12 @@ struct GlintCommands: Commands {
       }
       .shortcut(.showTerminal)
       .disabled(!isReady)
+      Button(AppCommand.newTerminalTab.title) { session?.newTerminalTab() }
+        .shortcut(.newTerminalTab)
+        .disabled(!isReady)
+      Button(AppCommand.closeTerminalTab.title) { session?.closeTerminalTab() }
+        .shortcut(.closeTerminalTab)
+        .disabled(!isReady || session?.isTerminalShown != true)
 
       Button("Open in \(TerminalApp.preferred.name)") { session?.openInTerminal() }
         .shortcut(.openExternalTerminal)

@@ -36,6 +36,18 @@ extension RepositorySession {
   /// The active repository's folder, for the terminal panel.
   var repositoryURL: URL? { info?.url }
 
+  /// Opens another shell in the terminal panel, showing it if hidden.
+  func newTerminalTab() {
+    guard let folder = repository?.url else { return }
+    if isTerminalShown { terminals.newTab(for: folder) } else { isTerminalShown = true }
+  }
+
+  /// Closes the terminal tab you're in; closing the last hides the panel.
+  func closeTerminalTab() {
+    guard isTerminalShown, let folder = repository?.url, let tab = terminals.current(for: folder) else { return }
+    if !terminals.close(tab, in: folder) { isTerminalShown = false }
+  }
+
   /// Opens the active repository in your terminal app (⌘T).
   func openInTerminal() {
     guard let folder = repository?.url else { return }
