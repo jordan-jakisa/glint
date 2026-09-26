@@ -76,3 +76,20 @@ struct ChangeKindBadge: View {
       .accessibilityLabel(mark.label)
   }
 }
+
+/// `+12 -3`, in the system diff colours, with digits that don't change width
+/// as the counts change.
+struct ChangeStats: View {
+  let additions: Int
+  let deletions: Int
+
+  var body: some View {
+    HStack(spacing: 4) {
+      Text("+\(additions)").foregroundStyle(.green)
+      Text("-\(deletions)").foregroundStyle(.red)
+    }
+    .monospacedDigit()
+    .accessibilityElement(children: .ignore)
+    .accessibilityLabel("\(additions) added, \(deletions) removed")
+  }
+}

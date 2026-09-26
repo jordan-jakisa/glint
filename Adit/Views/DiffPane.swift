@@ -142,8 +142,7 @@ private struct WorkingTreeHeader: View {
           .textSelection(.enabled)
         HStack(spacing: 12) {
           Text(staged ? "Staged" : "Not staged")
-          Text("+\(diff.additions)").foregroundStyle(.green)
-          Text("-\(diff.deletions)").foregroundStyle(.red)
+          ChangeStats(additions: diff.additions, deletions: diff.deletions)
         }
         .font(.callout)
         .foregroundStyle(.secondary)
@@ -196,8 +195,7 @@ private struct CommitHeader: View {
         }
         Spacer(minLength: 12)
         Text(fileCount)
-        Text("+\(diff.additions)").foregroundStyle(.green)
-        Text("-\(diff.deletions)").foregroundStyle(.red)
+        ChangeStats(additions: diff.additions, deletions: diff.deletions)
       }
       .font(.callout)
       .foregroundStyle(.secondary)
@@ -231,8 +229,7 @@ private struct BranchHeader: View {
           }
           Text("plus uncommitted work")
           Text(diff.files.count == 1 ? "1 file" : "\(diff.files.count) files")
-          Text("+\(diff.additions)").foregroundStyle(.green)
-          Text("-\(diff.deletions)").foregroundStyle(.red)
+          ChangeStats(additions: diff.additions, deletions: diff.deletions)
         }
         .font(.callout)
         .foregroundStyle(.secondary)

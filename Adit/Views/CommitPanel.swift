@@ -254,8 +254,7 @@ private struct CommitSizeLabel: View {
   var body: some View {
     HStack(spacing: 4) {
       Text(size.files == 1 ? "1 file" : "\(size.files) files")
-      Text("+\(size.additions)").foregroundStyle(.green)
-      Text("-\(size.deletions)").foregroundStyle(.red)
+      ChangeStats(additions: size.additions, deletions: size.deletions)
     }
     .font(.caption.monospacedDigit())
     .foregroundStyle(.secondary)
