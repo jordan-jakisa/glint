@@ -6,10 +6,29 @@
 	objectVersion = 77;
 	objects = {
 
+/* Begin PBXBuildFile section */
+		AD1700000000000000000010 /* Clibgit2 in Frameworks */ = {isa = PBXBuildFile; productRef = AD1700000000000000000011 /* Clibgit2 */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXContainerItemProxy section */
+		AD1700000000000000000027 /* PBXContainerItemProxy */ = {
+			isa = PBXContainerItemProxy;
+			containerPortal = AD1700000000000000000001 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = AD1700000000000000000004;
+			remoteInfo = Adit;
+		};
+/* End PBXContainerItemProxy section */
+
 /* Begin PBXFileSystemSynchronizedRootGroup section */
 		AD1700000000000000000006 /* Adit */ = {
 			isa = PBXFileSystemSynchronizedRootGroup;
 			path = Adit;
+			sourceTree = "<group>";
+		};
+		AD1700000000000000000020 /* AditTests */ = {
+			isa = PBXFileSystemSynchronizedRootGroup;
+			path = AditTests;
 			sourceTree = "<group>";
 		};
 /* End PBXFileSystemSynchronizedRootGroup section */
@@ -22,10 +41,25 @@
 			path = Adit.app;
 			sourceTree = BUILT_PRODUCTS_DIR;
 		};
+		AD1700000000000000000021 /* AditTests.xctest */ = {
+			isa = PBXFileReference;
+			explicitFileType = wrapper.cfbundle;
+			includeInIndex = 0;
+			path = AditTests.xctest;
+			sourceTree = BUILT_PRODUCTS_DIR;
+		};
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
 		AD1700000000000000000008 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				AD1700000000000000000010 /* Clibgit2 in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AD1700000000000000000024 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -39,6 +73,7 @@
 			isa = PBXGroup;
 			children = (
 				AD1700000000000000000006 /* Adit */,
+				AD1700000000000000000020 /* AditTests */,
 				AD1700000000000000000003 /* Products */,
 			);
 			sourceTree = "<group>";
@@ -47,6 +82,7 @@
 			isa = PBXGroup;
 			children = (
 				AD1700000000000000000005 /* Adit.app */,
+				AD1700000000000000000021 /* AditTests.xctest */,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -71,10 +107,32 @@
 			);
 			name = Adit;
 			packageProductDependencies = (
+				AD1700000000000000000011 /* Clibgit2 */,
 			);
 			productName = Adit;
 			productReference = AD1700000000000000000005 /* Adit.app */;
 			productType = "com.apple.product-type.application";
+		};
+		AD1700000000000000000022 /* AditTests */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = AD170000000000000000002A /* Build configuration list for PBXNativeTarget "AditTests" */;
+			buildPhases = (
+				AD1700000000000000000023 /* Sources */,
+				AD1700000000000000000024 /* Frameworks */,
+				AD1700000000000000000025 /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				AD1700000000000000000026 /* PBXTargetDependency */,
+			);
+			fileSystemSynchronizedGroups = (
+				AD1700000000000000000020 /* AditTests */,
+			);
+			name = AditTests;
+			productName = AditTests;
+			productReference = AD1700000000000000000021 /* AditTests.xctest */;
+			productType = "com.apple.product-type.bundle.unit-test";
 		};
 /* End PBXNativeTarget section */
 
@@ -89,6 +147,10 @@
 					AD1700000000000000000004 = {
 						CreatedOnToolsVersion = 27.0;
 					};
+					AD1700000000000000000022 = {
+						CreatedOnToolsVersion = 27.0;
+						TestTargetID = AD1700000000000000000004;
+					};
 				};
 			};
 			buildConfigurationList = AD170000000000000000000A /* Build configuration list for PBXProject "Adit" */;
@@ -100,18 +162,29 @@
 			);
 			mainGroup = AD1700000000000000000002;
 			minimizedProjectReferenceProxies = 1;
+			packageReferences = (
+				AD1700000000000000000012 /* XCLocalSwiftPackageReference "Packages/Clibgit2" */,
+			);
 			preferredProjectObjectVersion = 77;
 			productRefGroup = AD1700000000000000000003 /* Products */;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
 				AD1700000000000000000004 /* Adit */,
+				AD1700000000000000000022 /* AditTests */,
 			);
 		};
 /* End PBXProject section */
 
 /* Begin PBXResourcesBuildPhase section */
 		AD1700000000000000000009 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		AD1700000000000000000025 /* Resources */ = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
@@ -128,8 +201,22 @@
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		AD1700000000000000000023 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 /* End PBXSourcesBuildPhase section */
 
+/* Begin PBXTargetDependency section */
+		AD1700000000000000000026 /* PBXTargetDependency */ = {
+			isa = PBXTargetDependency;
+			target = AD1700000000000000000004 /* Adit */;
+			targetProxy = AD1700000000000000000027 /* PBXContainerItemProxy */;
+		};
+/* End PBXTargetDependency section */
 
 /* Begin XCBuildConfiguration section */
 		AD170000000000000000000C /* Debug */ = {
@@ -236,6 +323,46 @@
 			};
 			name = Release;
 		};
+		AD1700000000000000000028 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kerustudios.adit.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Packages/Clibgit2/libgit2/include";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Adit.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Adit";
+			};
+			name = Debug;
+		};
+		AD1700000000000000000029 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				BUNDLE_LOADER = "$(TEST_HOST)";
+				CODE_SIGN_IDENTITY = "-";
+				CODE_SIGN_STYLE = Manual;
+				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = "";
+				GENERATE_INFOPLIST_FILE = YES;
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = com.kerustudios.adit.tests;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SWIFT_APPROACHABLE_CONCURRENCY = YES;
+				SWIFT_INCLUDE_PATHS = "$(SRCROOT)/Packages/Clibgit2/libgit2/include";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_VERSION = 6.0;
+				TEST_HOST = "$(BUILT_PRODUCTS_DIR)/Adit.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Adit";
+			};
+			name = Release;
+		};
 /* End XCBuildConfiguration section */
 
 /* Begin XCConfigurationList section */
@@ -257,8 +384,30 @@
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
+		AD170000000000000000002A /* Build configuration list for PBXNativeTarget "AditTests" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				AD1700000000000000000028 /* Debug */,
+				AD1700000000000000000029 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
 /* End XCConfigurationList section */
 
+/* Begin XCLocalSwiftPackageReference section */
+		AD1700000000000000000012 /* XCLocalSwiftPackageReference "Packages/Clibgit2" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/Clibgit2;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		AD1700000000000000000011 /* Clibgit2 */ = {
+			isa = XCSwiftPackageProductDependency;
+			productName = Clibgit2;
+		};
+/* End XCSwiftPackageProductDependency section */
 	};
 	rootObject = AD1700000000000000000001 /* Project object */;
 }
