@@ -62,6 +62,19 @@ confines each handle to an actor and converts to Sendable value types at the
 boundary. The target builds with complete strict concurrency to catch violations at
 compile time rather than as field crashes.
 
+## libgit2 vendored from source, not SwiftGit2 (2026-09-26)
+
+Supersedes "via SwiftGit2" above. SwiftGit2 only builds with Carthage (no
+Swift package), its last release was 2019, and its diff API hides the
+`git_diff_options` that matter for speed. The SPM alternatives build libgit2
+from one person's fork.
+
+Instead, libgit2 v1.9.7 is vendored in `Packages/Clibgit2` as a local Swift
+package, compiled from the official release with only the parts Adit needs (no
+networking, no SSH). Adit's own thin wrapper in `Git/` covers exactly what v0.1
+uses. Cost accepted: about 5 MB of C source in the repo, and upgrades are a
+manual copy (steps in `Packages/Clibgit2/VENDORED.md`).
+
 ## Xcode project with a synchronized root group (2026-09-26)
 
 The project uses `PBXFileSystemSynchronizedRootGroup` (Xcode 16 and later), so
