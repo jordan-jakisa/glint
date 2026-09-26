@@ -188,3 +188,24 @@ import Testing
     #expect(terminal.arguments.isEmpty)
   }
 }
+
+@MainActor
+@Suite struct FileEventRoutingTests {
+  @Test func editedFilesGetAPartialStatusEvenThroughASymlink() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n", "b.txt": "1\n"])
+    let session = RepositorySession()
+    // temporaryDirectory is under /var, a symlink to /private/var.
+    session.install(try await RepositorySession.load(fixture.url))
+    #expect(session.status.isClean)
+
+    try fixture.write("b.txt", "2\n")
+    let real = fixture.url.resolvingSymlinksInPath().appendingPathComponent("b.txt").path
+    var change = RepositoryWatcher.Change()
+    change.workingTree = true
+    change.paths = [real: .workingTree]
+    session.filesChanged(change)
+    await session.statusTask?.value
+    #expect(session.status.unstaged.map(\.path) == ["b.txt"])
+  }
+}

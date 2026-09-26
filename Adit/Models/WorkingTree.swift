@@ -43,6 +43,15 @@ struct WorkingTreeStatus: Equatable, Sendable {
 }
 
 extension WorkingTreeStatus {
+  /// This status with `paths` replaced by what a status of just those paths
+  /// found, for updating after the file watcher reports a few changes.
+  func merging(_ partial: WorkingTreeStatus, for paths: Set<String>) -> WorkingTreeStatus {
+    let order = FileOrder.current
+    return WorkingTreeStatus(
+      staged: order.sorted(staged.filter { !paths.contains($0.path) } + partial.staged, path: \.path),
+      unstaged: order.sorted(unstaged.filter { !paths.contains($0.path) } + partial.unstaged, path: \.path))
+  }
+
   /// What the lists should show right after staging `path`, before git has
   /// confirmed it. The next real status replaces this.
   mutating func markStaged(_ path: String) {

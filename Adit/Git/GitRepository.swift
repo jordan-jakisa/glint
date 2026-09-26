@@ -72,7 +72,10 @@ actor GitRepository {
 
   /// Staged and unstaged changes, like `git status`. Untracked folders are
   /// listed file by file; ignored files and submodules are left out.
-  func status() throws -> WorkingTreeStatus {
+  /// With `paths`, checks just those files (exact paths, no globbing): what
+  /// the file watcher saw change. Much cheaper than a full scan on a large
+  /// repository; merge it in with `WorkingTreeStatus.merging`.
+  func status(paths: [String]? = nil) throws -> WorkingTreeStatus {
     try reloadIndex()
     var options = git_status_options()
     git_status_options_init(&options, UInt32(GIT_STATUS_OPTIONS_VERSION))
@@ -82,8 +85,14 @@ actor GitRepository {
       | GIT_STATUS_OPT_RECURSE_UNTRACKED_DIRS.rawValue
       | GIT_STATUS_OPT_EXCLUDE_SUBMODULES.rawValue
 
+    let pathspec = paths.map(CStringArray.init)
+    if let pathspec {
+      options.pathspec = pathspec.array
+      options.flags |= GIT_STATUS_OPT_DISABLE_PATHSPEC_MATCH.rawValue
+    }
     var list: OpaquePointer?
     try GitError.check(git_status_list_new(&list, handle, &options), "Couldn't read changes.")
+    withExtendedLifetime(pathspec) {}
     defer { git_status_list_free(list) }
 
     var result = WorkingTreeStatus.clean

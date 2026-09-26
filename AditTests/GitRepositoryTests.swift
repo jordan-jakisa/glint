@@ -506,3 +506,30 @@ import Testing
     #expect(try await repository.commitSize(trackedOnly: true) == ChangeSize(files: 1, additions: 1, deletions: 0))
   }
 }
+
+@Suite struct PartialStatusTests {
+  @Test func checksOnlyTheGivenPathsAndMergesIn() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n", "b.txt": "1\n", "c.txt": "1\n"])
+    try fixture.write("a.txt", "2\n")
+    let repository = try await GitRepository.open(at: fixture.url)
+    let full = try await repository.status()
+    #expect(full.unstaged.map(\.path) == ["a.txt"])
+
+    // b changes and a is put back; a partial status of just b misses a...
+    try fixture.write("b.txt", "2\n")
+    try fixture.write("a.txt", "1\n")
+    let partial = try await repository.status(paths: ["b.txt"])
+    #expect(partial.unstaged.map(\.path) == ["b.txt"])
+    // ...so merging only replaces what it checked.
+    #expect(full.merging(partial, for: ["b.txt"]).unstaged.map(\.path) == ["a.txt", "b.txt"])
+    let both = try await repository.status(paths: ["a.txt", "b.txt"])
+    #expect(full.merging(both, for: ["a.txt", "b.txt"]).unstaged.map(\.path) == ["b.txt"])
+
+    // A new file in a new folder, and a deletion.
+    try fixture.write("new/x.txt", "x\n")
+    try fixture.delete("c.txt")
+    let more = try await repository.status(paths: ["new/x.txt", "c.txt"])
+    #expect(Set(more.unstaged) == [ChangedFile(path: "new/x.txt", kind: .untracked), ChangedFile(path: "c.txt", kind: .deleted)])
+  }
+}

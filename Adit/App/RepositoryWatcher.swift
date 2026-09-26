@@ -31,7 +31,7 @@ final class RepositoryWatcher {
   private var flushTask: Task<Void, Never>?
 
   init(url: URL, onChange: @escaping (Change) -> Void) {
-    root = url.standardizedFileURL.path
+    root = url.resolvingSymlinksInPath().path
     self.onChange = onChange
     start()
   }

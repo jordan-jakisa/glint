@@ -9,6 +9,7 @@ import SwiftUI
 struct DiffTableView: NSViewRepresentable {
   let rows: [DiffRow]
   let rowsVersion: Int
+  var rowsChange: RepositorySession.RowsChange = .all
   let source: DiffSource
   let lineNumberDigits: Int
   let scroller: DiffScroller
@@ -106,7 +107,27 @@ struct DiffTableView: NSViewRepresentable {
       let actionChanged = view.partialAction != partialAction
       partialAction = view.partialAction
 
-      if view.rowsVersion != version || actionChanged {
+      if view.rowsVersion != version, !actionChanged, view.source == source,
+        case .file(let file) = view.rowsChange,
+        DiffMetrics(lineNumberDigits: view.lineNumberDigits).gutterWidth == metrics.gutterWidth
+      {
+        // Collapsing or expanding one file: swap only its rows. A full reload
+        // rebuilt every visible row for this and missed the frame budget.
+        let body = { (rows: [DiffRow]) in rows.indices.filter { rows[$0].id.file == file && rows[$0].id != .file(file) } }
+        let removed = body(rows)
+        let old = rows
+        rows = view.rows
+        version = view.rowsVersion
+        heightsWidth = -1
+        let inserted = body(rows)
+        table.beginUpdates()
+        if !removed.isEmpty { table.removeRows(at: IndexSet(removed), withAnimation: []) }
+        if !inserted.isEmpty { table.insertRows(at: IndexSet(inserted), withAnimation: []) }
+        if let header = old.firstIndex(where: { $0.id == .file(file) }) {
+          table.reloadData(forRowIndexes: IndexSet(integer: header), columnIndexes: IndexSet(integer: 0))
+        }
+        table.endUpdates()
+      } else if view.rowsVersion != version || actionChanged {
         let isNewSource = view.source != source
         rows = view.rows
         version = view.rowsVersion

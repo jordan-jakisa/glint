@@ -86,16 +86,20 @@ extension RepositorySession {
   /// Routes a burst of file events. In a workspace, only events inside the
   /// active repository refresh it; the others update the picker's counts.
   func filesChanged(_ change: RepositoryWatcher.Change) {
-    guard let active = repository?.url.standardizedFileURL.path else { return }
-    guard workspace != nil else {
-      if change.head { refreshHistory() }
-      if change.workingTree { refreshWorkingTree(changedAt: change.firstEventAt) }
-      return
-    }
+    // FSEvents reports real paths (/private/var/...); the repository may have
+    // been opened through a symlink (/var/...). Compare real paths.
+    guard let active = repository?.url.resolvingSymlinksInPath().path else { return }
     let prefix = active.hasSuffix("/") ? active : active + "/"
     let mine = change.paths.filter { $0.key.hasPrefix(prefix) || $0.key == active }
     if mine.values.contains(.head) { refreshHistory() }
-    if !mine.isEmpty { refreshWorkingTree(changedAt: change.firstEventAt) }
+    if !mine.isEmpty {
+      // Only working-tree files changed: check just those. The index or HEAD
+      // changing (staging, commits, checkouts) can touch anything: full scan.
+      let files = mine.keys.filter { !$0.contains("/.git/") && !$0.hasSuffix("/.git") }
+      let onlyFiles = files.count == mine.count && files.count <= 500
+      let relative = Set(files.map { String($0.dropFirst(prefix.count)) })
+      refreshWorkingTree(changedAt: change.firstEventAt, paths: onlyFiles ? relative : nil)
+    }
     if mine.count < change.paths.count { otherRepositoriesChanged(Array(change.paths.keys)) }
   }
 
@@ -104,7 +108,7 @@ extension RepositorySession {
   func otherRepositoriesChanged(_ paths: [String]) {
     guard let workspace else { return }
     let touched = workspace.repositories.filter { repo in
-      let prefix = repo.url.standardizedFileURL.path + "/"
+      let prefix = repo.url.resolvingSymlinksInPath().path + "/"
       return paths.contains { $0.hasPrefix(prefix) }
     }
     let active = activeWorkspaceRepository?.relativePath

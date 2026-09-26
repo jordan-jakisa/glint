@@ -19,7 +19,8 @@ struct DiffPane: View {
             description: Text(emptyDescription(for: diff.source)))
         } else {
           DiffTableView(
-            rows: session.rows, rowsVersion: session.rowsVersion, source: diff.source,
+            rows: session.rows, rowsVersion: session.rowsVersion, rowsChange: session.rowsChange,
+            source: diff.source,
             lineNumberDigits: session.lineNumberDigits, scroller: session.diffScroller,
             toggleCollapsed: session.toggleCollapsed,
             visibleRowsChanged: session.visibleRowsChanged,

@@ -3,20 +3,34 @@ import AppKit
 /// The Changes tab: working-tree status and its selection.
 extension RepositorySession {
   /// Rereads `git status`, then reloads the selected working-tree diff in
-  /// place. Calls that arrive while one is running collapse into one rerun.
-  /// `changedAt` is when the file watcher first saw the change, for timing.
-  func refreshWorkingTree(changedAt: ContinuousClock.Instant? = nil) {
+  /// place. With `paths` (repository-relative, from the file watcher) only
+  /// those files are checked and merged in; without, it's a full scan.
+  /// Requests that arrive while one runs are merged into one rerun.
+  /// `changedAt` is when the watcher first saw the change, for timing.
+  func refreshWorkingTree(changedAt: ContinuousClock.Instant? = nil, paths: Set<String>? = nil) {
     guard let repository else { return }
     if statusTask != nil {
+      // Any full request wins; otherwise the paths add up.
+      if let paths, pendingStatusPaths != nil || !statusRefreshQueued {
+        pendingStatusPaths = (pendingStatusPaths ?? []).union(paths)
+      } else {
+        pendingStatusPaths = nil
+      }
       statusRefreshQueued = true
       return
     }
+    let partial = paths.map { Array($0) }
     statusTask = Task {
       let start = ContinuousClock.now
-      let fresh = try? await repository.status()
+      let fresh = try? await repository.status(paths: partial)
       if let fresh {
-        Timing.report("status", since: start, budget: 50)
-        apply(fresh)
+        if let paths {
+          Timing.report("status, changed files only", since: start, budget: 16)
+          apply(status.merging(fresh, for: paths))
+        } else {
+          Timing.report("status", since: start, budget: 50)
+          apply(fresh)
+        }
         if let changedAt {
           // Plus FSEvents' 50 ms latency before the watcher hears about it.
           Timing.report("file event to list updated", since: changedAt, budget: 150)
@@ -25,7 +39,9 @@ extension RepositorySession {
       statusTask = nil
       if statusRefreshQueued {
         statusRefreshQueued = false
-        refreshWorkingTree()
+        let queued = pendingStatusPaths
+        pendingStatusPaths = nil
+        refreshWorkingTree(paths: queued)
       }
     }
   }

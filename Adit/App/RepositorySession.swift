@@ -89,14 +89,18 @@ final class RepositorySession {
   // MARK: Diff on screen
 
   internal(set) var diff: Diff? {
-    didSet { rebuildRows() }
+    didSet { rebuildRows(.all) }
   }
   internal(set) var diffError: String?
   internal(set) var isLoadingDiff = false
   internal(set) var collapsedFiles: Set<Int> = [] {
     // Set.remove of a missing member still counts as a set. Without this check
     // every hunk jump rebuilt every row and reloaded the whole table.
-    didSet { if collapsedFiles != oldValue { rebuildRows() } }
+    didSet {
+      guard collapsedFiles != oldValue else { return }
+      let changed = collapsedFiles.symmetricDifference(oldValue)
+      rebuildRows(changed.count == 1 ? .file(changed.first!) : .all)
+    }
   }
 
   /// Unified or split. Remembered between launches.
@@ -104,7 +108,7 @@ final class RepositorySession {
     didSet {
       guard layout != oldValue else { return }
       UserDefaults.standard.set(layout.rawValue, forKey: Self.layoutKey)
-      rebuildRows()
+      rebuildRows(.all)
     }
   }
 
@@ -114,6 +118,14 @@ final class RepositorySession {
   /// Bumped with every rebuild, so the table can tell new rows from old
   /// without comparing them.
   private(set) var rowsVersion = 0
+  /// What the last rebuild changed, so the table can update just those rows.
+  private(set) var rowsChange = RowsChange.all
+
+  enum RowsChange: Equatable {
+    case all
+    /// One file collapsed or expanded; every other row is unchanged.
+    case file(Int)
+  }
   private(set) var lineNumberDigits = 3
   // MARK: Branches
 
@@ -154,6 +166,8 @@ final class RepositorySession {
   @ObservationIgnored var prefetchTask: Task<Void, Never>?
   @ObservationIgnored var statusTask: Task<Void, Never>?
   @ObservationIgnored var statusRefreshQueued = false
+  /// Files waiting for a partial status; nil when a full one is queued.
+  @ObservationIgnored var pendingStatusPaths: Set<String>?
   @ObservationIgnored var cache = DiffCache(capacity: 32)
   @ObservationIgnored var diffRequestedAt: ContinuousClock.Instant?
   /// The reader's position in the diff: the top-most visible row, or the last
@@ -169,7 +183,8 @@ final class RepositorySession {
       .flatMap(DiffLayout.init(rawValue:)) ?? .unified
   }
 
-  private func rebuildRows() {
+  private func rebuildRows(_ change: RowsChange) {
+    rowsChange = change
     rowsVersion += 1
     guard let diff else {
       rows = []
