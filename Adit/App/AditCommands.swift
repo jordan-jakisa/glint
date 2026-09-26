@@ -12,6 +12,10 @@ struct AditCommands: Commands {
   @FocusedValue(\.session) private var session
 
   var body: some Commands {
+    CommandGroup(replacing: .appInfo) {
+      Button("About Adit") { AboutPanel.show() }
+    }
+
     CommandGroup(replacing: .newItem) {
       Button("Open Repository…") { session?.chooseRepository() }
         .shortcut(.openRepository)

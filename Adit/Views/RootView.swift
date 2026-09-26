@@ -104,6 +104,10 @@ private struct WelcomeView: View {
 
   var body: some View {
     VStack(spacing: 14) {
+      Image(nsImage: NSApp.applicationIconImage)
+        .resizable()
+        .frame(width: 112, height: 112)
+        .accessibilityHidden(true)
       Text("Adit")
         .font(.system(size: 34, weight: .semibold, design: .rounded))
       Text("A way in to every change.")
