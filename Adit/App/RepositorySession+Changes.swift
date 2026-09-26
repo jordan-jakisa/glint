@@ -114,7 +114,7 @@ extension RepositorySession {
         try await work(repository)
         Timing.report("index write", since: start, budget: 100)
       } catch {
-        alertMessage = "\(error)"
+        alert = UserAlert("Couldn't update what's staged", error: error)
       }
       refreshWorkingTree()
     }
@@ -196,7 +196,7 @@ extension RepositorySession {
           try FileManager.default.trashItem(at: url, resultingItemURL: nil)
         }
       } catch {
-        alertMessage = "\(error)"
+        alert = UserAlert("Couldn't discard that", error: error)
       }
       refreshWorkingTree()
     }

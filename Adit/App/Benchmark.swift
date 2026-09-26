@@ -26,8 +26,8 @@ extension RepositorySession {
     generateCommitMessage()
     await messageTask?.value
     Timing.report("AI test, whole message", since: start, budget: 10_000)
-    if let alertMessage {
-      Timing.log.info("AI test failed: \(alertMessage, privacy: .public)")
+    if let alert {
+      Timing.log.info("AI test failed: \(alert.message, privacy: .public)")
     } else {
       Timing.log.info("AI test message (\(self.aiNote ?? "", privacy: .public)):\n\(self.commitMessage, privacy: .public)")
     }

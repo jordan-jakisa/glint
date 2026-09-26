@@ -62,7 +62,7 @@ extension RepositorySession {
         aiNote = nil
         isAmending = false
       } catch {
-        alertMessage = "The commit didn't go through.\n\n\(error)"
+        alert = UserAlert("The commit didn't go through", error: error)
       }
       refresh()
     }
@@ -80,7 +80,7 @@ extension RepositorySession {
           commitMessage = message.trimmingCharacters(in: .whitespacesAndNewlines)
         }
       } catch {
-        alertMessage = "\(error)"
+        alert = UserAlert("Couldn't undo the last commit", error: error)
       }
       refresh()
     }

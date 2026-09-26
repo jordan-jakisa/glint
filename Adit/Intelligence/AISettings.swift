@@ -122,7 +122,7 @@ final class AISettings {
       } catch {
         guard provider == self.provider else { return }
         models = []
-        modelsError = "\(error)"
+        modelsError = "Couldn't get \(provider.name)'s models. " + UserAlert("", error: error).message
       }
     }
   }

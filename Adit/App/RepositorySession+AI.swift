@@ -13,11 +13,14 @@ extension RepositorySession {
     }
     let settings = AISettings.shared
     guard settings.isReady, let model = settings.modelID else {
-      alertMessage = settings.setupHint
+      alert = UserAlert("Set up AI messages", message: settings.setupHint, opensSettings: true)
       return
     }
     guard let key = settings.readKey() else {
-      alertMessage = "Adit couldn't read your \(settings.provider.name) key from the Keychain. Add it again in Settings (⌘,)."
+      alert = UserAlert(
+        "Couldn't read your key",
+        message: "Adit couldn't read your \(settings.provider.name) key from the Keychain. Add it again in Settings.",
+        opensSettings: true)
       return
     }
     guard let repository else { return }
@@ -42,7 +45,7 @@ extension RepositorySession {
       do {
         let diff = try await repository.workingTreeDiff(staged: staged, path: nil)
         guard !diff.files.isEmpty else {
-          alertMessage = "There's nothing to describe yet. Change something first."
+          alert = UserAlert("Nothing to describe", message: "Change something first, then try again.")
           return
         }
         let rules = followsRules ? Self.rules(for: repository.url, workspace: workspaceRoot) : nil
@@ -80,9 +83,9 @@ extension RepositorySession {
         if final.isEmpty || CommitPrompt.isWeak(final) {
           // Weak messages are worse than none: put back what was there.
           commitMessage = before
-          alertMessage = final.isEmpty
+          alert = UserAlert("No message this time", message: final.isEmpty
             ? "The model sent back an empty message. Try again, or pick another model."
-            : "That one wasn't useful (\u{201C}\(final.components(separatedBy: "\n").first ?? final)\u{201D}). Try again, or pick another model."
+            : "That one wasn't useful (\u{201C}\(final.components(separatedBy: "\n").first ?? final)\u{201D}). Try again, or pick another model.")
         } else {
           commitMessage = final
           generatedMessage = final
@@ -93,7 +96,7 @@ extension RepositorySession {
       } catch is CancellationError {
       } catch let error as URLError where error.code == .cancelled {
       } catch {
-        alertMessage = "Couldn't write the message.\n\n\(error)"
+        alert = UserAlert("Couldn't write the message", error: error)
       }
     }
   }

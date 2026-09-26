@@ -4,6 +4,7 @@ struct RootView: View {
   @State private var session = RepositorySession()
   /// This window's terminals, one per repository, alive while hidden.
   @State private var terminals = TerminalStore()
+  @Environment(\.openSettings) private var openSettings
 
   var body: some View {
     content
@@ -27,14 +28,28 @@ struct RootView: View {
         Text(discardMessage)
       }
       .alert(
-        "That didn't work",
+        session.alert?.title ?? "",
         isPresented: Binding(
-          get: { session.alertMessage != nil },
-          set: { if !$0 { session.alertMessage = nil } })
-      ) {
-        Button("OK") {}
-      } message: {
-        Text(session.alertMessage ?? "")
+          get: { session.alert != nil },
+          set: { if !$0 { session.alert = nil } }),
+        presenting: session.alert
+      ) { alert in
+        if alert.opensSettings {
+          Button("Open Settings") { openSettings() }
+            .keyboardShortcut(.defaultAction)
+          Button("Not Now", role: .cancel) {}
+        } else {
+          Button("OK") {}
+            .keyboardShortcut(.defaultAction)
+          if let details = alert.details {
+            Button("Copy Details") {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(details, forType: .string)
+            }
+          }
+        }
+      } message: { alert in
+        Text(alert.message)
       }
   }
 

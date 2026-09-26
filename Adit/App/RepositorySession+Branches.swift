@@ -10,7 +10,7 @@ extension RepositorySession {
       do {
         branches = try await repository.branches()
       } catch {
-        alertMessage = "\(error)"
+        alert = UserAlert("Couldn't list the branches", error: error)
       }
     }
   }
@@ -40,7 +40,7 @@ extension RepositorySession {
         _ = try await git.run(arguments)
         isBranchPickerShown = false
       } catch {
-        alertMessage = "Couldn't \(action).\n\n\(error)"
+        alert = UserAlert("Couldn't \(action)", error: error)
       }
       refresh()
     }

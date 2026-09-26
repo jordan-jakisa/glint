@@ -39,12 +39,14 @@ extension RepositorySession {
       return
     }
     guard let branch = info?.branch else {
-      alertMessage = "You're not on a branch, so there's nothing to push. Switch to a branch first."
+      alert = UserAlert("Nothing to push", message: "You're not on a branch. Switch to one first (\(AppCommand.switchBranch.keys)).")
       return
     }
     Task {
       guard let remote = await repository.defaultRemote() else {
-        alertMessage = "This repository has no remote to push to, or more than one and no origin."
+        alert = UserAlert(
+          "No remote to push to",
+          message: "This repository has no remote, or several and none called origin. Add one with git remote add origin <url> in the terminal (\(AppCommand.showTerminal.keys)).")
         return
       }
       runNetwork(.push, ["push", "--set-upstream", remote, branch])
@@ -61,7 +63,7 @@ extension RepositorySession {
       do {
         _ = try await git.run(arguments)
       } catch {
-        alertMessage = "\(operation.rawValue) didn't work.\n\n\(error)"
+        alert = UserAlert("Couldn't \(operation.verb)", error: error)
       }
       refresh()
     }

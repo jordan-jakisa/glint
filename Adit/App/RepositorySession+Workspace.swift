@@ -44,7 +44,7 @@ extension RepositorySession {
       do {
         try await app.open(at: folder)
       } catch {
-        alertMessage = "Couldn't open \(app.name).\n\n\(error)"
+        alert = UserAlert("Couldn't open \(app.name)", error: error)
       }
     }
   }
@@ -72,7 +72,7 @@ extension RepositorySession {
         install(opened, selecting: file)
         Timing.report("switch repository", since: start, budget: 100)
       } catch {
-        alertMessage = "Couldn't open \(target.name).\n\n\(error)"
+        alert = UserAlert("Couldn't open \(target.name)", error: error)
       }
     }
   }

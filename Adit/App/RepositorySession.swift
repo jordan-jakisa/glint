@@ -38,7 +38,7 @@ final class RepositorySession {
     didSet { UserDefaults.standard.set(showsAllRepositories, forKey: "showsAllRepositories") }
   }
   /// Shown as an alert: failures of actions the user asked for.
-  var alertMessage: String?
+  var alert: UserAlert?
   /// Files waiting for the user to confirm a discard.
   var pendingDiscard: [ChangedFile]?
 
@@ -142,6 +142,14 @@ final class RepositorySession {
 
   enum NetworkOperation: String {
     case fetch = "Fetching", pull = "Pulling", push = "Pushing"
+
+    var verb: String {
+      switch self {
+      case .fetch: "fetch"
+      case .pull: "pull"
+      case .push: "push"
+      }
+    }
   }
 
   internal(set) var sync = SyncStatus.none
@@ -378,7 +386,7 @@ final class RepositorySession {
         } else if repository == nil {
           phase = .closed(message: "Couldn't open \(message)")
         } else {
-          alertMessage = "Couldn't open \(message)"
+          alert = UserAlert("Couldn't open \(url.lastPathComponent)", error: error)
         }
       }
     }

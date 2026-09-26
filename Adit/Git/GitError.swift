@@ -3,7 +3,10 @@ internal import Clibgit2
 /// A libgit2 failure, carrying libgit2's own message.
 struct GitError: Error, Sendable, CustomStringConvertible {
   let code: Int32
+  /// Adit's own words for what failed.
   let message: String
+  /// libgit2's text, for the details and the log.
+  var detail: String?
 
   var description: String { message }
 
@@ -14,7 +17,8 @@ struct GitError: Error, Sendable, CustomStringConvertible {
   /// failure.
   static func check(_ code: Int32, _ context: @autoclosure () -> String) throws {
     guard code < 0 else { return }
-    throw GitError(code: code, message: lastMessage(or: context()))
+    let libgit2 = lastMessage(or: "")
+    throw GitError(code: code, message: context(), detail: libgit2.isEmpty ? nil : libgit2)
   }
 
   static func lastMessage(or fallback: String) -> String {

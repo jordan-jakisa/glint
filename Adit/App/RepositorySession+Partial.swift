@@ -131,7 +131,7 @@ extension RepositorySession {
         for patch in patches { try await repository.applyToIndex(patch) }
         Timing.report("partial staging", since: start, budget: 100)
       } catch {
-        alertMessage = "\(error)"
+        alert = UserAlert("Couldn't stage those lines", error: error)
       }
       refreshWorkingTree()
     }
