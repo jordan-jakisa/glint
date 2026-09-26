@@ -71,13 +71,12 @@ final class DiffRowCell: NSView {
     }
     x += 20
 
-    let status = Self.status(file.status)
-    let badge = NSRect(x: x, y: midY - 8, width: 16, height: 16)
-    status.color.withAlphaComponent(0.15).setFill()
-    NSBezierPath(roundedRect: badge, xRadius: 3, yRadius: 3).fill()
+    let status = StatusMark(file.status)
+    let badge = NSRect(x: x, y: midY - StatusMark.size / 2, width: StatusMark.size, height: StatusMark.size)
+    status.color.withAlphaComponent(StatusMark.tint).setFill()
+    NSBezierPath(roundedRect: badge, xRadius: StatusMark.radius, yRadius: StatusMark.radius).fill()
     let letter = NSAttributedString(
-      string: status.letter,
-      attributes: [.font: NSFont.monospacedSystemFont(ofSize: 10, weight: .bold), .foregroundColor: status.color])
+      string: status.letter, attributes: [.font: StatusMark.font, .foregroundColor: status.color])
     let letterSize = letter.size()
     letter.draw(at: NSPoint(x: badge.midX - letterSize.width / 2, y: badge.midY - letterSize.height / 2))
     x += 24
@@ -216,17 +215,6 @@ final class DiffRowCell: NSView {
     case .deletion: NSColor.systemRed.withAlphaComponent(0.22)
     case .context, .noNewline: NSColor.secondaryLabelColor.withAlphaComponent(0.05)
     case nil: NSColor.secondaryLabelColor.withAlphaComponent(0.08)
-    }
-  }
-
-  private static func status(_ status: FileChange.Status) -> (letter: String, color: NSColor) {
-    switch status {
-    case .added: ("A", .systemGreen)
-    case .deleted: ("D", .systemRed)
-    case .modified: ("M", .systemOrange)
-    case .renamed: ("R", .systemBlue)
-    case .copied: ("C", .systemBlue)
-    case .typeChanged: ("T", .systemOrange)
     }
   }
 }

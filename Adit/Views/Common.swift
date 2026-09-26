@@ -22,3 +22,57 @@ struct DelayedSpinner: View {
       .accessibilityHidden(!isShown)
   }
 }
+
+/// The letter and colour for a file's status, shared by the file list and the
+/// diff's file headers so the two always agree.
+struct StatusMark {
+  let letter: String
+  let color: NSColor
+  let label: String
+
+  init(_ kind: ChangedFile.Kind) {
+    switch kind {
+    case .added: (letter, color, label) = ("A", .systemGreen, "Added")
+    case .modified: (letter, color, label) = ("M", .systemOrange, "Modified")
+    case .deleted: (letter, color, label) = ("D", .systemRed, "Deleted")
+    case .renamed: (letter, color, label) = ("R", .systemBlue, "Renamed")
+    case .typeChanged: (letter, color, label) = ("T", .systemOrange, "Type changed")
+    case .untracked: (letter, color, label) = ("U", .systemGreen, "Untracked")
+    case .conflicted: (letter, color, label) = ("!", .systemRed, "Conflicted")
+    }
+  }
+
+  init(_ status: FileChange.Status) {
+    switch status {
+    case .added: (letter, color, label) = ("A", .systemGreen, "Added")
+    case .deleted: (letter, color, label) = ("D", .systemRed, "Deleted")
+    case .modified: (letter, color, label) = ("M", .systemOrange, "Modified")
+    case .renamed: (letter, color, label) = ("R", .systemBlue, "Renamed")
+    case .copied: (letter, color, label) = ("C", .systemBlue, "Copied")
+    case .typeChanged: (letter, color, label) = ("T", .systemOrange, "Type changed")
+    }
+  }
+
+  static let size: CGFloat = 16
+  static let radius: CGFloat = 3
+  static let tint: CGFloat = 0.15
+  static var font: NSFont { .monospacedSystemFont(ofSize: 10, weight: .bold) }
+}
+
+/// A file's status as a small tinted tile, the same one the diff draws.
+struct ChangeKindBadge: View {
+  let kind: ChangedFile.Kind
+
+  var body: some View {
+    let mark = StatusMark(kind)
+    Text(mark.letter)
+      .font(Font(StatusMark.font))
+      .foregroundStyle(Color(nsColor: mark.color))
+      .frame(width: StatusMark.size, height: StatusMark.size)
+      .background(
+        Color(nsColor: mark.color).opacity(StatusMark.tint),
+        in: RoundedRectangle(cornerRadius: StatusMark.radius))
+      .help(mark.label)
+      .accessibilityLabel(mark.label)
+  }
+}

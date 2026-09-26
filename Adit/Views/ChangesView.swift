@@ -172,51 +172,6 @@ struct ChangeRow: View {
   }
 }
 
-struct ChangeKindBadge: View {
-  let kind: ChangedFile.Kind
-
-  var body: some View {
-    Text(letter)
-      .font(.system(size: 10, weight: .bold, design: .monospaced))
-      .foregroundStyle(color)
-      .frame(width: 14)
-      .help(label)
-  }
-
-  private var letter: String {
-    switch kind {
-    case .added: "A"
-    case .modified: "M"
-    case .deleted: "D"
-    case .renamed: "R"
-    case .typeChanged: "T"
-    case .untracked: "U"
-    case .conflicted: "!"
-    }
-  }
-
-  private var label: String {
-    switch kind {
-    case .added: "Added"
-    case .modified: "Modified"
-    case .deleted: "Deleted"
-    case .renamed: "Renamed"
-    case .typeChanged: "Type changed"
-    case .untracked: "Untracked"
-    case .conflicted: "Conflicted"
-    }
-  }
-
-  private var color: Color {
-    switch kind {
-    case .added, .untracked: .green
-    case .modified, .typeChanged: .orange
-    case .deleted, .conflicted: .red
-    case .renamed: .blue
-    }
-  }
-}
-
 /// A changed file in a repository that isn't the active one.
 private struct OtherRepositoryRow: View {
   let path: String
@@ -224,7 +179,7 @@ private struct OtherRepositoryRow: View {
 
   var body: some View {
     HStack(spacing: 6) {
-      Color.clear.frame(width: 14)
+      Color.clear.frame(width: 16)
       ChangeKindBadge(kind: kind)
       Text((path as NSString).lastPathComponent)
         .lineLimit(1)
