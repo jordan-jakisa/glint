@@ -8,6 +8,9 @@ import os
 ///     log stream --level info --predicate 'subsystem == "com.kerustudios.adit"'
 enum Timing {
   static let log = Logger(subsystem: "com.kerustudios.adit", category: "timing")
+  /// Every write Adit makes to a repository, so an unexpected change can be
+  /// traced back to the action that made it.
+  static let writes = Logger(subsystem: "com.kerustudios.adit", category: "writes")
   static let signposter = OSSignposter(logger: log)
 
   /// Milliseconds elapsed since `start`, a `ContinuousClock` instant.

@@ -218,6 +218,35 @@ actor GitRepository {
     return nil
   }
 
+  /// The full message of the HEAD commit, for amending.
+  func headMessage() -> String? {
+    var oid = git_oid()
+    guard git_reference_name_to_id(&oid, handle, "HEAD") == 0 else { return nil }
+    var commit: OpaquePointer?
+    guard git_commit_lookup(&commit, handle, &oid) == 0 else { return nil }
+    defer { git_commit_free(commit) }
+    return git_commit_message(commit).map { String(cString: $0) }
+  }
+
+  /// Moves the branch back one commit and keeps that commit's changes staged,
+  /// like `git reset --soft HEAD~1`. Returns the undone commit's message.
+  func undoLastCommit() throws -> String {
+    var oid = git_oid()
+    try GitError.check(git_reference_name_to_id(&oid, handle, "HEAD"), "There's no commit to undo.")
+    var commit: OpaquePointer?
+    try GitError.check(git_commit_lookup(&commit, handle, &oid), "Couldn't read the last commit.")
+    defer { git_commit_free(commit) }
+    guard git_commit_parentcount(commit) > 0 else {
+      throw GitError(code: -1, message: "That's the repository's first commit, so there's nothing before it to go back to.")
+    }
+    let message = git_commit_message(commit).map { String(cString: $0) } ?? ""
+    var parent: OpaquePointer?
+    try GitError.check(git_commit_parent(&parent, commit, 0), "Couldn't read the commit before it.")
+    defer { git_commit_free(parent) }
+    try GitError.check(git_reset(handle, parent, GIT_RESET_SOFT, nil), "Couldn't undo the commit.")
+    return message
+  }
+
   // MARK: - Commits
 
   /// Starts a new walk from HEAD, newest first, and returns the first page.

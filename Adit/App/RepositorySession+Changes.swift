@@ -47,6 +47,7 @@ extension RepositorySession {
   /// Stages or unstages one whole file. The list updates this frame; the index
   /// write and a real status refresh follow.
   func setStaged(_ path: String, _ staged: Bool) {
+    Timing.writes.notice("\(staged ? "stage" : "unstage", privacy: .public) \(path, privacy: .private)")
     if staged {
       changeIndex({ $0.markStaged(path) }) { try await $0.stage([path]) }
     } else {
@@ -76,12 +77,14 @@ extension RepositorySession {
   func stageAll() {
     let paths = status.unstaged.map(\.path)
     guard !paths.isEmpty else { return }
+    Timing.writes.notice("stage all (\(paths.count) files)")
     changeIndex({ status in paths.forEach { status.markStaged($0) } }) { try await $0.stageAll() }
   }
 
   func unstageAll() {
     let paths = status.staged.map(\.path)
     guard !paths.isEmpty else { return }
+    Timing.writes.notice("unstage all (\(paths.count) files)")
     changeIndex({ status in paths.forEach { status.markUnstaged($0) } }) { try await $0.unstage(paths) }
   }
 
@@ -165,6 +168,7 @@ extension RepositorySession {
   func confirmDiscard() {
     guard let files = pendingDiscard, let repository else { return }
     pendingDiscard = nil
+    Timing.writes.notice("discard (\(files.count) files)")
     let tracked = files.filter { $0.kind != .untracked }.map(\.path)
     let untracked = files.filter { $0.kind == .untracked }.map { repository.url.appendingPathComponent($0.path) }
     var next = status

@@ -16,6 +16,7 @@ struct ChangesView: View {
       } else {
         list
       }
+      CommitPanel(session: session)
     }
   }
 

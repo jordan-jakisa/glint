@@ -28,6 +28,16 @@ final class RepositorySession {
   /// Files waiting for the user to confirm a discard.
   var pendingDiscard: [ChangedFile]?
 
+  // MARK: Commit box
+
+  var commitMessage = ""
+  var isAmending = false {
+    didSet { if isAmending, !oldValue { prefillAmendMessage() } }
+  }
+  internal(set) var isCommitting = false
+  /// Bumped to move keyboard focus into the commit message.
+  internal(set) var commitFocusRequest = 0
+
   /// Each tab keeps its own selection; switching tabs shows that tab's diff.
   var tab: Tab = .changes {
     didSet { if tab != oldValue { showSelectedDiff() } }
@@ -146,6 +156,7 @@ final class RepositorySession {
   private static var prewarmed: (access: RepositoryAccess, url: URL, load: Task<Opened, Error>)?
 
   static func prewarm() {
+    _ = LoginEnvironment.shared
     let access = RepositoryAccess()
     // `-AditRepository <path>` opens a specific repository, for benchmarks.
     let override = UserDefaults.standard.string(forKey: "AditRepository").map {
@@ -315,6 +326,9 @@ final class RepositorySession {
     case " ":
       guard tab == .changes else { return false }
       toggleSelectedStaged()
+    case "c":
+      tab = .changes
+      commitFocusRequest += 1
     default: return false
     }
     return true

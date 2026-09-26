@@ -332,3 +332,45 @@ import Testing
     #expect(status.staged.map(\.path) == ["a.txt"])
   }
 }
+
+@Suite struct CommitTests {
+  @Test func systemGitCommitsStagedChanges() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n"])
+    try fixture.write("a.txt", "2\n")
+    try fixture.stage("a.txt")
+    let git = SystemGit(directory: fixture.url)
+    _ = try await git.run(["-c", "user.name=Test", "-c", "user.email=t@example.com", "commit", "-F", "-"], input: "Change a\n\nBody.")
+    #expect(try fixture.headSummary() == "Change a")
+    #expect(try await GitRepository.open(at: fixture.url).status().isClean)
+  }
+
+  @Test func systemGitFailureCarriesGitsMessage() async throws {
+    let fixture = try FixtureRepository()
+    let git = SystemGit(directory: fixture.url)
+    await #expect(throws: SystemGit.Failure.self) {
+      _ = try await git.run(["checkout", "no-such-branch"])
+    }
+  }
+
+  @Test func undoLastCommitKeepsChangesStaged() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n"])
+    try fixture.commit("Second\n\nWith a body.", files: ["a.txt": "2\n"])
+    let repository = try await GitRepository.open(at: fixture.url)
+
+    let message = try await repository.undoLastCommit()
+    #expect(message.hasPrefix("Second"))
+    #expect(try fixture.headSummary() == "Base")
+    let status = try await repository.status()
+    #expect(status.staged.map(\.path) == ["a.txt"])
+    #expect(status.unstaged.isEmpty)
+  }
+
+  @Test func undoRefusesTheFirstCommit() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Only", files: ["a.txt": "1\n"])
+    let repository = try await GitRepository.open(at: fixture.url)
+    await #expect(throws: GitError.self) { _ = try await repository.undoLastCommit() }
+  }
+}
