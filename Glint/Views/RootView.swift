@@ -60,7 +60,7 @@ struct RootView: View {
         OnboardingView(open: session.chooseRepository)
       }
     case .opening:
-      Color.clear
+      OpeningView(name: session.openingName)
     case .ready:
       NavigationSplitView {
         SidebarView(session: session)
@@ -212,6 +212,27 @@ private struct DiffToolbar: ViewModifier {
       }
       .pickerStyle(.segmented)
       .help(AppCommand.toggleLayout.hint("Switch between unified and split diffs"))
+    }
+  }
+}
+
+/// Shown only if opening takes longer than 300 ms, so a quick open never
+/// flashes it.
+private struct OpeningView: View {
+  let name: String?
+  @State private var isShown = false
+
+  var body: some View {
+    VStack(spacing: 12) {
+      ProgressView().controlSize(.small)
+      Text(name.map { "Opening \($0)…" } ?? "Opening…")
+        .foregroundStyle(.secondary)
+    }
+    .opacity(isShown ? 1 : 0)
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .task {
+      try? await Task.sleep(for: .milliseconds(300))
+      isShown = true
     }
   }
 }

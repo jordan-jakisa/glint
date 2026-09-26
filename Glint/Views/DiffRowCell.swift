@@ -10,6 +10,12 @@ final class DiffRowCell: NSView {
     didSet { if isRowSelected != oldValue { needsDisplay = true } }
   }
 
+  /// Faint tints, twice as strong with Increase Contrast on, so hunk headers
+  /// and empty sides stay visible.
+  static func tint(_ alpha: CGFloat) -> CGFloat {
+    NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? alpha * 2 : alpha
+  }
+
   /// Width of the clickable "Stage Hunk" label at the right of a hunk header.
   static let hunkActionWidth: CGFloat = 110
 
@@ -118,7 +124,7 @@ final class DiffRowCell: NSView {
   }
 
   private func drawHunkHeader(_ hunk: Hunk) {
-    NSColor.controlAccentColor.withAlphaComponent(0.08).setFill()
+    NSColor.controlAccentColor.withAlphaComponent(Self.tint(0.08)).setFill()
     bounds.fill()
     var width = bounds.width - 24
     if let hunkAction {
@@ -211,7 +217,7 @@ final class DiffRowCell: NSView {
 
   // MARK: - Colors
 
-  private static let emptySide = NSColor.secondaryLabelColor.withAlphaComponent(0.06)
+  private static var emptySide: NSColor { NSColor.secondaryLabelColor.withAlphaComponent(tint(0.06)) }
 
   private static func background(_ kind: DiffLine.Kind) -> NSColor {
     switch kind {
@@ -225,8 +231,8 @@ final class DiffRowCell: NSView {
     switch kind {
     case .addition: NSColor.systemGreen.withAlphaComponent(0.22)
     case .deletion: NSColor.systemRed.withAlphaComponent(0.22)
-    case .context, .noNewline: NSColor.secondaryLabelColor.withAlphaComponent(0.05)
-    case nil: NSColor.secondaryLabelColor.withAlphaComponent(0.08)
+    case .context, .noNewline: NSColor.secondaryLabelColor.withAlphaComponent(tint(0.05))
+    case nil: NSColor.secondaryLabelColor.withAlphaComponent(tint(0.08))
     }
   }
 }

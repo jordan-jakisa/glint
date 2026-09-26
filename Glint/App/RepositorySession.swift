@@ -49,7 +49,9 @@ final class RepositorySession {
 
   // MARK: Commit box
 
-  var commitMessage = ""
+  var commitMessage = "" {
+    didSet { if commitMessage != oldValue { scheduleDraftSave() } }
+  }
   var isAmending = false {
     didSet { if isAmending, !oldValue { prefillAmendMessage() } }
   }
@@ -185,6 +187,32 @@ final class RepositorySession {
   /// Unsent commit messages per repository, kept while you switch between
   /// the repositories of a workspace.
   @ObservationIgnored var messageDrafts: [URL: String] = [:]
+  @ObservationIgnored private var draftSave: Task<Void, Never>?
+  /// The folder being opened, for the "Opening…" screen.
+  internal(set) var openingName: String?
+
+  private static let draftsKey = "messageDrafts"
+
+  /// A message you were writing, from last time. Kept per repository, so a
+  /// quit or crash doesn't lose it.
+  static func savedDraft(for repository: URL) -> String {
+    (UserDefaults.standard.dictionary(forKey: draftsKey) as? [String: String])?[repository.standardizedFileURL.path] ?? ""
+  }
+
+  /// Saves the draft half a second after you stop typing.
+  private func scheduleDraftSave() {
+    draftSave?.cancel()
+    guard let repository = repository?.url else { return }
+    let message = commitMessage
+    draftSave = Task {
+      try? await Task.sleep(for: .milliseconds(500))
+      guard !Task.isCancelled else { return }
+      var drafts = UserDefaults.standard.dictionary(forKey: Self.draftsKey) as? [String: String] ?? [:]
+      let key = repository.standardizedFileURL.path
+      drafts[key] = message.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : message
+      UserDefaults.standard.set(drafts, forKey: Self.draftsKey)
+    }
+  }
   /// Open handles for the workspace's other repositories, used to keep their
   /// summaries current without switching to them.
   @ObservationIgnored var summaryHandles: [String: GitRepository] = [:]
@@ -385,6 +413,7 @@ final class RepositorySession {
   }
 
   private func open(_ url: URL, restoring: Bool, loading: Task<Opened, Error>) {
+    openingName = url.lastPathComponent
     if repository == nil { phase = .opening }
     Task {
       do {
@@ -416,13 +445,15 @@ final class RepositorySession {
     messageTask?.cancel()
     messageTask = nil
     if let current = repository?.url { messageDrafts[current] = commitMessage }
-    commitMessage = messageDrafts[opened.repository.url] ?? ""
+    let keepsHistory = tab == .history && repository != nil
     isAmending = false
     workspace = opened.workspace
     if let workspace, let active = workspace.repositories.first(where: { $0.url.standardizedFileURL == opened.repository.url.standardizedFileURL }) {
       WorkspaceMemory.remember(active.relativePath, in: workspace.root)
     }
     repository = opened.repository
+    // After `repository` changes, so the draft saves under the right one.
+    commitMessage = messageDrafts[opened.repository.url] ?? Self.savedDraft(for: opened.repository.url)
     info = opened.info
     status = opened.status
     refreshCommitSize()
@@ -443,7 +474,14 @@ final class RepositorySession {
     }
 
     // Show the preloaded diff directly, so it paints with the window.
+    // Switching repository from History stays in History.
     tab = .changes
+    defer {
+      if keepsHistory {
+        tab = .history
+        showSelectedDiff()
+      }
+    }
     selectedChange = opened.firstChange
     selectedCommitID = opened.commits.first?.id
     diffTask?.cancel()
