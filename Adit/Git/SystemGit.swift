@@ -32,6 +32,7 @@ struct SystemGit: Sendable {
     process.standardError = errors
     process.standardInput = stdin
 
+    let exit = Self.exitStatus(of: process)
     try process.run()
     if let input { stdin.fileHandleForWriting.write(Data(input.utf8)) }
     try? stdin.fileHandleForWriting.close()
@@ -41,14 +42,26 @@ struct SystemGit: Sendable {
     async let out = Self.readAll(output)
     async let err = Self.readAll(errors)
     let (stdout, stderr) = await (out, err)
-    process.waitUntilExit()
+    let status = await exit.first { _ in true } ?? process.terminationStatus
 
-    guard process.terminationStatus == 0 else {
+    guard status == 0 else {
       let text = [stderr, stdout].map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
         .first { !$0.isEmpty }
-      throw Failure(message: text ?? "git \(arguments.first ?? "") failed (exit \(process.terminationStatus)).")
+      throw Failure(message: text ?? "git \(arguments.first ?? "") failed (exit \(status)).")
     }
     return stdout
+  }
+
+  /// The process's exit status, delivered when it ends. Set up before
+  /// `run()`. `waitUntilExit()` isn't used: off the main thread it can wait
+  /// forever for a process that has already exited (it hung the push test).
+  static func exitStatus(of process: Process) -> AsyncStream<Int32> {
+    AsyncStream { continuation in
+      process.terminationHandler = { finished in
+        continuation.yield(finished.terminationStatus)
+        continuation.finish()
+      }
+    }
   }
 
   @concurrent
@@ -100,15 +113,18 @@ struct LoginEnvironment: Sendable {
     process.standardOutput = output
     process.standardError = FileHandle.nullDevice
     process.standardInput = FileHandle.nullDevice
+    let exit = SystemGit.exitStatus(of: process)
     guard (try? process.run()) != nil else { return nil }
 
-    // A shell config that hangs shouldn't hang Adit.
+    // A shell config that hangs shouldn't hang Adit. Interactive zsh ignores
+    // SIGTERM, so the timeout uses SIGKILL.
+    let pid = process.processIdentifier
     let timeout = Task {
       try await Task.sleep(for: .seconds(3))
-      if process.isRunning { process.terminate() }
+      kill(pid, SIGKILL)
     }
     let data = (try? output.fileHandleForReading.readToEnd()) ?? Data()
-    process.waitUntilExit()
+    _ = await exit.first { _ in true }
     timeout.cancel()
 
     let text = String(decoding: data, as: UTF8.self)
