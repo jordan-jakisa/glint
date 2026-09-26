@@ -17,7 +17,12 @@ struct AditApp: App {
     }
 
     Settings {
-      AISettingsView()
+      TabView {
+        GeneralSettingsView()
+          .tabItem { Label("General", systemImage: "gearshape") }
+        AISettingsView()
+          .tabItem { Label("AI", systemImage: "sparkles") }
+      }
     }
   }
 }

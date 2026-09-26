@@ -175,3 +175,16 @@ import Testing
     #expect(RepositorySession.rules(for: repo, workspace: nil) == "Repository rules")
   }
 }
+
+@Suite struct TerminalAppTests {
+  @Test func ghosttyGetsTheFolderAsAnArgument() {
+    let folder = URL(fileURLWithPath: "/tmp/some repo")
+    let ghostty = TerminalApp.ghostty.launchRequest(at: folder)
+    #expect(ghostty.openFolder == false)
+    #expect(ghostty.arguments == ["--working-directory=/tmp/some repo"])
+    #expect(ghostty.newInstance)
+    let terminal = TerminalApp.terminal.launchRequest(at: folder)
+    #expect(terminal.openFolder)
+    #expect(terminal.arguments.isEmpty)
+  }
+}

@@ -27,8 +27,9 @@ app="$derived/Build/Products/Release/Adit.app"
 
 if pgrep -xq Adit; then
   echo "Quitting the running Adit"
-  osascript -e 'tell application id "com.kerustudios.adit" to quit' || true
-  sleep 1
+  # A plain quit signal: AppleScript would need Automation permission.
+  pkill -x Adit || true
+  for _ in {1..20}; do pgrep -xq Adit || break; sleep 0.1; done
 fi
 rm -rf /Applications/Adit.app
 ditto "$app" /Applications/Adit.app

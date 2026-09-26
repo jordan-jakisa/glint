@@ -33,6 +33,19 @@ extension RepositorySession {
     }
   }
 
+  /// Opens the active repository in your terminal app (⌘T).
+  func openInTerminal() {
+    guard let folder = repository?.url else { return }
+    let app = TerminalApp.preferred
+    Task {
+      do {
+        try await app.open(at: folder)
+      } catch {
+        alertMessage = "Couldn't open \(app.name).\n\n\(error)"
+      }
+    }
+  }
+
   /// A dot beside the repository name says another repository has changes.
   var otherRepositoriesHaveChanges: Bool {
     let active = activeWorkspaceRepository?.relativePath
