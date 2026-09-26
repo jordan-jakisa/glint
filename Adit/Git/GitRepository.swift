@@ -457,6 +457,73 @@ actor GitRepository {
     return try makeDiff(diff, source: .workingTree(staged: staged, path: path))
   }
 
+  // MARK: - Branch diff
+
+  /// The branch to compare against: the remote's default branch if it names
+  /// one, else main or master, local or remote. Skips any that point at HEAD
+  /// itself (on main, the local main is no comparison at all).
+  func branchBase() -> (name: String, oid: git_oid)? {
+    var head = git_oid()
+    guard git_reference_name_to_id(&head, handle, "HEAD") == 0 else { return nil }
+    var candidates: [String] = []
+    var remoteHead: OpaquePointer?
+    if git_reference_lookup(&remoteHead, handle, "refs/remotes/origin/HEAD") == 0, let remoteHead {
+      if let target = git_reference_symbolic_target(remoteHead) {
+        candidates.append(String(cString: target).replacingOccurrences(of: "refs/remotes/", with: ""))
+      }
+      git_reference_free(remoteHead)
+    }
+    candidates += ["main", "master", "origin/main", "origin/master"]
+    for name in candidates {
+      var oid = git_oid()
+      let ref = name.hasPrefix("origin/") ? "refs/remotes/\(name)" : "refs/heads/\(name)"
+      guard git_reference_name_to_id(&oid, handle, ref) == 0 else { continue }
+      if git_oid_equal(&oid, &head) == 1 { continue }
+      return (name, oid)
+    }
+    return nil
+  }
+
+  /// Everything the current branch changes since it split from its base:
+  /// the merge base's tree against the working tree, so uncommitted work
+  /// and untracked files are included, like reviewing a pull request before
+  /// it's opened.
+  func branchDiff() throws -> (Diff, BranchComparison) {
+    guard let base = branchBase() else {
+      throw GitError(code: -1, message: "There's no main or master branch to compare this branch with.")
+    }
+    try reloadIndex()
+    var head = git_oid()
+    try GitError.check(git_reference_name_to_id(&head, handle, "HEAD"), "Couldn't read HEAD.")
+    var baseOID = base.oid
+    var mergeBase = git_oid()
+    try GitError.check(
+      git_merge_base(&mergeBase, handle, &head, &baseOID), "This branch and \(base.name) share no history.")
+    var ahead = 0
+    var behind = 0
+    git_graph_ahead_behind(&ahead, &behind, handle, &head, &mergeBase)
+
+    var commit: OpaquePointer?
+    try GitError.check(git_commit_lookup(&commit, handle, &mergeBase), "Couldn't read the merge base.")
+    defer { git_commit_free(commit) }
+    var tree: OpaquePointer?
+    try GitError.check(git_commit_tree(&tree, commit), "Couldn't read the merge base's files.")
+    defer { git_tree_free(tree) }
+
+    var options = Self.diffOptions()
+    options.flags |=
+      GIT_DIFF_INCLUDE_UNTRACKED.rawValue | GIT_DIFF_RECURSE_UNTRACKED_DIRS.rawValue
+      | GIT_DIFF_SHOW_UNTRACKED_CONTENT.rawValue
+    var diff: OpaquePointer?
+    try GitError.check(
+      git_diff_tree_to_workdir_with_index(&diff, handle, tree, &options), "Couldn't diff this branch.")
+    defer { git_diff_free(diff) }
+
+    let comparison = BranchComparison(
+      base: base.name, branch: info().branch, ahead: ahead, mergeBase: String(Self.hex(mergeBase).prefix(7)))
+    return (try makeDiff(diff, source: .branch), comparison)
+  }
+
   private static func diffOptions() -> git_diff_options {
     var options = git_diff_options()
     git_diff_options_init(&options, UInt32(GIT_DIFF_OPTIONS_VERSION))

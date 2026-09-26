@@ -48,6 +48,8 @@ struct DiffPane: View {
       CommitHeader(
         commit: session.commits.first { $0.id == id },
         diff: diff, isLoading: session.isLoadingDiff)
+    case .branch:
+      BranchHeader(comparison: session.branchComparison, diff: diff, isLoading: session.isLoadingDiff)
     case .workingTree(let staged, let path):
       WorkingTreeHeader(
         staged: staged, path: path, diff: diff, isLoading: session.isLoadingDiff,
@@ -69,6 +71,7 @@ struct DiffPane: View {
     case .commit: "This commit doesn't change any files."
     case .workingTree(true, _): "Nothing staged here."
     case .workingTree(false, _): "Nothing changed here."
+    case .branch: "This branch doesn't change anything yet."
     }
   }
 }
@@ -162,5 +165,46 @@ private struct CommitHeader: View {
 
   private var fileCount: String {
     diff.files.count == 1 ? "1 file" : "\(diff.files.count) files"
+  }
+}
+
+/// Header for the branch diff: which branch, against what, and how far.
+private struct BranchHeader: View {
+  let comparison: BranchComparison?
+  let diff: Diff
+  let isLoading: Bool
+
+  var body: some View {
+    HStack(alignment: .center, spacing: 12) {
+      VStack(alignment: .leading, spacing: 4) {
+        Text(title)
+          .font(.headline)
+          .lineLimit(1)
+        HStack(spacing: 12) {
+          if let comparison {
+            Text(comparison.ahead == 1 ? "1 commit" : "\(comparison.ahead) commits")
+            Text("since \(comparison.mergeBase)")
+              .font(.system(size: 12, design: .monospaced))
+          }
+          Text("plus uncommitted work")
+          Text(diff.files.count == 1 ? "1 file" : "\(diff.files.count) files")
+          Text("+\(diff.additions)").foregroundStyle(.green)
+          Text("-\(diff.deletions)").foregroundStyle(.red)
+        }
+        .font(.callout)
+        .foregroundStyle(.secondary)
+      }
+      Spacer(minLength: 12)
+      if isLoading {
+        ProgressView().controlSize(.small)
+      }
+    }
+    .padding(.horizontal, 16)
+    .padding(.vertical, 10)
+  }
+
+  private var title: String {
+    guard let comparison else { return "This branch" }
+    return "\(comparison.branch ?? "HEAD") compared with \(comparison.base)"
   }
 }

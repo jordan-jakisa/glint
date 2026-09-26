@@ -7,6 +7,9 @@ enum DiffSource: Hashable, Sendable {
   /// Uncommitted changes: HEAD to index when `staged`, index to working tree
   /// otherwise. A nil `path` means every changed file.
   case workingTree(staged: Bool, path: String?)
+  /// Everything the current branch changes since it split from its base,
+  /// uncommitted work included.
+  case branch
 
   var commitID: String? {
     if case .commit(let id) = self { return id }

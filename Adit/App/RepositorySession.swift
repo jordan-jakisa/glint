@@ -68,6 +68,14 @@ final class RepositorySession {
   // MARK: History tab
 
   internal(set) var commits: [Commit] = []
+  /// The branch this one is compared with in the pinned branch-diff row, or
+  /// nil when there's none (no main or master, or on main itself).
+  internal(set) var branchBaseName: String?
+  /// The branch diff's comparison, once loaded.
+  internal(set) var branchComparison: BranchComparison?
+  /// History's pinned first row. Commit ids are 40 hex characters, so this
+  /// can't collide with one.
+  static let branchSelectionID = "branch-diff"
   internal(set) var hasMoreCommits = false
   var selectedCommitID: String? {
     didSet { if tab == .history, selectedCommitID != oldValue { showSelectedDiff() } }
@@ -175,6 +183,7 @@ final class RepositorySession {
     let info: RepositoryInfo
     let status: WorkingTreeStatus
     let sync: SyncStatus
+    let branchBase: String?
     let commits: [Commit]
     let firstChange: ChangeSelection?
     let firstDiff: Diff?
@@ -218,6 +227,7 @@ final class RepositorySession {
     stage("open: ahead and behind")
     let commits = try await repository.firstCommits(limit: firstPageSize)
     stage("open: first commits")
+    let branchBase = await repository.branchBase()?.name
     let firstChange = ChangeSelection.first(in: status)
     var firstDiff: Diff?
     if let firstChange {
@@ -225,7 +235,8 @@ final class RepositorySession {
     }
     stage("open: first diff")
     return Opened(
-      workspace: workspace, repository: repository, info: info, status: status, sync: sync, commits: commits,
+      workspace: workspace, repository: repository, info: info, status: status, sync: sync,
+      branchBase: branchBase, commits: commits,
       firstChange: firstChange, firstDiff: firstDiff)
   }
 
@@ -300,6 +311,8 @@ final class RepositorySession {
     status = opened.status
     commits = opened.commits
     sync = opened.sync
+    branchBaseName = opened.branchBase
+    branchComparison = nil
     hasMoreCommits = opened.commits.count == Self.firstPageSize
     cache = DiffCache(capacity: 32)
     diffError = nil
@@ -350,7 +363,8 @@ final class RepositorySession {
   var selectedSource: DiffSource? {
     switch tab {
     case .changes: selectedChange?.source
-    case .history: selectedCommitID.map(DiffSource.commit)
+    case .history:
+      selectedCommitID == Self.branchSelectionID ? .branch : selectedCommitID.map(DiffSource.commit)
     }
   }
 
@@ -389,6 +403,10 @@ final class RepositorySession {
           cache[id] = loaded
         case .workingTree(let staged, let path):
           loaded = try await repository.workingTreeDiff(staged: staged, path: path)
+        case .branch:
+          let (branchDiff, comparison) = try await repository.branchDiff()
+          loaded = branchDiff
+          branchComparison = comparison
         }
         guard !Task.isCancelled, selectedSource == source else { return }
         diff = loaded

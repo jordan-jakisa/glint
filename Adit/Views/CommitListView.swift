@@ -6,6 +6,10 @@ struct CommitListView: View {
   var body: some View {
     ScrollViewReader { proxy in
       List(selection: $session.selectedCommitID) {
+        if let base = session.branchBaseName {
+          BranchRow(branch: session.info?.branch, base: base)
+            .tag(RepositorySession.branchSelectionID)
+        }
         ForEach(session.commits) { commit in
           CommitRow(commit: commit)
             .onAppear {
@@ -63,5 +67,23 @@ private enum RelativeDate {
 
   static func string(for date: Date) -> String {
     formatter.localizedString(for: date, relativeTo: .now)
+  }
+}
+
+/// History's pinned first row: the whole branch, as one diff.
+private struct BranchRow: View {
+  let branch: String?
+  let base: String
+
+  var body: some View {
+    VStack(alignment: .leading, spacing: 3) {
+      Label("All changes on \(branch ?? "this branch")", systemImage: "arrow.triangle.branch")
+        .lineLimit(1)
+      Text("Compared with \(base), uncommitted work included")
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+    }
+    .padding(.vertical, 2)
   }
 }

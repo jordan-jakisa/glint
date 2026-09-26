@@ -8,8 +8,11 @@ extension RepositorySession {
     Task {
       let info = await repository.info()
       sync = await repository.syncStatus()
+      branchBaseName = await repository.branchBase()?.name
       let head = await repository.headCommitID()
       guard info != self.info || head != commits.first?.id else { return }
+      // A new commit moves the branch diff too.
+      if showsBranchDiff { showSelectedDiff(inPlace: true) }
       guard let fresh = try? await repository.firstCommits(limit: Self.firstPageSize) else { return }
       self.info = info
       commits = fresh
@@ -30,17 +33,25 @@ extension RepositorySession {
     }
   }
 
+  /// History's rows: the pinned branch diff (when there's a base), then
+  /// commits.
+  var historyIDs: [String] {
+    (branchBaseName == nil ? [] : [Self.branchSelectionID]) + commits.map(\.id)
+  }
+
+  var showsBranchDiff: Bool { tab == .history && selectedCommitID == Self.branchSelectionID }
+
   func moveCommitSelection(by offset: Int) {
-    guard !commits.isEmpty else { return }
-    guard let current = selectedCommitID, let index = commits.firstIndex(where: { $0.id == current })
-    else {
-      selectedCommitID = commits.first?.id
+    let ids = historyIDs
+    guard !ids.isEmpty else { return }
+    guard let current = selectedCommitID, let index = ids.firstIndex(of: current) else {
+      selectedCommitID = commits.first?.id ?? ids.first
       return
     }
-    let next = min(max(index + offset, 0), commits.count - 1)
-    selectedCommitID = commits[next].id
+    let next = min(max(index + offset, 0), ids.count - 1)
+    selectedCommitID = ids[next]
     // Page in more history before the reader reaches the end of it.
-    if commits.count - next < 20 { loadMoreCommits() }
+    if ids.count - next < 20 { loadMoreCommits() }
   }
 
   /// Builds the next commit's diff in the background, so `j` usually finds it

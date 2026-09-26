@@ -427,3 +427,26 @@ import Testing
     #expect(sync.behind == 0)
   }
 }
+
+@Suite struct BranchDiffTests {
+  @Test func coversCommitsAndUncommittedWorkSinceTheSplit() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["shared.txt": "base\n"])
+    let repository = try await GitRepository.open(at: fixture.url)
+    let mainName = try #require(await repository.info().branch)
+    // On the base branch itself there's nothing to compare with.
+    #expect(await repository.branchBase() == nil)
+
+    let git = SystemGit(directory: fixture.url)
+    _ = try await git.run(["switch", "-q", "-c", "feature"])
+    try fixture.commit("Feature work", files: ["feature.txt": "new\n"])
+    try fixture.write("shared.txt", "base\nedited, not committed\n")
+
+    let (diff, comparison) = try await repository.branchDiff()
+    #expect(comparison.base == mainName)
+    #expect(comparison.branch == "feature")
+    #expect(comparison.ahead == 1)
+    #expect(diff.source == .branch)
+    #expect(Set(diff.files.map(\.path)) == ["feature.txt", "shared.txt"])
+  }
+}

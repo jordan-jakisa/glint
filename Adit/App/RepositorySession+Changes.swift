@@ -41,6 +41,8 @@ extension RepositorySession {
     if reloadDiff, tab == .changes, selectedChange == previousSelection, selectedChange != nil {
       showSelectedDiff(inPlace: true)
     }
+    // The branch diff includes uncommitted work, so it follows edits live.
+    if reloadDiff, showsBranchDiff { showSelectedDiff(inPlace: true) }
   }
 
   // MARK: - Staging

@@ -18,6 +18,16 @@ struct Branch: Identifiable, Hashable, Sendable {
   }
 }
 
+/// The current branch against the branch it was made from.
+struct BranchComparison: Equatable, Sendable {
+  /// `main`, `origin/main`, or whichever base was found.
+  let base: String
+  let branch: String?
+  /// Commits on this branch that the base doesn't have.
+  let ahead: Int
+  let mergeBase: String
+}
+
 /// Where the current branch stands against its upstream.
 struct SyncStatus: Equatable, Sendable {
   /// `origin/main`, or nil when the branch doesn't track anything.
