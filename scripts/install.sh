@@ -19,7 +19,7 @@ else
   echo "No Apple Development certificate found; signing ad-hoc"
 fi
 
-xcodebuild -project Adit.xcodeproj -scheme Adit -configuration Release \
+xcodebuild -project Adit.xcodeproj -scheme Adit -configuration Release -skipPackagePluginValidation \
   -derivedDataPath "$derived" "${signing[@]}" build | grep -E "error:|BUILD" || true
 
 app="$derived/Build/Products/Release/Adit.app"
