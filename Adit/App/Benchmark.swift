@@ -13,6 +13,26 @@ extension RepositorySession {
     UserDefaults.standard.bool(forKey: "AditBenchmark")
   }
 
+  /// `-AditTestAI YES`: writes a commit message for the open repository's
+  /// changes with the AI settings in effect, and logs the result and timing.
+  /// For checking a provider end to end without clicking.
+  static var isTestingAI: Bool { UserDefaults.standard.bool(forKey: "AditTestAI") }
+
+  func runAITest() async {
+    try? await Task.sleep(for: .seconds(1))
+    let settings = AISettings.shared
+    Timing.log.info("AI test: provider \(settings.provider.rawValue, privacy: .public), model \(settings.modelID ?? "none", privacy: .public), ready \(settings.isReady)")
+    let start = ContinuousClock.now
+    generateCommitMessage()
+    await messageTask?.value
+    Timing.report("AI test, whole message", since: start, budget: 10_000)
+    if let alertMessage {
+      Timing.log.info("AI test failed: \(alertMessage, privacy: .public)")
+    } else {
+      Timing.log.info("AI test message (\(self.aiNote ?? "", privacy: .public)):\n\(self.commitMessage, privacy: .public)")
+    }
+  }
+
   func runBenchmark() async {
     // Let launch work settle so it doesn't bleed into the first sample.
     try? await Task.sleep(for: .seconds(1))

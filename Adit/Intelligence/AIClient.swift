@@ -7,6 +7,9 @@ struct AIClient: Sendable {
 
   struct Failure: Error, CustomStringConvertible {
     let message: String
+    /// Busy rather than broken: rate limited or a server error. Worth trying
+    /// another free model; a bad key or bad request isn't.
+    var isBusy = false
     var description: String { message }
   }
 
@@ -35,14 +38,19 @@ struct AIClient: Sendable {
           guard status == 200 else {
             var body = ""
             for try await line in bytes.lines { body += line }
-            throw Failure(message: Self.errorMessage(status: status, body: body, provider: provider))
+            throw Failure(
+              message: Self.errorMessage(status: status, body: body, provider: provider),
+              isBusy: status == 429 || status >= 500)
           }
           for try await line in bytes.lines {
             switch Self.parse(line) {
             case .text(let text): continuation.yield(text)
             case .done: continuation.finish()
               return
-            case .failure(let message): throw Failure(message: message)
+            case .failure(let message):
+              // An error mid-stream from an upstream host is almost always it
+              // being overloaded.
+              throw Failure(message: message, isBusy: true)
             case .ignore: break
             }
           }

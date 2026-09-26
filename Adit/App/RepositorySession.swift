@@ -53,6 +53,8 @@ final class RepositorySession {
   /// The last message AI wrote, to measure how much you edit it before
   /// committing. Logged locally, never sent.
   @ObservationIgnored var generatedMessage: String?
+  /// Which model wrote the last AI message, shown under the commit box.
+  internal(set) var aiNote: String?
   /// Writing a message with AI. Observed so the button can show Stop.
   internal(set) var messageTask: Task<Void, Never>?
   /// Bumped to move keyboard focus into the commit message.
@@ -344,7 +346,11 @@ final class RepositorySession {
     Task {
       do {
         let opened = try await loading.value
-        access.adopt(opened.workspace?.root ?? opened.repository.url)
+        // A repository opened with -AditRepository (benchmarks, tests) isn't
+        // one you picked, so it doesn't replace the one Adit reopens.
+        if UserDefaults.standard.string(forKey: "AditRepository") == nil {
+          access.adopt(opened.workspace?.root ?? opened.repository.url)
+        }
         install(opened)
       } catch {
         let message = "\(url.lastPathComponent): \(error)"
@@ -413,6 +419,7 @@ final class RepositorySession {
       refreshSummaries(of: nil)
     }
     if Self.isBenchmarking { Task { await runBenchmark() } }
+    if Self.isTestingAI { Task { await runAITest() } }
   }
 
   /// Rereads everything that can change behind Adit's back: HEAD, history,

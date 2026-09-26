@@ -21,6 +21,7 @@ extension RepositorySession {
       return
     }
     guard let repository else { return }
+    aiNote = nil
     // Like the commit button: staged changes if there are any, else every
     // tracked change.
     let staged = !status.staged.isEmpty
@@ -49,16 +50,31 @@ extension RepositorySession {
           diff: CommitPrompt.compress(CommitPrompt.patchText(diff)), subject: subject,
           rules: rules, userInstructions: instructions, recentSubjects: recentSubjects, userWhy: userWhy)
 
+        // Free models are often busy. Try the chosen one, then up to two
+        // other free ones, and say which wrote the message.
+        let candidates = await AISettings.shared.fallbackModels(count: 3)
         var reply = ""
-        let start = ContinuousClock.now
-        var reportedFirstToken = false
-        for try await piece in client.stream(model: model, prompt: prompt) {
-          if !reportedFirstToken {
-            reportedFirstToken = true
-            Timing.report("AI first token", since: start, budget: 2_000)
+        var usedModel = model
+        for (attempt, candidate) in candidates.enumerated() {
+          reply = ""
+          usedModel = candidate
+          do {
+            let start = ContinuousClock.now
+            var reportedFirstToken = false
+            for try await piece in client.stream(model: candidate, prompt: prompt) {
+              if !reportedFirstToken {
+                reportedFirstToken = true
+                Timing.report("AI first token", since: start, budget: 2_000)
+              }
+              reply += piece
+              commitMessage = CommitPrompt.clean(reply)
+            }
+            break
+          } catch let failure as AIClient.Failure where failure.isBusy && attempt < candidates.count - 1 {
+            Timing.log.info("AI: \(candidate, privacy: .public) was busy, trying the next free model")
+            commitMessage = before
+            continue
           }
-          reply += piece
-          commitMessage = CommitPrompt.clean(reply)
         }
         let final = CommitPrompt.clean(reply)
         if final.isEmpty || CommitPrompt.isWeak(final) {
@@ -70,6 +86,9 @@ extension RepositorySession {
         } else {
           commitMessage = final
           generatedMessage = final
+          aiNote = usedModel == model
+            ? "Written by \(usedModel)"
+            : "Written by \(usedModel): \(model) was busy"
         }
       } catch is CancellationError {
       } catch let error as URLError where error.code == .cancelled {

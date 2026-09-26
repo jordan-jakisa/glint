@@ -78,8 +78,9 @@ enum AIProvider: String, CaseIterable, Identifiable, Sendable {
       return Self.isZero(pricing.input) && Self.isZero(pricing.output)
     case .openRouter:
       guard let pricing = model.pricing else { return false }
-      let text = model.architecture?.outputModalities?.contains("text") ?? true
-      return text && Self.isZero(pricing.prompt) && Self.isZero(pricing.completion)
+      // Text in, text out only: some zero-priced models make music or images.
+      let textOnly = model.architecture?.outputModalities.map { $0 == ["text"] } ?? true
+      return textOnly && Self.isZero(pricing.prompt) && Self.isZero(pricing.completion)
     }
   }
 

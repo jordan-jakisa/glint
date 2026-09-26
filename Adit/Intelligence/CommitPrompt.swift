@@ -158,6 +158,13 @@ enum CommitPrompt {
       if lines.last?.trimmingCharacters(in: .whitespaces).hasPrefix("```") == true { lines.removeLast() }
       text = lines.joined(separator: "\n").trimmingCharacters(in: .whitespacesAndNewlines)
     }
+    // Git reads everything up to the first blank line as the subject, so a
+    // body a model starts on the next line would merge into it.
+    var lines = text.components(separatedBy: "\n")
+    if lines.count > 1, !lines[1].trimmingCharacters(in: .whitespaces).isEmpty {
+      lines.insert("", at: 1)
+      text = lines.joined(separator: "\n")
+    }
     return text
   }
 }

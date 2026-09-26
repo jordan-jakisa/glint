@@ -11,7 +11,9 @@ import Testing
          "architecture": {"output_modalities": ["text"]}},
         {"id": "b/paid", "name": "B", "pricing": {"prompt": "0.000001", "completion": "0.000002"}},
         {"id": "c/image:free", "name": "C", "pricing": {"prompt": "0", "completion": "0"},
-         "architecture": {"output_modalities": ["image"]}}
+         "architecture": {"output_modalities": ["image"]}},
+        {"id": "d/music-preview", "name": "D", "pricing": {"prompt": "0", "completion": "0"},
+         "architecture": {"output_modalities": ["audio", "text"]}}
       ]}
       """
     let models = try AIProvider.openRouter.freeModels(from: Data(json.utf8))
@@ -49,6 +51,11 @@ import Testing
     #expect(AIClient.parse(#"data: {"error":{"message":"Rate limited"}}"#) == .failure("Rate limited"))
   }
 
+  @Test func busyFailuresAreWorthRetrying() {
+    #expect(AIClient.Failure(message: "x", isBusy: true).isBusy)
+    #expect(!AIClient.Failure(message: "bad key").isBusy)
+  }
+
   @Test func explainsCommonHTTPErrors() {
     let unauthorized = AIClient.errorMessage(status: 401, body: #"{"error":{"message":"bad key"}}"#, provider: .openRouter)
     #expect(unauthorized.contains("API key"))
@@ -61,6 +68,8 @@ import Testing
   @Test func cleansReasoningAndFences() {
     #expect(CommitPrompt.clean("<think>hmm</think>\nAdd login") == "Add login")
     #expect(CommitPrompt.clean("```\nFix crash\n\nBody\n```") == "Fix crash\n\nBody")
+    // A body that starts right under the subject gets its blank line.
+    #expect(CommitPrompt.clean("Fix total\nIt ignored quantity.") == "Fix total\n\nIt ignored quantity.")
     // Mid-stream, an unfinished reasoning block stays hidden.
     #expect(CommitPrompt.clean("<think>still thinking") == "")
   }

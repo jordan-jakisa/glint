@@ -32,6 +32,16 @@ struct CommitPanel: View {
       .controlSize(.small)
       .padding(.horizontal, 10)
       .padding(.vertical, 6)
+      if let note = session.aiNote {
+        Text(note)
+          .font(.caption)
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          .truncationMode(.middle)
+          .frame(maxWidth: .infinity, alignment: .leading)
+          .padding(.horizontal, 10)
+          .padding(.bottom, 4)
+      }
       if let last = session.lastCommit {
         Divider()
         LastCommitRow(commit: last, undo: session.undoLastCommit)

@@ -95,6 +95,17 @@ final class AISettings {
     return "Pick a free model in Settings (⌘,)."
   }
 
+  /// The free models to try, in order, when the chosen one is busy: the
+  /// chosen one first, then up to `count - 1` others. Loads the provider's
+  /// list first if Settings hasn't this launch.
+  func fallbackModels(count: Int) async -> [String] {
+    guard let chosen = modelID else { return [] }
+    if models.isEmpty, let loaded = try? await AIClient.freeModels(for: provider) {
+      models = loaded
+    }
+    return [chosen] + models.map(\.id).filter { $0 != chosen }.prefix(count - 1)
+  }
+
   func loadModels() {
     let provider = self.provider
     isLoadingModels = true

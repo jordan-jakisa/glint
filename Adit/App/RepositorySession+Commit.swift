@@ -59,6 +59,7 @@ extension RepositorySession {
           generatedMessage = nil
         }
         commitMessage = ""
+        aiNote = nil
         isAmending = false
       } catch {
         alertMessage = "The commit didn't go through.\n\n\(error)"
