@@ -32,6 +32,8 @@ from OpenCode Zen, Vercel AI Gateway, or OpenRouter (set up in Settings). See
 
 ## Keys
 
+All of these can be changed in Settings > Shortcuts.
+
 | Key | Does |
 |---|---|
 | `j` / `k` | Next / previous file or commit |
@@ -43,6 +45,8 @@ from OpenCode Zen, Vercel AI Gateway, or OpenRouter (set up in Settings). See
 | `c` | Write the commit message (Escape leaves it) |
 | `⌘↩` | Commit |
 | `⌥⌘G` | Write the commit message with AI |
+| `⌘T` / `⌥⌘T` | Terminal in Adit / in your terminal app |
+| `⇧⌘R`, `⌘1`–`⌘9` | Switch repository (in a folder of several) |
 | `⌘B` | Switch branch |
 | `⌥⌘F` / `⌥⌘P` / `⌥⇧⌘P` | Fetch / pull / push |
 | `⌥⌘S` / `⌥⌘U` | Stage all / unstage all |

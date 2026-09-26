@@ -22,7 +22,7 @@ struct CommitPanel: View {
           ProgressView().controlSize(.small)
         }
         Button(session.commitButtonTitle, action: session.commit)
-          .keyboardShortcut(.return, modifiers: .command)
+          .shortcut(.commit)
           .disabled(!session.canCommit)
           .help(commitHelp)
       }

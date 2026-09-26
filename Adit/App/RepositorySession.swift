@@ -437,23 +437,24 @@ final class RepositorySession {
   /// Single-key commands from `KeyMonitor`. Returns false for keys it doesn't
   /// use, so they reach the focused control as usual.
   func handleKey(_ key: Character) -> Bool {
-    guard phase == .ready else { return false }
-    switch key {
-    case "j": selectNextItem()
-    case "k": selectPreviousItem()
-    case "n": nextHunk()
-    case "p": previousHunk()
-    case "o": toggleCurrentFileCollapsed()
-    case " ":
+    guard phase == .ready, let command = ShortcutStore.shared.singleKeyCommand(for: key) else { return false }
+    switch command {
+    case .nextItem: selectNextItem()
+    case .previousItem: selectPreviousItem()
+    case .nextHunk: nextHunk()
+    case .previousHunk: previousHunk()
+    case .toggleCollapsed: toggleCurrentFileCollapsed()
+    case .toggleStaged:
       guard tab == .changes else { return false }
       toggleSelectedStaged()
-    case "c":
+    case .focusCommitMessage:
       tab = .changes
       commitFocusRequest += 1
-    case "s":
+    case .stagePartial:
       guard isPartialStagingAvailable else { return false }
       stageAtCursor()
-    default: return false
+    default:
+      return false
     }
     return true
   }

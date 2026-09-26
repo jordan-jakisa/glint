@@ -22,6 +22,8 @@ struct AditApp: App {
           .tabItem { Label("General", systemImage: "gearshape") }
         AISettingsView()
           .tabItem { Label("AI", systemImage: "sparkles") }
+        ShortcutsSettingsView()
+          .tabItem { Label("Shortcuts", systemImage: "keyboard") }
       }
     }
   }

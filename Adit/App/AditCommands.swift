@@ -5,15 +5,16 @@ extension FocusedValues {
   @Entry var session: RepositorySession?
 }
 
-/// Menu commands. Single-letter keys (j, k, n, p, o, Space) are handled by
-/// `KeyMonitor` instead, so they never fire while you type a commit message.
+/// Menu commands, with the keys set in Settings > Shortcuts. Single keys (j,
+/// k, n, p, o, Space, s, c by default) are handled by `KeyMonitor` instead,
+/// so they never fire while you type a commit message.
 struct AditCommands: Commands {
   @FocusedValue(\.session) private var session
 
   var body: some Commands {
     CommandGroup(replacing: .newItem) {
       Button("Open Repository…") { session?.chooseRepository() }
-        .keyboardShortcut("o")
+        .shortcut(.openRepository)
         .disabled(session == nil)
     }
 
@@ -21,45 +22,45 @@ struct AditCommands: Commands {
       Button(session?.layout == .split ? "Show Unified Diff" : "Show Split Diff") {
         session?.toggleLayout()
       }
-      .keyboardShortcut("\\")
+      .shortcut(.toggleLayout)
       .disabled(!isReady)
 
       Button("Reload") { session?.refresh() }
-        .keyboardShortcut("r")
+        .shortcut(.reload)
         .disabled(!isReady)
 
       Button("Fetch") { session?.fetch() }
-        .keyboardShortcut("f", modifiers: [.command, .option])
+        .shortcut(.fetch)
         .disabled(!isReady)
       Button("Pull") { session?.pull() }
-        .keyboardShortcut("p", modifiers: [.command, .option])
+        .shortcut(.pull)
         .disabled(!isReady)
       Button("Push") { session?.push() }
-        .keyboardShortcut("p", modifiers: [.command, .option, .shift])
+        .shortcut(.push)
         .disabled(!isReady)
 
       Button("Write Commit Message with AI") {
         session?.tab = .changes
         session?.generateCommitMessage()
       }
-      .keyboardShortcut("g", modifiers: [.command, .option])
+      .shortcut(.writeMessage)
       .disabled(!isReady)
 
       Button(session?.isTerminalShown == true ? "Hide Terminal" : "Show Terminal") {
         session?.isTerminalShown.toggle()
       }
-      .keyboardShortcut("t")
+      .shortcut(.showTerminal)
       .disabled(!isReady)
 
       Button("Open in \(TerminalApp.preferred.name)") { session?.openInTerminal() }
-        .keyboardShortcut("t", modifiers: [.command, .option])
+        .shortcut(.openExternalTerminal)
         .disabled(!isReady)
 
       Button("Switch Repository…") {
         session?.tab = .changes
         session?.isRepositoryPickerShown = true
       }
-      .keyboardShortcut("r", modifiers: [.command, .shift])
+      .shortcut(.switchRepository)
       .disabled(!isReady || session?.workspace == nil)
 
       ForEach(0..<9, id: \.self) { index in
@@ -73,7 +74,7 @@ struct AditCommands: Commands {
         session?.tab = .changes
         session?.isBranchPickerShown = true
       }
-      .keyboardShortcut("b")
+      .shortcut(.switchBranch)
       .disabled(!isReady)
 
       Divider()
@@ -87,9 +88,9 @@ struct AditCommands: Commands {
         Divider()
 
         Button("Next File") { session?.nextFile() }
-          .keyboardShortcut(.downArrow)
+          .shortcut(.nextFile)
         Button("Previous File") { session?.previousFile() }
-          .keyboardShortcut(.upArrow)
+          .shortcut(.previousFile)
 
         Divider()
 
@@ -105,9 +106,9 @@ struct AditCommands: Commands {
         Button("Stage or Unstage File") { session?.toggleSelectedStaged() }
         Button("Stage or Unstage Hunk or Lines") { session?.stageAtCursor() }
         Button("Stage All") { session?.stageAll() }
-          .keyboardShortcut("s", modifiers: [.command, .option])
+          .shortcut(.stageAll)
         Button("Unstage All") { session?.unstageAll() }
-          .keyboardShortcut("u", modifiers: [.command, .option])
+          .shortcut(.unstageAll)
         Button("Discard All Changes…") { session?.requestDiscardAll() }
       }
       .disabled(!isReady)
