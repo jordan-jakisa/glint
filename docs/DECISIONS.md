@@ -3,7 +3,31 @@
 Durable decisions with their evidence. Weigh changes against these. Do not
 re-litigate without new evidence.
 
-## Name: Adit (2026-09-26)
+## Name: Glint (2026-09-26, replaces Adit)
+
+Adit's acronym (AI Diff Inspection Tool) stopped fitting once the app grew into a
+full git panel: staging, commits, branches, push and pull, a terminal. AI is a
+small part of it. The goal became a short, easy name with character, like Zed or
+Ghostty.
+
+**Glint**: a quick flash of light, the one look you need to see what changed. It
+shares a root with "glance" (Middle English *glenten*, to gleam or look askance;
+etymonline), which gives the tagline "Every change, at a glance."
+
+- One syllable, spelled as it sounds. Easy-to-pronounce names are processed more
+  fluently and rated better (Alter & Oppenheimer 2006, PNAS). The short front
+  vowel reads as quick, light and small (Klink 2000, Marketing Letters).
+- Homebrew cask and formula both free. No git or diff tool uses the name; the
+  largest GitHub project called Glint has under 500 stars.
+- Rejected: Diffy (a 3.8k-star diff tool has it), Flick, Scout, Tuck, Blip,
+  Gleam, Snap (taken on Homebrew or by large projects), Spry (describes a feeling,
+  not the job), Tick, Nib, Twig, Sprig, Kite, Graft, Peek (weaker fit or clashes).
+
+The bundle id is `com.kerustudios.glint`. `LegacyMigration` copies Adit's
+settings on first launch, and `Keychain` copies a key saved under Adit's service
+the first time it's read.
+
+## Name: Adit (2026-09-26, replaced the same day)
 
 **A**I **D**iff **I**nspection **T**ool, and a real word: the horizontal entry
 tunnel into a mine, cut for access and inspection.
@@ -31,13 +55,21 @@ an established macOS diff viewer and anything optical reads as a clone of it.
 
 **Tagline:** "A way in to every change."
 
-## Scope: a viewer, not a git client (2026-09-26)
+## Scope: a fast git panel, not a full git client (2026-09-26, revised)
 
-Adit reads diffs and drafts commit messages. It does not do branching, remotes,
-rebasing, stashing, or merge conflict resolution. Tower, Fork, and Sourcetree
-already do those well, and competing with them means becoming slow.
+Revised the same day. The first version read "a viewer, not a git client":
+read diffs, draft messages, nothing else. Using it made clear that reading the
+diff is only half the loop; the other half is staging and committing, and
+leaving Adit for that defeats the point.
 
-The test for any proposed feature: does it make reading a diff or writing a message
+Adit now covers what Zed's git panel covers, borrowing its concepts without
+copying its design: working-tree changes, diffs, staging
+(files, hunks, lines), committing, branch switching, and push and pull. It
+still does not do rebase, merge, conflict resolution, stash, or history
+rewriting beyond amend. Tower, Fork, and Sourcetree do those, and competing
+with them means becoming slow.
+
+The test for any proposed feature: does it make the look, stage, commit loop
 faster? If not, it does not belong.
 
 ## Build order: viewer before AI (2026-09-26)
@@ -50,7 +82,7 @@ The diff viewer ships first, with no AI at all. Three reasons:
 3. Generating a message needs the staged diff anyway, so the reading layer has to
    be built and correct regardless.
 
-## libgit2, not subprocess git (2026-09-26)
+## libgit2, not subprocess git, for reads (2026-09-26)
 
 Each `Process` spawn costs roughly 10-30ms before git starts working, and listing
 commits plus diffing files means dozens of calls per screen. In-process libgit2 via
@@ -62,6 +94,28 @@ confines each handle to an actor and converts to Sendable value types at the
 boundary. The target builds with complete strict concurrency to catch violations at
 compile time rather than as field crashes.
 
+## libgit2 vendored from source, not SwiftGit2 (2026-09-26)
+
+Supersedes "via SwiftGit2" above. SwiftGit2 only builds with Carthage (no
+Swift package), its last release was 2019, and its diff API hides the
+`git_diff_options` that matter for speed. The SPM alternatives build libgit2
+from one person's fork.
+
+Instead, libgit2 v1.9.7 is vendored in `Packages/Clibgit2` as a local Swift
+package, compiled from the official release with only the parts Adit needs (no
+networking, no SSH). Adit's own thin wrapper in `Git/` covers exactly what v0.1
+uses. Cost accepted: about 5 MB of C source in the repo, and upgrades are a
+manual copy (steps in `Packages/Clibgit2/VENDORED.md`).
+
+## Terminal: SwiftTerm, pinned to 1.11 (2026-09-26)
+
+The built-in terminal panel uses SwiftTerm (MIT, maintained, used by several
+Mac terminal apps) through Swift Package Manager: writing a terminal emulator
+is out of scope. Pinned to 1.11.x on purpose: 1.12 and later add Metal shaders,
+which need Xcode's separate Metal Toolchain download to build, and 1.19 adds a
+build plugin Xcode asks you to trust. Revisit when the GPU renderer is worth
+that setup.
+
 ## Xcode project with a synchronized root group (2026-09-26)
 
 The project uses `PBXFileSystemSynchronizedRootGroup` (Xcode 16 and later), so
@@ -71,18 +125,53 @@ the project file. This removes the merge conflicts and churn that normally make
 diffs.
 
 Signing is ad-hoc (`CODE_SIGN_IDENTITY = "-"`) so the project builds with no
-developer team configured. A real team and notarization get added when there is
+developer team configured. `scripts/install.sh` overrides that for installed
+builds when an Apple Development certificate is available: an ad-hoc signature
+changes with every build, and macOS ties Keychain "Always Allow" to it, so each
+update asked for the API key again. A real team and notarization get added when there is
 something worth distributing.
 
-## Sandboxed, with user-selected file access (2026-09-26)
+## Not sandboxed; system git for writes and network (2026-09-26, revised)
 
-Enabled rather than disabled, despite being more work (security-scoped bookmarks
-are needed to remember repositories across launches). A tool that reads source code
-should be able to touch the repositories the user chose and nothing else.
+Revised the same day. The app started sandboxed with user-selected file access,
+so it could touch only the repositories the user picked. That stopped working
+once Adit took on push and pull: a sandboxed app can't read `~/.ssh`, the SSH
+agent, `~/.gitconfig`, or credential helpers, and every process it starts
+inherits the sandbox. The alternative, rebuilding libgit2 with its own HTTPS and
+SSH stacks and asking for `~/.ssh` through an open panel, was a lot of work for
+partial agent and `~/.ssh/config` support.
 
-## Open question: where the AI runs (undecided)
+So the sandbox is off, and Adit splits git work by what it needs:
 
-A hosted model API is simpler and better at writing prose. A local model keeps code
-on the machine, which some users will require. Undecided, and not needed until
-v0.2. Whichever ships first, the privacy behaviour is stated plainly in the UI and
-never silent.
+- **libgit2, in-process:** everything read often and fast. Status, history,
+  diffs, and index writes (stage, unstage, hunk and line staging, discard).
+- **System git, as a subprocess:** commit, branch switching, fetch, pull, push.
+  These are rare, so the 10 to 30 ms spawn cost doesn't matter, and they then
+  behave exactly like the terminal: same keys, agent, config, credential
+  helpers, signing, and hooks.
+
+Cost accepted: Adit can read anything the user can, and Mac App Store
+distribution is off the table (it requires the sandbox).
+
+## AI commit messages: hosted free models first (2026-09-26)
+
+Decides the earlier open question "where the AI runs" for now: hosted, starting
+with providers that offer free models, all through one OpenAI-compatible chat
+completions client. OpenCode Zen, Vercel AI Gateway, and OpenRouter, in that
+order. Only their free models are listed (zero-priced, or named as free where a
+provider's listing has no prices).
+
+Borrowed from Zed's git panel, which uses its language-model providers for this
+(not ACP; ACP runs agents in Zed's agent panel): staged diff if anything is
+staged, else every change; the diff squeezed to 20 KB; the user's subject line
+kept; the repository's agent rules file sent along; the reply streamed into the
+message box. Zed's code is GPL, so the prompt and truncation are written fresh,
+not copied.
+
+Privacy, as the architecture notes require: off until switched on in Settings,
+nothing sent until you press the button, the provider named on the button, and
+each provider's note about free-tier data use shown next to the model picker.
+Keys live in the Keychain.
+
+A local model is still open, for people who can't send code anywhere. ACP
+agents (opencode, Claude Code, Gemini CLI) are the other candidate for later.

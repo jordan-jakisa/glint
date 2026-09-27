@@ -1,0 +1,189 @@
+import Foundation
+
+/// Where a diff comes from.
+enum DiffSource: Hashable, Sendable {
+  /// One commit against its first parent.
+  case commit(String)
+  /// Uncommitted changes: HEAD to index when `staged`, index to working tree
+  /// otherwise. A nil `path` means every changed file.
+  case workingTree(staged: Bool, path: String?)
+  /// Everything the current branch changes since it split from its base,
+  /// uncommitted work included.
+  case branch
+
+  var commitID: String? {
+    if case .commit(let id) = self { return id }
+    return nil
+  }
+}
+
+/// A set of file changes, from a commit or from uncommitted work.
+struct Diff: Sendable {
+  let source: DiffSource
+  let files: [FileChange]
+  /// False for the first screenful of a very large diff, shown while the
+  /// rest is still being built.
+  var isComplete = true
+
+  /// The leading files up to about `lines` changed lines, marked
+  /// incomplete, or the whole diff when it's small enough. For painting the
+  /// first screen of a huge diff before the rest.
+  func firstScreen(lines budget: Int) -> Diff {
+    var count = 0
+    var files: [FileChange] = []
+    for file in self.files {
+      if count >= budget { return Diff(source: source, files: files, isComplete: false) }
+      files.append(file)
+      count += file.additions + file.deletions
+    }
+    return self
+  }
+
+  var additions: Int { files.reduce(0) { $0 + $1.additions } }
+  var deletions: Int { files.reduce(0) { $0 + $1.deletions } }
+}
+
+struct FileChange: Identifiable, Sendable {
+  enum Status: Sendable {
+    case added, deleted, modified, renamed, copied, typeChanged
+  }
+
+  /// Position in the diff. Stable for the lifetime of one `Diff`.
+  let id: Int
+  let status: Status
+  let oldPath: String?
+  let newPath: String?
+  let isBinary: Bool
+  let hunks: [Hunk]
+  let additions: Int
+  let deletions: Int
+
+  var path: String { newPath ?? oldPath ?? "" }
+
+  /// The same change at a new position, after the diff's files are reordered.
+  func renumbered(_ newID: Int) -> FileChange {
+    FileChange(
+      id: newID, status: status, oldPath: oldPath, newPath: newPath, isBinary: isBinary, hunks: hunks,
+      additions: additions, deletions: deletions)
+  }
+}
+
+struct Hunk: Identifiable, Sendable {
+  /// Position within its file.
+  let id: Int
+  let header: String
+  let oldStart: Int
+  let oldCount: Int
+  let newStart: Int
+  let newCount: Int
+  let lines: [DiffLine]
+  /// The same lines paired up for side-by-side display.
+  let splitRows: [SplitRow]
+
+  init(
+    id: Int, header: String, oldStart: Int, oldCount: Int, newStart: Int,
+    newCount: Int, lines: [DiffLine]
+  ) {
+    self.id = id
+    self.header = header
+    self.oldStart = oldStart
+    self.oldCount = oldCount
+    self.newStart = newStart
+    self.newCount = newCount
+    self.lines = lines
+    self.splitRows = SplitRow.pair(lines)
+  }
+}
+
+struct DiffLine: Sendable, Equatable {
+  enum Kind: Sendable {
+    case context, addition, deletion
+    /// "\ No newline at end of file". Carries no line numbers.
+    case noNewline
+  }
+
+  let kind: Kind
+  let oldNumber: Int?
+  let newNumber: Int?
+  let text: String
+  /// Width in monospaced columns with tabs expanded to 4, or -1 when the line
+  /// has non-ASCII text and has to be measured. Counted once, when the diff
+  /// is built off the main thread, so row heights are pure arithmetic.
+  let columns: Int
+
+  init(kind: Kind, oldNumber: Int?, newNumber: Int?, text: String) {
+    self.kind = kind
+    self.oldNumber = oldNumber
+    self.newNumber = newNumber
+    self.text = text
+    self.columns = Self.columns(of: text)
+  }
+
+  static let tabWidth = 4
+
+  static func columns(of text: String) -> Int {
+    var columns = 0
+    for byte in text.utf8 {
+      if byte == UInt8(ascii: "\t") {
+        columns += tabWidth - columns % tabWidth
+      } else if byte < 0x80 {
+        columns += 1
+      } else {
+        return -1
+      }
+    }
+    return columns
+  }
+}
+
+/// One row of the split view. Either side can be empty.
+struct SplitRow: Sendable, Equatable {
+  let left: DiffLine?
+  let right: DiffLine?
+
+  /// Pairs a hunk's lines the way side-by-side diff tools do: context lines sit
+  /// on both sides, and a run of deletions lines up against the run of
+  /// additions that follows it.
+  static func pair(_ lines: [DiffLine]) -> [SplitRow] {
+    var rows: [SplitRow] = []
+    rows.reserveCapacity(lines.count)
+    var deletions: [DiffLine] = []
+    var additions: [DiffLine] = []
+
+    func flush() {
+      for i in 0..<max(deletions.count, additions.count) {
+        rows.append(
+          SplitRow(
+            left: i < deletions.count ? deletions[i] : nil,
+            right: i < additions.count ? additions[i] : nil))
+      }
+      deletions.removeAll(keepingCapacity: true)
+      additions.removeAll(keepingCapacity: true)
+    }
+
+    for (index, line) in lines.enumerated() {
+      switch line.kind {
+      case .deletion:
+        if !additions.isEmpty { flush() }
+        deletions.append(line)
+      case .addition:
+        additions.append(line)
+      case .context:
+        flush()
+        rows.append(SplitRow(left: line, right: line))
+      case .noNewline:
+        // The marker belongs to whichever side the line before it was on.
+        let previous = index > 0 ? lines[index - 1].kind : .context
+        switch previous {
+        case .deletion: deletions.append(line)
+        case .addition: additions.append(line)
+        default:
+          flush()
+          rows.append(SplitRow(left: line, right: line))
+        }
+      }
+    }
+    flush()
+    return rows
+  }
+}

@@ -1,0 +1,211 @@
+import Foundation
+import Testing
+
+@testable import Glint
+
+@Suite struct RepositoryDiscoveryTests {
+  private func makeFolder(_ layout: [String]) throws -> URL {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("glint-ws-\(UUID().uuidString)")
+    for path in layout {
+      let url = root.appendingPathComponent(path)
+      if path.hasSuffix("/.git") && path.contains("worktree") {
+        // A linked worktree has a .git file, not a folder.
+        try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+        try Data("gitdir: /elsewhere\n".utf8).write(to: url)
+      } else {
+        try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+      }
+    }
+    return root
+  }
+
+  @Test func findsSiblingRepositoriesLikePapercheck() throws {
+    let root = try makeFolder([
+      "frontend/.git", "frontend/src", "backend/.git", "documents/.git", "docs/notes",
+    ])
+    defer { try? FileManager.default.removeItem(at: root) }
+    let found = RepositoryDiscovery.repositories(in: root)
+    #expect(found.map(\.relativePath) == ["backend", "documents", "frontend"])
+  }
+
+  @Test func findsNestedOnesAndWorktreesButNotInsideRepositories() throws {
+    let root = try makeFolder([
+      "apps/web/.git",
+      "apps/web/packages/inner/.git",
+      "services/api/worktree/.git",
+      "node_modules/pkg/.git",
+      ".hidden/repo/.git",
+      "a/b/c/d/.git",
+    ])
+    defer { try? FileManager.default.removeItem(at: root) }
+    let found = RepositoryDiscovery.repositories(in: root)
+    // web is found but not searched inside; dependency and hidden folders are
+    // skipped; four levels down is past the limit.
+    #expect(found.map(\.relativePath) == ["apps/web", "services/api/worktree"])
+  }
+
+  @Test func emptyFolderHasNone() throws {
+    let root = try makeFolder(["just/files"])
+    defer { try? FileManager.default.removeItem(at: root) }
+    #expect(RepositoryDiscovery.repositories(in: root).isEmpty)
+  }
+}
+
+@Suite struct WorkspaceOpeningTests {
+  @Test func folderOfRepositoriesOpensAsAWorkspace() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("glint-wsopen-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for name in ["backend", "frontend"] {
+      _ = try await SystemGit(directory: root).run(["init", "-q", "-b", "main", name])
+    }
+    try Data("x\n".utf8).write(to: root.appendingPathComponent("frontend/new.txt"))
+
+    let opened = try await RepositorySession.load(root)
+    let workspace = try #require(opened.workspace)
+    #expect(workspace.repositories.map(\.relativePath) == ["backend", "frontend"])
+    #expect(opened.repository.url.standardizedFileURL.lastPathComponent == "backend")
+
+    // Reopening lands on the repository used last.
+    WorkspaceMemory.remember("frontend", in: root)
+    let reopened = try await RepositorySession.load(root)
+    #expect(reopened.repository.url.lastPathComponent == "frontend")
+    #expect(reopened.status.unstaged.map(\.path) == ["new.txt"])
+  }
+
+  @Test func folderWithNoRepositoriesSaysSo() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("glint-wsnone-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root.appendingPathComponent("docs"), withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    await #expect(throws: GitError.self) { _ = try await RepositorySession.load(root) }
+  }
+
+  @Test func summaryCountsAPartlyStagedFileOnce() {
+    let summary = RepositorySummary(
+      branch: "main",
+      status: WorkingTreeStatus(
+        staged: [ChangedFile(path: "a", kind: .modified)],
+        unstaged: [ChangedFile(path: "a", kind: .modified), ChangedFile(path: "b", kind: .untracked)]))
+    #expect(summary.changeCount == 2)
+  }
+}
+
+@MainActor
+@Suite struct WorkspaceSessionTests {
+  @Test func summariesCoverEveryRepositoryAndSwitchingFollows() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("glint-wssession-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for name in ["api", "web"] {
+      _ = try await SystemGit(directory: root).run(["init", "-q", "-b", "main", name])
+    }
+    try Data("1\n".utf8).write(to: root.appendingPathComponent("web/a.txt"))
+    try Data("2\n".utf8).write(to: root.appendingPathComponent("web/b.txt"))
+    WorkspaceMemory.remember("api", in: root)
+
+    let session = RepositorySession()
+    session.install(try await RepositorySession.load(root))
+    await session.summaryTask?.value
+
+    #expect(session.workspace?.repositories.count == 2)
+    #expect(session.activeWorkspaceRepository?.relativePath == "api")
+    #expect(session.repositorySummaries["api"]?.changeCount == 0)
+    #expect(session.repositorySummaries["web"]?.changeCount == 2)
+    #expect(session.otherRepositoriesHaveChanges)
+
+    // Switching keeps the unsent message with the repository it was for.
+    session.commitMessage = "api draft"
+    session.install(try await RepositorySession.load(root.appendingPathComponent("web"), in: session.workspace))
+    #expect(session.activeWorkspaceRepository?.relativePath == "web")
+    #expect(session.commitMessage == "")
+    #expect(session.status.unstaged.count == 2)
+    #expect(WorkspaceMemory.activeRepository(in: root) == "web")
+    session.install(try await RepositorySession.load(root.appendingPathComponent("api"), in: session.workspace))
+    #expect(session.commitMessage == "api draft")
+  }
+}
+
+@MainActor
+@Suite struct AllRepositoriesTests {
+  @Test func listsOtherRepositoriesAndOpensTheirFiles() async throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("glint-wsall-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+    for name in ["api", "web"] {
+      _ = try await SystemGit(directory: root).run(["init", "-q", "-b", "main", name])
+    }
+    try Data("1\n".utf8).write(to: root.appendingPathComponent("web/page.txt"))
+    WorkspaceMemory.remember("api", in: root)
+
+    let session = RepositorySession()
+    let previous = session.showsAllRepositories
+    defer { session.showsAllRepositories = previous }
+    session.install(try await RepositorySession.load(root))
+    await session.summaryTask?.value
+
+    session.showsAllRepositories = false
+    #expect(session.otherRepositoryChanges.isEmpty)
+    session.showsAllRepositories = true
+    let groups = session.otherRepositoryChanges
+    #expect(groups.map(\.repository.relativePath) == ["web"])
+    #expect(groups.first?.files == [ChangeSelection(staged: false, path: "page.txt")])
+
+    // Picking that file switches to web and lands on it.
+    let web = try #require(groups.first?.repository)
+    session.install(
+      try await RepositorySession.load(web.url, in: session.workspace),
+      selecting: ChangeSelection(staged: false, path: "page.txt"))
+    #expect(session.activeWorkspaceRepository?.relativePath == "web")
+    #expect(session.selectedChange == ChangeSelection(staged: false, path: "page.txt"))
+  }
+}
+
+@Suite struct WorkspaceRulesTests {
+  @Test func fallsBackToTheWorkspaceFolder() throws {
+    let root = FileManager.default.temporaryDirectory.appendingPathComponent("glint-wsrules-\(UUID().uuidString)")
+    let repo = root.appendingPathComponent("api")
+    try FileManager.default.createDirectory(at: repo, withIntermediateDirectories: true)
+    defer { try? FileManager.default.removeItem(at: root) }
+
+    #expect(RepositorySession.rules(for: repo, workspace: root) == nil)
+    try Data("Workspace rules\n".utf8).write(to: root.appendingPathComponent("CLAUDE.md"))
+    #expect(RepositorySession.rules(for: repo, workspace: root) == "Workspace rules")
+    try Data("Repository rules\n".utf8).write(to: repo.appendingPathComponent("AGENTS.md"))
+    #expect(RepositorySession.rules(for: repo, workspace: root) == "Repository rules")
+    #expect(RepositorySession.rules(for: repo, workspace: nil) == "Repository rules")
+  }
+}
+
+@Suite struct TerminalAppTests {
+  @Test func ghosttyGetsTheFolderAsAnArgument() {
+    let folder = URL(fileURLWithPath: "/tmp/some repo")
+    let ghostty = TerminalApp.ghostty.launchRequest(at: folder)
+    #expect(ghostty.openFolder == false)
+    #expect(ghostty.arguments == ["--working-directory=/tmp/some repo"])
+    #expect(ghostty.newInstance)
+    let terminal = TerminalApp.terminal.launchRequest(at: folder)
+    #expect(terminal.openFolder)
+    #expect(terminal.arguments.isEmpty)
+  }
+}
+
+@MainActor
+@Suite struct FileEventRoutingTests {
+  @Test func editedFilesGetAPartialStatusEvenThroughASymlink() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("Base", files: ["a.txt": "1\n", "b.txt": "1\n"])
+    let session = RepositorySession()
+    // temporaryDirectory is under /var, a symlink to /private/var.
+    session.install(try await RepositorySession.load(fixture.url))
+    #expect(session.status.isClean)
+
+    try fixture.write("b.txt", "2\n")
+    let real = fixture.url.resolvingSymlinksInPath().appendingPathComponent("b.txt").path
+    var change = RepositoryWatcher.Change()
+    change.workingTree = true
+    change.paths = [real: .workingTree]
+    session.filesChanged(change)
+    await session.statusTask?.value
+    #expect(session.status.unstaged.map(\.path) == ["b.txt"])
+  }
+}
