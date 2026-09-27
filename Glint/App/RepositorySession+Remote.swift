@@ -72,7 +72,10 @@ extension RepositorySession {
           }
         acknowledge { $0.syncOutcome = outcome } until: { $0.syncOutcome = nil }
       } catch {
-        alert = UserAlert("Couldn't \(operation.verb)", error: error)
+        var failed = UserAlert("Couldn't \(operation.verb)", error: error)
+        failed.canRetry = true
+        retryAlertAction = { [weak self] in self?.runNetwork(operation, arguments) }
+        alert = failed
       }
       refresh()
     }

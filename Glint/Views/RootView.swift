@@ -36,6 +36,16 @@ struct RootView: View {
           Button("Open Settings") { openSettings() }
             .keyboardShortcut(.defaultAction)
           Button("Not Now", role: .cancel) {}
+        } else if alert.canRetry {
+          Button("Try Again") { session.retryAlertAction?() }
+            .keyboardShortcut(.defaultAction)
+          Button("Cancel", role: .cancel) {}
+          if let details = alert.details {
+            Button("Copy Details") {
+              NSPasteboard.general.clearContents()
+              NSPasteboard.general.setString(details, forType: .string)
+            }
+          }
         } else {
           Button("OK") {}
             .keyboardShortcut(.defaultAction)

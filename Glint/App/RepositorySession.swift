@@ -44,6 +44,8 @@ final class RepositorySession {
   }
   /// Shown as an alert: failures of actions the user asked for.
   var alert: UserAlert?
+  /// What Try Again in the current alert runs, if it has one.
+  @ObservationIgnored var retryAlertAction: (() -> Void)?
   /// Files waiting for the user to confirm a discard.
   var pendingDiscard: [ChangedFile]?
 

@@ -39,4 +39,9 @@ import Testing
     #expect(alert.message == "Couldn't stage Cart.swift.")
     #expect(alert.details?.contains("failed to stat") == true)
   }
+
+  @Test func connectionFailuresSayToCheckTheConnection() {
+    let text = "fatal: unable to access 'https://github.com/me/app.git/': Failed to connect to github.com port 443 after 31 ms: Couldn't connect to server"
+    #expect(UserAlert.advice(forGit: text) == "Couldn't reach the remote. Check your connection, then try again.")
+  }
 }

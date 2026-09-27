@@ -8,6 +8,8 @@ struct UserAlert: Equatable, Sendable {
   var details: String?
   /// Setup hints (AI not configured) offer Settings instead of just OK.
   var opensSettings = false
+  /// A network command that failed can be run again from the alert.
+  var canRetry = false
 
   /// `title` says what failed ("Couldn't push"); the message comes from the
   /// error, in plain words.
@@ -61,9 +63,10 @@ struct UserAlert: Equatable, Sendable {
     }
     if has(
       "could not resolve host", "network is unreachable", "connection timed out", "operation timed out",
-      "connection refused", "could not connect to server")
+      "connection refused", "could not connect to server", "couldn't connect to server", "failed to connect to",
+      "connection reset", "network is down", "ssl_error", "connection timed out")
     {
-      return "Couldn't reach the remote. Check your connection and try again."
+      return "Couldn't reach the remote. Check your connection, then try again."
     }
     if has("repository not found", "does not appear to be a git repository") {
       return "The remote isn't there, or you don't have access to it. Check the remote's URL with git remote -v \(inTerminal)."
