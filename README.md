@@ -1,59 +1,71 @@
 <p align="center">
-  <img src="docs/assets/icon.png" width="128" height="128" alt="Glint icon: a prompt whose cursor glows violet">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/assets/banner-dark.png">
+    <img src="docs/assets/banner-light.png" alt="Glint: every change, at a glance. A fast, native git panel for the Mac." width="820">
+  </picture>
 </p>
 
-<h1 align="center">Glint</h1>
+<p align="center">
+  <img src="https://img.shields.io/badge/macOS-15%2B-111?logo=apple" alt="macOS 15 or later">
+  <img src="https://img.shields.io/badge/Swift-6-F05138?logo=swift&logoColor=white" alt="Swift 6">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-5B47F0" alt="MIT license"></a>
+  <a href="https://github.com/jordan-jakisa/glint/stargazers"><img src="https://img.shields.io/github/stars/jordan-jakisa/glint?style=social" alt="GitHub stars"></a>
+</p>
 
-<p align="center"><strong>Every change, at a glance.</strong></p>
+Glint is a small, native Mac app for the thing i do dozens of times a day: look at
+what changed, stage the right bits, and commit with a message that actually says
+why.
 
-A fast, native macOS git panel: read the diff, stage exactly what you mean, and
-commit with a message that says why. With AI-written commit messages from free
-models.
+Here is the thing. Every time i wanted to read a diff, i had to open a full git
+client, wait for it, and dig through branches, stashes, and remotes just to find
+the one panel i came for. That is too slow for something you do this often. So i
+built Glint around one rule: speed is the product. You open it, you look, you get
+back to work.
 
-A *glint* is a quick flash of light: the one look you need to see what changed.
-Glint was called Adit until 2026-09-26; it brings your settings and keys over
-on first launch.
+<p align="center">
+  <img src="docs/assets/screenshot-changes.png" alt="Glint showing a staged file and a side-by-side diff with hunk staging" width="900">
+</p>
 
-## Why this exists
+## Features
 
-Reviewing a diff and writing a commit message means leaving whatever you are doing
-and opening a full git client. The existing macOS options (Tower, Fork, Sourcetree)
-are repository managers: they do branching, remotes, rebasing, stashing, and the
-diff is one panel among many. Glint does the two things you actually do dozens of
-times a day, and nothing else:
+- **Your changes, live.** Every file you touch shows up as you save, with its diff
+  right there, unified or side by side. Huge diffs paint their first screen at once.
+- **Stage exactly what you mean.** Whole files, single hunks, or just the lines you
+  pick.
+- **Commit, amend, undo.** Undo puts your last commit back into staging, message
+  and all.
+- **Commit messages that say why.** A free AI model writes the message from your
+  staged changes, and falls back to another free model when one is busy. Your diff
+  is only sent when you press the sparkle button.
+- **History.** Every commit's diff, plus everything on your branch compared with
+  main.
+- **Branches and remotes.** Switch or create branches, then fetch, pull, and push
+  with your own git, so your SSH keys, hooks, and signing all just work.
+- **A terminal with tabs**, right under the diff, for the commands around a commit.
+- **Folders of repositories.** Open a folder that holds several repos and switch
+  between them, or jump between recent projects from the title.
+- **Keyboard first.** Every shortcut can be changed in Settings.
 
-1. Read the diff.
-2. Write the commit message.
-
-Speed is the product. If it is not instant it has failed.
+<p align="center">
+  <img src="docs/assets/screenshot-history.png" alt="Glint's History tab with the commit list and a commit's diff" width="900">
+</p>
 
 ## Install
 
-Download `Glint-<version>.dmg` from the latest
-[release](https://github.com/jordan-jakisa/glint/releases), open it, and drag
+Grab `Glint-<version>.dmg` from the
+[releases page](https://github.com/jordan-jakisa/glint/releases), open it, and drag
 Glint to Applications. Or with Homebrew:
 
 ```bash
 brew install --cask jordan-jakisa/tap/glint
 ```
 
-Needs macOS 15 or later. On first launch Glint walks you through setting up AI
-commit messages (a free API key from OpenCode Zen, Vercel AI Gateway, or
-OpenRouter) and opening your first project.
-
-## What it does
-
-- Your uncommitted changes and any commit's diff, unified or split, updating as
-  you save.
-- Stage files, hunks, or single lines. Commit, amend, and undo the last commit.
-- Switch and create branches; fetch, pull, and push with your own git, so SSH
-  keys, hooks, and signing work as in the terminal.
-- A built-in terminal with tabs.
-- Folders that hold several repositories, with a switcher for each and for your
-  recent projects.
-- Commit messages that say why, written by free AI models. Your diff is sent
-  only when you ask.
-- Every shortcut can be changed in Settings.
+You need macOS 15 or later. The first time you open Glint, it walks you through
+three quick steps: what it does, a free API key for the AI messages (from
+[OpenRouter](https://openrouter.ai/settings/keys),
+[OpenCode Zen](https://opencode.ai/docs/zen/), or
+[Vercel AI Gateway](https://vercel.com/docs/ai-gateway/authentication-and-byok)),
+and your first project. The key goes into your Mac's Keychain, never anywhere else.
 
 ## Keys
 
@@ -80,36 +92,58 @@ All of these can be changed in Settings > Shortcuts.
 | `⌘\` | Unified or split |
 | `⌘R` | Reload |
 
-## Build
+## Running locally
+
+1. Clone the repository:
+
+   ```bash
+   git clone https://github.com/jordan-jakisa/glint.git
+   ```
+
+2. Open `Glint.xcodeproj` in Xcode 27 or later and press Run. Or from the
+   terminal:
+
+   ```bash
+   xcodebuild -project Glint.xcodeproj -scheme Glint -configuration Debug build
+   ```
+
+3. To build a Release copy and install it to `/Applications`, run
+   `scripts/install.sh`. It signs with your Apple Development certificate if you
+   have one, and ad hoc if you don't, so you don't need a developer team to try it.
+
+Run the tests with:
 
 ```bash
-xcodebuild -project Glint.xcodeproj -scheme Glint -configuration Debug build
+xcodebuild -project Glint.xcodeproj -scheme Glint test
 ```
 
-Or open `Glint.xcodeproj` in Xcode and press Run. To build and install to
-`/Applications`, run `scripts/install.sh`; it signs with your Apple Development
-certificate if you have one, so macOS keeps Keychain permissions across updates. Requires Xcode 27 or later and
-macOS 15 or later. Signs ad-hoc when there's no certificate, so no developer team
-is needed for local builds. Releases: `docs/RELEASING.md`.
+## How it's built
 
-## Layout
+- **SwiftUI and AppKit, Swift 6** with complete strict concurrency. The diff is an
+  `NSTableView` that draws its rows directly with Core Text, so scrolling through
+  thousands of lines stays smooth.
+- **libgit2**, vendored in `Packages/Clibgit2`, for everything read often: status,
+  history, diffs, and staging.
+- **Your own git** for commit, branch switching, fetch, pull, and push, so it
+  behaves exactly like your terminal.
+- **SwiftTerm** for the built-in terminal.
+- **Free hosted models** over an OpenAI-compatible API for commit messages.
 
-```
-Glint.xcodeproj      Xcode project. Uses a synchronized root group, so files added
-                    on disk are picked up with no project-file edits.
-Glint/               All app source.
-docs/               Architecture, decision log, and plans.
-```
+If you want to go deeper, `docs/ARCHITECTURE.md` explains the layering and why
+each piece was chosen, and `docs/DECISIONS.md` keeps the decisions and their
+evidence. Releases are in `docs/RELEASING.md`.
 
-## Docs
+## Contributing
 
-- `docs/ARCHITECTURE.md` - layering and the stack, with reasons.
-- `docs/DECISIONS.md` - the decision log. Read before re-litigating a choice.
-- `docs/plans/` - one file per planned release.
-- `docs/BRAND.md` - name, icon, colors, and voice.
+Pull requests are welcome. For bigger changes, please open an issue first so we
+can talk it through. Glint stays small on purpose: if a change doesn't make reading
+a diff or writing a commit message faster, it probably doesn't belong.
 
 ## License
 
-MIT, see `LICENSE`. Glint ships with libgit2 (GPLv2 with the linking exception)
-and SwiftTerm (MIT); their licences are in `Glint/Acknowledgements.txt` and under
-Help > Acknowledgements in the app.
+Glint is MIT licensed, see [LICENSE](LICENSE). It ships with libgit2 (GPLv2 with
+the linking exception) and SwiftTerm (MIT); their licences are in
+`Glint/Acknowledgements.txt` and under Help > Acknowledgements in the app.
+
+Thank you for checking it out. If it saves you a few seconds a day, that's the
+whole point.
