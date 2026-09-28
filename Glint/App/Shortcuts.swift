@@ -107,7 +107,7 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
   case biggerText, smallerText, actualTextSize, toggleMinimal
   case stashAll, popStash, viewStashes, toggleBlame
   case splitTerminalRight, splitTerminalDown, focusPaneLeft, focusPaneRight, focusPaneUp, focusPaneDown
-  case switchProject, switchRepository, switchBranch, writeMessage, commit
+  case switchProject, switchRepository, switchBranch, writeMessage, commit, amendCommit
   case fetch, pull, push
   case nextFile, previousFile, stageAll, unstageAll
   case nextItem, previousItem, nextHunk, previousHunk, toggleCollapsed, toggleStaged, stagePartial,
@@ -145,6 +145,7 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .switchBranch: "Switch Branch…"
     case .writeMessage: "Write Commit Message with AI"
     case .commit: "Commit"
+    case .amendCommit: "Amend Last Commit"
     case .fetch: "Fetch"
     case .pull: "Pull"
     case .push: "Push"
@@ -180,7 +181,8 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .reload: Shortcut("r", command: true)
     case .toggleLayout: Shortcut("\\", command: true)
     case .showTerminal: Shortcut("t", command: true)
-    case .maximizeTerminal: Shortcut("return", command: true, shift: true)
+    // ⌘⇧↩ is Zed's Amend, so maximize takes ⌥⌘↩.
+    case .maximizeTerminal: Shortcut("return", command: true, option: true)
     case .newTerminalTab: Shortcut("t", command: true, shift: true)
     case .closeTerminalTab: Shortcut("w", command: true, option: true)
     case .toggleMinimal: Shortcut("m", command: true, control: true)
@@ -203,6 +205,7 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .switchBranch: Shortcut("b", command: true)
     case .writeMessage: Shortcut("g", command: true, option: true)
     case .commit: Shortcut("return", command: true)
+    case .amendCommit: Shortcut("return", command: true, shift: true)
     case .fetch: Shortcut("f", command: true, option: true)
     case .pull: Shortcut("p", command: true, option: true)
     case .push: Shortcut("p", command: true, option: true, shift: true)

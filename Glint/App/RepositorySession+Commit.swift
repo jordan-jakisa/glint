@@ -30,6 +30,7 @@ extension RepositorySession {
     if isAmending { arguments.append("--amend") }
     if !isAmending, commitsTrackedChanges { arguments.append("-a") }
     if signsOff { arguments.append("--signoff") }
+    if skipsHooks { arguments.append("--no-verify") }
     let message = commitMessage
     let git = SystemGit(directory: repository.url)
     isCommitting = true
@@ -51,6 +52,7 @@ extension RepositorySession {
         acknowledge { $0.justCommitted = true } until: { $0.justCommitted = false }
         aiNote = nil
         isAmending = false
+        skipsHooks = false
       } catch {
         alert = UserAlert("The commit didn't go through", error: error)
       }
@@ -74,6 +76,15 @@ extension RepositorySession {
       }
       refresh()
     }
+  }
+
+  /// Zed's Amend (⌘⇧↩): amends the last commit with the message in the box,
+  /// or its own message if the box is empty.
+  func amendNow() {
+    guard lastCommit != nil else { return }
+    if !isAmending { isAmending = true }
+    guard !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    commit()
   }
 
   func prefillAmendMessage() {

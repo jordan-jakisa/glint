@@ -56,7 +56,8 @@ struct CommitPanel: View {
       Menu {
         Toggle("Amend", isOn: $session.isAmending)
           .disabled(session.lastCommit == nil)
-        Toggle("Sign Off", isOn: $session.signsOff)
+        Toggle("Signoff", isOn: $session.signsOff)
+        Toggle("Skip Hooks", isOn: $session.skipsHooks)
       } label: {
         Text(session.commitButtonTitle)
       } primaryAction: {
@@ -98,7 +99,7 @@ struct CommitPanel: View {
         .fixedSize()
         .disabled(session.lastCommit == nil)
         .help("Replace the last commit instead of adding a new one")
-      Toggle("Sign Off", isOn: $session.signsOff)
+      Toggle("Signoff", isOn: $session.signsOff)
         .toggleStyle(.checkbox)
         .fixedSize()
         .help("Add a Signed-off-by line with your name and email")

@@ -67,6 +67,9 @@ struct GlintCommands: Commands {
       Button("Force Push") { session?.forcePush() }
         .disabled(!isReady)
 
+      Button(AppCommand.amendCommit.title) { session?.amendNow() }
+        .shortcut(.amendCommit)
+        .disabled(!isReady)
       Button(AppCommand.writeMessage.title) {
         session?.tab = .changes
         session?.generateCommitMessage()

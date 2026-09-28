@@ -123,6 +123,8 @@ final class RepositorySession {
   var signsOff = UserDefaults.standard.bool(forKey: "commitSignOff") {
     didSet { UserDefaults.standard.set(signsOff, forKey: "commitSignOff") }
   }
+  /// Zed's Skip Hooks: commits with `--no-verify`, for the next commit only.
+  var skipsHooks = false
   /// View File History: the file History is narrowed to, and its commits.
   internal(set) var historyPath: String?
   internal(set) var fileCommits: [Commit] = []
