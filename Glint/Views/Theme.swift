@@ -157,6 +157,16 @@ final class Theme {
   }
 }
 
+/// The app's only motion. Speed is the product, so almost nothing moves:
+/// repeated paths are instant, and Reduce Motion turns this off too.
+@MainActor
+enum Motion {
+  /// A panel growing to make room, like Minimal's commit box.
+  static var reveal: Animation? {
+    NSWorkspace.shared.accessibilityDisplayShouldReduceMotion ? nil : .snappy(duration: 0.15)
+  }
+}
+
 extension Color {
   /// The accent you picked in Settings, in place of `Color.accentColor`.
   @MainActor static var themeAccent: Color { Color(nsColor: Theme.shared.accentColor) }

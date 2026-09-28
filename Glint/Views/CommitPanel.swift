@@ -22,6 +22,9 @@ struct CommitPanel: View {
         LastCommitRow(commit: last, justCommitted: session.justCommitted, undo: session.undoLastCommit)
       }
     }
+    // Grows in one step as you start a message; collapses instantly, since
+    // that happens after every commit.
+    .animation(isExpanded ? Motion.reveal : nil, value: isExpanded)
     .onChange(of: session.messageFocusRequest, initial: true) { _, request in
       guard let request else { return }
       messageFocused = request
@@ -70,7 +73,6 @@ struct CommitPanel: View {
       .scrollContentBackground(.hidden)
       .focused($messageFocused)
       .frame(height: isExpanded ? 84 : 24)
-      .animation(.snappy(duration: 0.15), value: isExpanded)
       .padding(.horizontal, 6)
       .padding(.top, 6)
       .overlay(alignment: .topLeading) {

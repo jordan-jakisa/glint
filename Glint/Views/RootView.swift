@@ -2,7 +2,8 @@ import SwiftUI
 
 struct RootView: View {
   @State private var session = RepositorySession()
-  @State private var columns = NavigationSplitViewVisibility.all
+  @State private var columns: NavigationSplitViewVisibility =
+    UserDefaults.standard.bool(forKey: "sidebarHidden") ? .detailOnly : .all
   @Environment(\.openSettings) private var openSettings
 
   var body: some View {
@@ -86,6 +87,8 @@ struct RootView: View {
           .id(Theme.shared.usesLiquidGlass)
       }
       .toolbar(removing: .title)
+      // Remembered between launches, like the terminal.
+      .onChange(of: columns) { UserDefaults.standard.set(columns == .detailOnly, forKey: "sidebarHidden") }
       .modifier(MinimalChrome(session: session, columns: $columns))
     }
   }
@@ -180,9 +183,8 @@ private struct DiffAndTerminal: View {
       .padding(.vertical, 3)
       .contentShape(Rectangle())
       .padding(.vertical, -3)
-      .onHover { inside in
-        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
-      }
+      // Holds through a drag, unlike a pushed cursor.
+      .pointerStyle(.rowResize)
       .gesture(
         DragGesture(minimumDistance: 1, coordinateSpace: .global)
           .onChanged { drag in
@@ -248,7 +250,7 @@ private struct DiffToolbar: ViewModifier {
 
   private var sidebarButton: some View {
     Button {
-      withAnimation { columns = columns == .detailOnly ? .all : .detailOnly }
+      withAnimation(Motion.reveal) { columns = columns == .detailOnly ? .all : .detailOnly }
     } label: {
       Label("Sidebar", systemImage: "sidebar.left")
     }

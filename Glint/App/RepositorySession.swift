@@ -50,7 +50,9 @@ final class RepositorySession {
     }
   }
   /// The terminal fills the diff's space. Hiding the terminal restores it.
-  var isTerminalMaximized = false
+  var isTerminalMaximized = UserDefaults.standard.bool(forKey: "terminalMaximized") {
+    didSet { UserDefaults.standard.set(isTerminalMaximized, forKey: "terminalMaximized") }
+  }
   /// Lists the other repositories' changes under the active one's.
   var showsAllRepositories = UserDefaults.standard.bool(forKey: "showsAllRepositories") {
     didSet { UserDefaults.standard.set(showsAllRepositories, forKey: "showsAllRepositories") }
@@ -252,6 +254,10 @@ final class RepositorySession {
   init() {
     layout = UserDefaults.standard.string(forKey: Self.layoutKey)
       .flatMap(DiffLayout.init(rawValue:)) ?? .unified
+    terminals.lastTabClosed = { [weak self] folder in
+      guard let self, folder == self.repositoryURL?.standardizedFileURL else { return }
+      self.isTerminalShown = false
+    }
   }
 
   private func rebuildRows(_ change: RowsChange) {

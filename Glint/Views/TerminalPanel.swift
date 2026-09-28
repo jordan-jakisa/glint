@@ -151,6 +151,9 @@ final class TerminalTab: Identifiable {
 final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
   private(set) var tabs: [URL: [TerminalTab]] = [:]
   private(set) var selected: [URL: UUID] = [:]
+  /// Called when a repository's last tab closes on its own (you typed
+  /// `exit`), so the panel hides instead of starting a new shell.
+  @ObservationIgnored var lastTabClosed: (URL) -> Void = { _ in }
   @ObservationIgnored private var textSizeObserver: NSObjectProtocol?
   @ObservationIgnored private var themeObserver: NSObjectProtocol?
 
@@ -366,7 +369,7 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
   nonisolated func processTerminated(source: TerminalView, exitCode: Int32?) {
     Task { @MainActor in
       guard let (folder, tab) = self.find(source), let view = source as? GlintTerminalView else { return }
-      self.closePane(view, of: tab, in: folder)
+      if !self.closePane(view, of: tab, in: folder) { self.lastTabClosed(folder) }
     }
   }
 }
@@ -464,10 +467,8 @@ private struct PaneSplit<First: View, Second: View>: View {
       .padding(axis == .horizontal ? .horizontal : .vertical, 3)
       .contentShape(Rectangle())
       .padding(axis == .horizontal ? .horizontal : .vertical, -3)
-      .onHover { inside in
-        let cursor: NSCursor = axis == .horizontal ? .resizeLeftRight : .resizeUpDown
-        if inside { cursor.push() } else { NSCursor.pop() }
-      }
+      // Holds through a drag, unlike a pushed cursor.
+      .pointerStyle(axis == .horizontal ? .columnResize : .rowResize)
       .gesture(
         DragGesture(minimumDistance: 1, coordinateSpace: .global)
           .onChanged { drag in
