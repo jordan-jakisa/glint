@@ -138,3 +138,26 @@ Settings and Minimal, in light and dark. The first pass is
 Tier 1 in order, one commit each, then Tiers 2 to 4. Build and tests after
 each tier; screenshots in light, dark and Minimal at the end, then re-score
 here.
+
+## Result (re-scored after the work)
+
+| # | Criterion | Before | After | What changed |
+|---|---|---|---|---|
+| 1 | Anticipates needs | 1 | 2 | Focus goes to the terminal only when you ask for it; maximize puts you in the shell; closing a pane moves to its neighbour; sidebar and maximize are remembered |
+| 2 | Intentional transitions | 1 | 2 | Commit box grows in one step; text size and theme keep your line and selections; status-line tabs don't shift |
+| 3 | Delight | 2 | 2 | Unchanged |
+| 4 | Knows when not to animate | 1 | 2 | One `Motion.reveal` token, off with Reduce Motion; no animation after commits |
+| 5 | Invisible consistency | 1 | 2 | App font in every list; badges follow text size; two weights; 22 pt targets; status colours clear of the diff pair; one terminal toggle |
+| 6 | Empty states | 1 | 2 | Minimal keeps Pull, Push and Publish; folded panes say "+1 pane"; `exit` hides the panel |
+| 7 | Rewards discovery | 1 | 2 | Minimal reaches every command (status line, ⌃⌘S, ⌃⌘M); Split button with keys; Settings tooltips name their keys |
+| 8 | Prescriptive errors | 1 | 2 | Diff load errors in plain words, titled in Minimal |
+| 9 | Premium performance | 1 | 1 | Unchanged; the budgets remain their own track |
+
+Also done during the pass, on request: Zed's fonts (IBM Plex Sans for the
+interface, Lilex for code) replace JetBrains Mono, and ⌃⌘M toggles Minimal.
+
+Not done: Tier 3.2 (switching Interface or Liquid Glass still rebuilds the
+window, losing scroll). macOS 15's toolbar builder can't drop items
+conditionally without a rebuild; it's a rare, deliberate switch. The pane
+context menu from Tier 4.1 is left out: SwiftTerm owns the terminal's
+right-click.
