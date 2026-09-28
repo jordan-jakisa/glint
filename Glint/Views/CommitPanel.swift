@@ -48,6 +48,15 @@ struct CommitPanel: View {
         .toggleStyle(.checkbox)
         .help("Add a Signed-off-by line with your name and email")
       Spacer()
+      // Zed's 72-character guide for the summary line, as a count.
+      if let summary = session.commitMessage.split(separator: "\n", omittingEmptySubsequences: false).first,
+        !summary.isEmpty
+      {
+        Text("\(summary.count)")
+          .font(.code(.caption))
+          .foregroundStyle(summary.count > 72 ? Color(nsColor: Theme.shared.modified) : .secondary)
+          .help(summary.count > 72 ? "The first line is over 72 characters, where git tools wrap it" : "Characters in the first line (72 fits everywhere)")
+      }
       DelayedSpinner(isActive: session.isCommitting)
       Button(session.commitButtonTitle, action: session.commit)
         .shortcut(.commit)

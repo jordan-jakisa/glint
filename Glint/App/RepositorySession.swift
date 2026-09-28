@@ -285,7 +285,7 @@ final class RepositorySession {
 
   init() {
     layout = UserDefaults.standard.string(forKey: Self.layoutKey)
-      .flatMap(DiffLayout.init(rawValue:)) ?? .unified
+      .flatMap(DiffLayout.init(rawValue:)) ?? .split
     NotificationCenter.default.addObserver(forName: Self.preferencesChanged, object: nil, queue: .main) {
       [weak self] _ in
       MainActor.assumeIsolated { self?.reloadPreferences() }
