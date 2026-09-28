@@ -86,9 +86,11 @@ struct Hunk: Identifiable, Sendable {
   /// The same lines paired up for side-by-side display.
   let splitRows: [SplitRow]
 
+  /// With `wordDiff`, paired changed lines get their changed words marked
+  /// (see `WordDiff`). Built where the diff is, off the main thread.
   init(
     id: Int, header: String, oldStart: Int, oldCount: Int, newStart: Int,
-    newCount: Int, lines: [DiffLine]
+    newCount: Int, lines: [DiffLine], wordDiff: Bool = false
   ) {
     self.id = id
     self.header = header
@@ -96,6 +98,7 @@ struct Hunk: Identifiable, Sendable {
     self.oldCount = oldCount
     self.newStart = newStart
     self.newCount = newCount
+    let lines = wordDiff ? WordDiff.emphasize(lines) : lines
     self.lines = lines
     self.splitRows = SplitRow.pair(lines)
   }
@@ -116,6 +119,10 @@ struct DiffLine: Sendable, Equatable {
   /// has non-ASCII text and has to be measured. Counted once, when the diff
   /// is built off the main thread, so row heights are pure arithmetic.
   let columns: Int
+  /// The changed words of a changed line paired with one on the other side,
+  /// as UTF-16 offsets into `text`, drawn as a stronger tint. Empty for most
+  /// lines. See `WordDiff`.
+  var emphasis: [Range<Int>] = []
 
   init(kind: Kind, oldNumber: Int?, newNumber: Int?, text: String) {
     self.kind = kind

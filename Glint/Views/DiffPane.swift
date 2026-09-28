@@ -31,6 +31,7 @@ struct DiffPane: View {
             partialAction: session.partialAction,
             selectionChanged: session.lineSelectionChanged,
             hunkAction: session.stageHunk,
+            restoreHunk: restoreHunk,
             editLines: editLines)
         }
       }
@@ -58,6 +59,13 @@ struct DiffPane: View {
     guard session.canEditDiff else { return nil }
     let session = session
     return { session.beginEdit($0) }
+  }
+
+  /// Restore sits beside Stage Hunk, only on your unstaged working copy.
+  private var restoreHunk: ((DiffRowID) -> Void)? {
+    guard session.canRestoreHunks else { return nil }
+    let session = session
+    return { session.requestRestoreHunk($0) }
   }
 
   @ViewBuilder private func header(for diff: Diff) -> some View {

@@ -25,6 +25,9 @@ struct DiffTableView: NSViewRepresentable {
   var partialAction: String? = nil
   var selectionChanged: ([DiffRowID]) -> Void = { _ in }
   var hunkAction: (DiffRowID) -> Void = { _ in }
+  /// Asks to throw a hunk's changes away; nil except on your unstaged
+  /// working copy. Adds "Restore" beside the hunk action.
+  var restoreHunk: ((DiffRowID) -> Void)? = nil
   /// Opens the line's hunk for editing; nil where the diff isn't your
   /// working copy (commits, staged changes).
   var editLines: ((DiffRowID) -> Void)? = nil
@@ -90,6 +93,7 @@ struct DiffTableView: NSViewRepresentable {
     private var selectionChanged: ([DiffRowID]) -> Void = { _ in }
     private var editLines: ((DiffRowID) -> Void)?
     private var hunkAction: (DiffRowID) -> Void = { _ in }
+    private var restoreHunk: ((DiffRowID) -> Void)?
     private var observers: [NSObjectProtocol] = []
 
     func attach(table: NSTableView, scrollView: NSScrollView) {
@@ -116,8 +120,10 @@ struct DiffTableView: NSViewRepresentable {
       selectionChanged = view.selectionChanged
       hunkAction = view.hunkAction
       editLines = view.editLines
+      let restoreChanged = (view.restoreHunk != nil) != (restoreHunk != nil)
+      restoreHunk = view.restoreHunk
       guard let table else { return }
-      let actionChanged = view.partialAction != partialAction
+      let actionChanged = view.partialAction != partialAction || restoreChanged
       partialAction = view.partialAction
       let sizeChanged = view.textSize != textSize || view.themeVersion != themeVersion
       textSize = view.textSize
@@ -211,7 +217,7 @@ struct DiffTableView: NSViewRepresentable {
       let cell =
         tableView.makeView(withIdentifier: identifier, owner: nil) as? DiffRowCell
         ?? DiffRowCell(identifier: identifier)
-      cell.configure(rows[row], metrics: metrics, hunkAction: partialAction.map { "\($0) Hunk" })
+      cell.configure(rows[row], metrics: metrics, hunkAction: hunkActionTitle, restoreAction: restoreHunk != nil)
       return cell
     }
 
@@ -253,6 +259,29 @@ struct DiffTableView: NSViewRepresentable {
       case .split(let pair): pair.left?.kind == .deletion || pair.right?.kind == .addition
       default: false
       }
+    }
+
+    /// "Stage Hunk" or "Unstage Hunk", where hunks can be staged.
+    var hunkActionTitle: String? { partialAction.map { "\($0) Hunk" } }
+    var canRestoreHunks: Bool { restoreHunk != nil }
+
+    /// The hunk a row belongs to, for the right-click hunk actions.
+    func hunk(at index: Int) -> DiffRowID? {
+      guard partialAction != nil, rows.indices.contains(index) else { return nil }
+      switch rows[index].content {
+      case .hunkHeader, .line, .split: return .hunk(rows[index].id.file, rows[index].id.hunk)
+      default: return nil
+      }
+    }
+
+    func stageHunkAt(row index: Int) {
+      guard let hunk = hunk(at: index) else { return }
+      hunkAction(hunk)
+    }
+
+    func restoreHunkAt(row index: Int) {
+      guard let hunk = hunk(at: index) else { return }
+      restoreHunk?(hunk)
     }
 
     // MARK: Copy and edit
@@ -305,7 +334,13 @@ struct DiffTableView: NSViewRepresentable {
         // header is just a header.
         guard let event = NSApp.currentEvent else { return }
         let point = sender.convert(event.locationInWindow, from: nil)
-        if point.x > sender.bounds.width - DiffRowCell.hunkActionWidth { hunkAction(rows[row].id) }
+        let zones = DiffRowCell.hunkActionZones(
+          rowWidth: sender.bounds.width, action: hunkActionTitle, restore: canRestoreHunks)
+        switch zones.first(where: { $0.hit.contains(point.x) })?.kind {
+        case .primary: hunkAction(rows[row].id)
+        case .restore: restoreHunk?(rows[row].id)
+        case nil: break
+        }
       default:
         break
       }
@@ -355,7 +390,7 @@ struct DiffTableView: NSViewRepresentable {
 }
 
 /// The diff's table: ⌘C copies the selected lines, and right-click offers
-/// Copy and, on your working copy, Edit.
+/// Copy, the clicked hunk's actions, and, on your working copy, Edit.
 final class DiffTable: NSTableView {
   weak var coordinator: DiffTableView.Coordinator?
 
@@ -383,7 +418,27 @@ final class DiffTable: NSTableView {
       edit.target = self
       edit.tag = row
     }
+    if coordinator.hunk(at: row) != nil, let title = coordinator.hunkActionTitle {
+      menu.addItem(.separator())
+      let stage = menu.addItem(withTitle: title, action: #selector(stageHunkClicked(_:)), keyEquivalent: "")
+      stage.target = self
+      stage.tag = row
+      if coordinator.canRestoreHunks {
+        let restore = menu.addItem(
+          withTitle: "Restore Hunk\u{2026}", action: #selector(restoreHunkClicked(_:)), keyEquivalent: "")
+        restore.target = self
+        restore.tag = row
+      }
+    }
     return menu
+  }
+
+  @objc private func stageHunkClicked(_ sender: NSMenuItem) {
+    coordinator?.stageHunkAt(row: sender.tag)
+  }
+
+  @objc private func restoreHunkClicked(_ sender: NSMenuItem) {
+    coordinator?.restoreHunkAt(row: sender.tag)
   }
 
   @objc private func editClicked(_ sender: NSMenuItem) {

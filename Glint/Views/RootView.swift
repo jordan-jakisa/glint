@@ -35,6 +35,18 @@ struct RootView: View {
       } message: {
         Text(discardMessage)
       }
+      .confirmationDialog(
+        "Restore this hunk?",
+        isPresented: Binding(
+          get: { session.pendingRestore != nil },
+          set: { if !$0 { session.pendingRestore = nil } }),
+        titleVisibility: .visible
+      ) {
+        Button("Restore", role: .destructive, action: session.confirmRestoreHunk)
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("Its changes to \(session.pendingRestore?.fileName ?? "this file") are gone for good.")
+      }
       .alert(
         session.alert?.title ?? "",
         isPresented: Binding(

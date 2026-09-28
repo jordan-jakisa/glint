@@ -63,6 +63,8 @@ final class RepositorySession {
   @ObservationIgnored var retryAlertAction: (() -> Void)?
   /// Files waiting for the user to confirm a discard.
   var pendingDiscard: [ChangedFile]?
+  /// A hunk waiting for the user to confirm restoring it. See `+Partial`.
+  var pendingRestore: HunkRestore?
 
   // MARK: Commit box
 
