@@ -86,7 +86,7 @@ struct RootView: View {
           .id(Theme.shared.usesLiquidGlass)
       }
       .toolbar(removing: .title)
-      .modifier(MinimalChrome(session: session))
+      .modifier(MinimalChrome(session: session, columns: $columns))
     }
   }
 
@@ -272,6 +272,7 @@ private struct DiffToolbar: ViewModifier {
 /// the window, across both columns.
 private struct MinimalChrome: ViewModifier {
   let session: RepositorySession
+  @Binding var columns: NavigationSplitViewVisibility
 
   func body(content: Content) -> some View {
     if Theme.shared.isMinimal {
@@ -279,7 +280,7 @@ private struct MinimalChrome: ViewModifier {
         .safeAreaInset(edge: .bottom, spacing: 0) {
           VStack(spacing: 0) {
             Hairline()
-            StatusLine(session: session)
+            StatusLine(session: session, columns: $columns)
           }
           .background(.bar)
         }

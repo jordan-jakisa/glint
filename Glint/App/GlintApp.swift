@@ -20,6 +20,9 @@ struct GlintApp: App {
     .windowToolbarStyle(.unified)
     .defaultSize(width: 1100, height: 720)
     .commands {
+      // Hide and show the sidebar from the View menu and ⌃⌘S, in every
+      // interface, including Minimal, which has no toolbar button.
+      SidebarCommands()
       GlintCommands()
     }
 

@@ -1,13 +1,24 @@
 import SwiftUI
 
 /// Minimal mode's only chrome, along the bottom of the window like Zed's
-/// status bar: the sidebar's two tabs, where you are, sync, and the diff and
-/// terminal toggles.
+/// status bar: the sidebar, the project, the sidebar's two tabs, where you
+/// are, sync, and the diff and terminal toggles. Everything the toolbar
+/// offers in Standard is here, so no command goes missing.
 struct StatusLine: View {
   @Bindable var session: RepositorySession
+  @Binding var columns: NavigationSplitViewVisibility
 
   var body: some View {
-    HStack(spacing: 14) {
+    HStack(spacing: 12) {
+      Button {
+        columns = columns == .detailOnly ? .all : .detailOnly
+      } label: {
+        Label("Sidebar", systemImage: "sidebar.left")
+      }
+      .help(columns == .detailOnly ? "Show the sidebar" : "Hide the sidebar")
+      // Hosts the switcher popover, so ⌥⌘O works here too.
+      ProjectTitle(session: session)
+        .labelStyle(.titleAndIcon)
       HStack(spacing: 10) {
         tab(.changes, "Changes")
         tab(.history, "History")
