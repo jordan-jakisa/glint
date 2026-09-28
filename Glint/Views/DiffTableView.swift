@@ -31,6 +31,9 @@ struct DiffTableView: NSViewRepresentable {
   /// Opens the line's hunk for editing; nil where the diff isn't your
   /// working copy (commits, staged changes).
   var editLines: ((DiffRowID) -> Void)? = nil
+  /// Style Zed's Open File on each file header; nil where there's no file
+  /// on disk to open.
+  var openFile: ((String) -> Void)? = nil
   /// Who last changed a new-side line of the file at an index; nil until
   /// that file's blame is loaded (asking starts the load). Feeds the blame
   /// column and the selected line's inline blame.
@@ -102,6 +105,7 @@ struct DiffTableView: NSViewRepresentable {
     private var partialAction: String?
     private var selectionChanged: ([DiffRowID]) -> Void = { _ in }
     private var editLines: ((DiffRowID) -> Void)?
+    private var openFile: ((String) -> Void)?
     private var hunkAction: (DiffRowID) -> Void = { _ in }
     private var blame: ((Int, DiffLine) -> BlameCommit?)?
     private var showsBlame = false
@@ -137,6 +141,7 @@ struct DiffTableView: NSViewRepresentable {
       selectionChanged = view.selectionChanged
       hunkAction = view.hunkAction
       editLines = view.editLines
+      openFile = view.openFile
       blame = view.blame
       permalinks = view.permalinks
       let restoreChanged = (view.restoreHunk != nil) != (restoreHunk != nil)
@@ -254,7 +259,7 @@ struct DiffTableView: NSViewRepresentable {
       let (column, inline) = blame(forRow: row)
       cell.configure(
         rows[row], metrics: metrics, hunkAction: hunkActionTitle, blame: column, inlineBlame: inline,
-        restoreAction: restoreHunk != nil)
+        restoreAction: restoreHunk != nil, openFile: openFile != nil)
       return cell
     }
 
@@ -431,7 +436,16 @@ struct DiffTableView: NSViewRepresentable {
       guard rows.indices.contains(row) else { return }
       switch rows[row].content {
       case .fileHeader(let file, _):
-        toggleCollapsed(file.id)
+        // Style Zed: Open File at the right edge opens it; the rest of the
+        // header folds the file, as everywhere.
+        if Theme.shared.isZed, let openFile, let path = file.newPath, file.status != .deleted,
+          let point = NSApp.currentEvent.map({ sender.convert($0.locationInWindow, from: nil) }),
+          point.x > sender.bounds.width - DiffRowCell.openFileWidth
+        {
+          openFile(path)
+        } else {
+          toggleCollapsed(file.id)
+        }
       case .hunkHeader where partialAction != nil:
         // Only the action label at the right edge acts; the rest of the
         // header is just a header.
@@ -673,7 +687,8 @@ struct DiffMetrics {
   static let tabWidth = 4
 
   static var fileHeaderHeight: CGFloat { lineHeight + 14 }
-  static var hunkHeaderHeight: CGFloat { lineHeight + 6 }
+  /// Style Zed shows no @@ line, only the hunk's actions in a thin row.
+  static var hunkHeaderHeight: CGFloat { Theme.shared.isZed ? lineHeight : lineHeight + 6 }
   static var noteHeight: CGFloat { lineHeight + 16 }
   static let verticalPadding: CGFloat = 1
   static let markerWidth: CGFloat = 16
@@ -704,7 +719,9 @@ struct DiffMetrics {
     if split {
       return (rowWidth - blameWidth - 1) / 2 - gutterWidth - Self.markerWidth - Self.trailingPadding
     }
-    return rowWidth - blameWidth - 2 * gutterWidth - Self.markerWidth - Self.trailingPadding
+    // Style Zed has one number column in unified view, the new side's.
+    let gutters: CGFloat = Theme.shared.isZed ? 1 : 2
+    return rowWidth - blameWidth - gutters * gutterWidth - Self.markerWidth - Self.trailingPadding
   }
 
   func columns(forWidth width: CGFloat) -> Int {

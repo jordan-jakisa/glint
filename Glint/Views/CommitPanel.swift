@@ -38,6 +38,59 @@ struct CommitPanel: View {
   }
 
   @ViewBuilder private var footer: some View {
+    if Theme.shared.isZed {
+      zedFooter
+    } else {
+      standardFooter
+    }
+  }
+
+  /// Zed's commit row: the AI button on the left, a Commit split button on
+  /// the right whose menu holds Amend and Sign Off.
+  private var zedFooter: some View {
+    HStack(spacing: 8) {
+      GenerateButton(session: session)
+      Spacer()
+      summaryCount
+      DelayedSpinner(isActive: session.isCommitting)
+      Menu {
+        Toggle("Amend", isOn: $session.isAmending)
+          .disabled(session.lastCommit == nil)
+        Toggle("Sign Off", isOn: $session.signsOff)
+      } label: {
+        Text(session.commitButtonTitle)
+      } primaryAction: {
+        session.commit()
+      }
+      .menuStyle(.borderedButton)
+      .fixedSize()
+      .disabled(!session.canCommit && !session.isAmending)
+      .help(commitHelp)
+      // ⌘↩ still commits; a menu can't carry the key itself.
+      Button("", action: session.commit)
+        .shortcut(.commit)
+        .disabled(!session.canCommit)
+        .hidden()
+        .frame(width: 0)
+    }
+    .controlSize(.small)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+  }
+
+  @ViewBuilder private var summaryCount: some View {
+    // Zed's 72-character guide for the summary line, as a count.
+    if let summary = session.commitMessage.split(separator: "\n", omittingEmptySubsequences: false).first,
+      !summary.isEmpty
+    {
+      Text("\(summary.count)")
+        .font(.code(.caption))
+        .foregroundStyle(summary.count > 72 ? Color(nsColor: Theme.shared.modified) : .secondary)
+        .help(summary.count > 72 ? "The first line is over 72 characters, where git tools wrap it" : "Characters in the first line (72 fits everywhere)")
+    }
+  }
+
+  @ViewBuilder private var standardFooter: some View {
     HStack(spacing: 8) {
       GenerateButton(session: session)
       Toggle("Amend", isOn: $session.isAmending)
@@ -50,15 +103,7 @@ struct CommitPanel: View {
         .fixedSize()
         .help("Add a Signed-off-by line with your name and email")
       Spacer()
-      // Zed's 72-character guide for the summary line, as a count.
-      if let summary = session.commitMessage.split(separator: "\n", omittingEmptySubsequences: false).first,
-        !summary.isEmpty
-      {
-        Text("\(summary.count)")
-          .font(.code(.caption))
-          .foregroundStyle(summary.count > 72 ? Color(nsColor: Theme.shared.modified) : .secondary)
-          .help(summary.count > 72 ? "The first line is over 72 characters, where git tools wrap it" : "Characters in the first line (72 fits everywhere)")
-      }
+      summaryCount
       DelayedSpinner(isActive: session.isCommitting)
       Button(session.commitButtonTitle, action: session.commit)
         .shortcut(.commit)
@@ -183,12 +228,15 @@ struct BranchBar: View {
         .popover(isPresented: $session.isRepositoryPickerShown, arrowEdge: .top) {
           RepositoryPicker(session: session)
         }
-      } else {
+      } else if !Theme.shared.isZed {
+        // Zed shows only the branch; the project is in the title.
         Text(session.info?.name ?? "")
           .foregroundStyle(.secondary)
           .lineLimit(1)
       }
-      Text("/").foregroundStyle(.tertiary)
+      if session.workspace != nil || !Theme.shared.isZed {
+        Text("/").foregroundStyle(.tertiary)
+      }
       Button {
         session.isBranchPickerShown.toggle()
       } label: {

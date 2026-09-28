@@ -22,6 +22,9 @@ struct RootView: View {
           }
         })
       .onAppear { session.restoreLastRepository() }
+      .onReceive(NotificationCenter.default.publisher(for: AppDelegate.openFolders)) { note in
+        if let url = (note.object as? [URL])?.first { session.openProject(url) }
+      }
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         session.refresh()
       }

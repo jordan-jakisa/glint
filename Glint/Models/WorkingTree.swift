@@ -65,3 +65,9 @@ extension WorkingTreeStatus {
     unstaged = FileOrder.current.sorted(unstaged, path: \.path)
   }
 }
+
+/// Lines added and deleted in a file, like `git diff --numstat`.
+struct LineStat: Equatable, Sendable {
+  let added: Int
+  let deleted: Int
+}

@@ -50,6 +50,7 @@ extension RepositorySession {
     let old = status
     status = fresh
     updateActiveSummary()
+    loadLineStats()
     let previousSelection = selectedChange
     reconcileChangeSelection(previous: old)
     // A file on screen may have changed without its status changing, so the
@@ -198,6 +199,32 @@ extension RepositorySession {
         alert = UserAlert("Couldn't discard that", error: error)
       }
       refreshWorkingTree()
+    }
+  }
+
+  // MARK: - Line counts
+
+  /// Each changed file's `+N -N` against the last commit, for Style Zed's
+  /// list, like Zed's diff stats. Only loaded there, off the main thread.
+  /// Each changed file's `+N -N` against the last commit, for Style Zed's
+  /// list, like Zed's diff stats: staged plus unstaged lines, counted by
+  /// libgit2 off the main thread. Only loaded in Style Zed. New untracked
+  /// files show none, as in Zed.
+  func loadLineStats() {
+    guard Theme.shared.isZed, let repository else { return }
+    let untracked = Set(status.unstaged.filter { $0.kind == .untracked }.map(\.path))
+    Task {
+      let unstaged = try? await repository.workingTreeDiff(staged: false, path: nil)
+      let staged = try? await repository.workingTreeDiff(staged: true, path: nil)
+      // A repository switch mid-load: these counts belong to the old one.
+      guard self.repository?.url == repository.url else { return }
+      var stats: [String: LineStat] = [:]
+      for file in (unstaged?.files ?? []) + (staged?.files ?? []) {
+        guard let path = file.newPath ?? file.oldPath, !untracked.contains(path) else { continue }
+        let before = stats[path] ?? LineStat(added: 0, deleted: 0)
+        stats[path] = LineStat(added: before.added + file.additions, deleted: before.deleted + file.deletions)
+      }
+      lineStats = stats
     }
   }
 

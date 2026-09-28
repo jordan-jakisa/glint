@@ -52,6 +52,15 @@ extension RepositorySession {
     return files.flatMap { file in file.hunks.map { DiffRowID.hunk(file.id, $0.id) } }
   }
 
+  /// Style Zed: brings the selected file's section of the all-files diff to
+  /// the top.
+  func scrollToSelectedFile() {
+    guard Theme.shared.isZed, tab == .changes, let path = selectedChange?.path,
+      let index = diff?.files.firstIndex(where: { $0.newPath == path || $0.oldPath == path })
+    else { return }
+    scroll(to: .file(index))
+  }
+
   func scroll(to target: DiffRowID) {
     cursor = target
     diffScroller.scroll(to: target, rowsVersion: rowsVersion)

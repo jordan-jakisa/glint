@@ -97,12 +97,23 @@ final class RepositorySession {
 
   internal(set) var status = WorkingTreeStatus.clean
   var selectedChange: ChangeSelection? {
-    didSet { if tab == .changes, selectedChange != oldValue { showSelectedDiff() } }
+    didSet {
+      guard tab == .changes, selectedChange != oldValue else { return }
+      // Style Zed: one diff of every file, like Zed's Uncommitted Changes;
+      // picking another file on the same side scrolls to it.
+      if Theme.shared.isZed, diff?.source == selectedSource {
+        scrollToSelectedFile()
+        return
+      }
+      showSelectedDiff()
+    }
   }
 
   // MARK: History tab
 
   internal(set) var commits: [Commit] = []
+  /// Each changed file's added and deleted lines, in Style Zed.
+  internal(set) var lineStats: [String: LineStat] = [:]
   /// This repository's remotes, and the one picked for fetch, pull and push
   /// when there are several.
   internal(set) var remotes: [String] = []
@@ -450,7 +461,9 @@ final class RepositorySession {
     let firstChange = ChangeSelection.first(in: status)
     var firstDiff: Diff?
     if let firstChange {
-      firstDiff = try? await repository.workingTreeDiff(staged: firstChange.staged, path: firstChange.path)
+      // Style Zed opens on every file's diff, like Zed's Uncommitted Changes.
+      let path = await MainActor.run { Theme.shared.isZed } ? nil : firstChange.path
+      firstDiff = try? await repository.workingTreeDiff(staged: firstChange.staged, path: path)
     }
     stage("open: first diff")
     return Opened(
@@ -552,6 +565,7 @@ final class RepositorySession {
     commitMessage = messageDrafts[opened.repository.url] ?? Self.savedDraft(for: opened.repository.url)
     info = opened.info
     status = opened.status
+    loadLineStats()
     commits = opened.commits
     sync = opened.sync
     branchBaseName = opened.branchBase
@@ -613,7 +627,8 @@ final class RepositorySession {
   /// The diff the selected tab wants on screen.
   var selectedSource: DiffSource? {
     switch tab {
-    case .changes: selectedChange?.source
+    case .changes:
+      selectedChange.map { Theme.shared.isZed ? .workingTree(staged: $0.staged, path: nil) : $0.source }
     case .history:
       selectedCommitID == Self.branchSelectionID ? .branch : selectedCommitID.map(DiffSource.commit)
     }
@@ -674,6 +689,7 @@ final class RepositorySession {
         }
         guard !Task.isCancelled, selectedSource == source else { return }
         diff = loaded
+        if !inPlace { scrollToSelectedFile() }
         if !loaded.isComplete {
           switch source {
           case .commit(let id): loaded = try await repository.diff(commitID: id)

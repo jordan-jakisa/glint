@@ -36,6 +36,7 @@ struct DiffPane: View {
             hunkAction: session.stageHunk,
             restoreHunk: restoreHunk,
             editLines: editLines,
+            openFile: session.canEditDiff ? { [session] in session.openFile($0) } : nil,
             blame: { [session] in session.blame(file: $0, line: $1) },
             showsBlame: session.isBlameShown,
             blameVersion: session.blameVersion,
@@ -92,6 +93,8 @@ struct DiffPane: View {
         diff: diff, isLoading: session.isLoadingDiff)
     case .branch:
       BranchHeader(comparison: session.branchComparison, diff: diff, isLoading: session.isLoadingDiff)
+    case .workingTree(let staged, _) where Theme.shared.isZed:
+      ZedDiffToolbar(session: session, staged: staged, diff: diff)
     case .workingTree(let staged, let path):
       WorkingTreeHeader(
         staged: staged, path: path, diff: diff, isLoading: session.isLoadingDiff,
@@ -280,5 +283,50 @@ private struct BranchHeader: View {
   private var title: String {
     guard let comparison else { return "This branch" }
     return "\(comparison.branch ?? "HEAD") compared with \(comparison.base)"
+  }
+}
+
+/// Zed's Uncommitted Changes toolbar (project_diff.rs): the title, the line
+/// counts, previous and next hunk, then Stage or Unstage for the hunk at the
+/// cursor and Stage All.
+private struct ZedDiffToolbar: View {
+  @Bindable var session: RepositorySession
+  let staged: Bool
+  let diff: Diff
+
+  var body: some View {
+    HStack(spacing: 10) {
+      Text(staged ? "Staged Changes" : "Uncommitted Changes")
+        .font(.app(.body))
+      LineStatLabel(stat: LineStat(added: diff.additions, deleted: diff.deletions))
+        .font(.app(.callout))
+      HStack(spacing: 2) {
+        Button(action: session.previousHunk) {
+          Image(systemName: "arrow.up").hitTarget()
+        }
+        .help(AppCommand.previousHunk.hint("Previous hunk"))
+        .accessibilityLabel("Previous hunk")
+        Button(action: session.nextHunk) {
+          Image(systemName: "arrow.down").hitTarget()
+        }
+        .help(AppCommand.nextHunk.hint("Next hunk"))
+        .accessibilityLabel("Next hunk")
+      }
+      .buttonStyle(.borderless)
+      DelayedSpinner(isActive: session.isLoadingDiff)
+      Spacer(minLength: 8)
+      Button(staged ? "Unstage" : "Stage", action: session.stageAtCursor)
+        .buttonStyle(.borderless)
+        .help(AppCommand.stagePartial.hint(staged ? "Unstage the hunk at the top, or the selected lines" : "Stage the hunk at the top, or the selected lines"))
+      Hairline(axis: .vertical).frame(height: 16)
+      Button(staged ? "Unstage All" : "Stage All") {
+        staged ? session.unstageAll() : session.stageAll()
+      }
+      .buttonStyle(.borderless)
+      .help(staged ? AppCommand.unstageAll.hint("Unstage every file") : AppCommand.stageAll.hint("Stage every file"))
+    }
+    .font(.app(.callout))
+    .padding(.horizontal, 12)
+    .frame(height: 36)
   }
 }

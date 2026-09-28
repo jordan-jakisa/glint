@@ -6,6 +6,8 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   private var row: DiffRow?
   private var metrics = DiffMetrics(lineNumberDigits: 3)
   private var hunkAction: String?
+  /// Style Zed: whether file headers offer Open File.
+  private var openFile = false
   /// The new-side line's blame, for the gutter column; nil until loaded.
   private var blame: BlameCommit?
   /// Set on the one selected line: its blame, drawn after the code.
@@ -65,9 +67,10 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
 
   func configure(
     _ row: DiffRow, metrics: DiffMetrics, hunkAction: String? = nil, blame: BlameCommit? = nil,
-    inlineBlame: BlameCommit? = nil, restoreAction: Bool = false
+    inlineBlame: BlameCommit? = nil, restoreAction: Bool = false, openFile: Bool = false
   ) {
     self.row = row
+    self.openFile = openFile
     let blameResized = self.metrics.blameWidth != metrics.blameWidth
     self.metrics = metrics
     let actionChanged = self.hunkAction != hunkAction || self.restoreAction != restoreAction
@@ -129,7 +132,69 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
 
   // MARK: - Headers
 
+  /// Style Zed's "Open File" label at the right of a file header.
+  static let openFileWidth: CGFloat = 96
+
+  /// Zed's excerpt header: a rounded card with the fold chevron, the file
+  /// name in its status colour and its folder dimmed, the line counts, and
+  /// Open File at the right.
+  private func drawZedFileHeader(_ file: FileChange, collapsed: Bool) {
+    Theme.shared.editorBackground.setFill()
+    bounds.fill()
+    let card = bounds.insetBy(dx: 6, dy: 4)
+    let path = NSBezierPath(roundedRect: card, xRadius: 6, yRadius: 6)
+    (Theme.shared.panelBackground ?? .windowBackgroundColor).setFill()
+    path.fill()
+    ZedPalette.border.setStroke()
+    path.lineWidth = 1 / (window?.backingScaleFactor ?? 2)
+    path.stroke()
+
+    let midY = card.midY
+    var x = card.minX + 10
+    if let chevron = NSImage(
+      systemSymbolName: collapsed ? "chevron.right" : "chevron.down", accessibilityDescription: nil)?
+      .withSymbolConfiguration(.init(pointSize: AppFont.small - 2, weight: .semibold).applying(.init(paletteColors: [ZedPalette.textMuted])))
+    {
+      chevron.draw(in: NSRect(x: x, y: midY - chevron.size.height / 2, width: chevron.size.width, height: chevron.size.height))
+    }
+    x += 18
+
+    let status = StatusMark(file.status)
+    let isDeleted = file.status == .deleted
+    let name = ((file.newPath ?? file.oldPath ?? "") as NSString).lastPathComponent
+    let folder = ((file.newPath ?? file.oldPath ?? "") as NSString).deletingLastPathComponent
+    var attributes: [NSAttributedString.Key: Any] = [
+      .font: DiffMetrics.boldFont, .foregroundColor: isDeleted ? ZedPalette.textPlaceholder : status.color,
+    ]
+    if isDeleted { attributes[.strikethroughStyle] = NSUnderlineStyle.single.rawValue }
+    let title = NSMutableAttributedString(string: name, attributes: attributes)
+    if !folder.isEmpty {
+      title.append(
+        NSAttributedString(
+          string: "  " + folder + "/",
+          attributes: [.font: DiffMetrics.font, .foregroundColor: ZedPalette.textMuted]))
+    }
+    for (text, color) in [("+\(file.additions)", Theme.shared.createdLabel), (" \u{2212}\(file.deletions)", Theme.shared.deletedLabel)] {
+      title.append(NSAttributedString(string: text == "+\(file.additions)" ? "  " + text : text, attributes: [.font: AppFont.nsSans(size: AppFont.small), .foregroundColor: color]))
+    }
+    let right = card.maxX - (openFile ? Self.openFileWidth : 10)
+    let paragraph = NSMutableParagraphStyle()
+    paragraph.lineBreakMode = .byTruncatingMiddle
+    title.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: title.length))
+    title.draw(
+      with: NSRect(x: x, y: midY - DiffMetrics.lineHeight / 2, width: max(0, right - x), height: DiffMetrics.lineHeight),
+      options: [.usesLineFragmentOrigin, .truncatesLastVisibleLine])
+
+    if openFile, !isDeleted {
+      let label = NSAttributedString(
+        string: "Open File", attributes: [.font: AppFont.nsSans(size: AppFont.small), .foregroundColor: ZedPalette.text])
+      let size = label.size()
+      label.draw(at: NSPoint(x: card.maxX - 12 - size.width, y: midY - size.height / 2))
+    }
+  }
+
   private func drawFileHeader(_ file: FileChange, collapsed: Bool) {
+    if Theme.shared.isZed { return drawZedFileHeader(file, collapsed: collapsed) }
     // Zed draws file headers on its panel colour.
     (Theme.shared.panelBackground ?? .windowBackgroundColor).setFill()
     bounds.fill()
@@ -185,8 +250,12 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   }
 
   private func drawHunkHeader(_ hunk: Hunk) {
-    Theme.shared.accentColor.withAlphaComponent(Self.tint(0.08)).setFill()
-    bounds.fill()
+    // Style Zed: no @@ line and no tint, only the actions, quietly.
+    let zed = Theme.shared.isZed
+    if !zed {
+      Theme.shared.accentColor.withAlphaComponent(Self.tint(0.08)).setFill()
+      bounds.fill()
+    }
     var width = bounds.width - 24
     let zones = Self.hunkActionZones(rowWidth: bounds.width, action: hunkAction, restore: restoreAction)
     for zone in zones {
@@ -197,6 +266,7 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
       label.draw(at: NSPoint(x: zone.labelX, y: (bounds.height - label.size().height) / 2))
     }
     if let leftmost = zones.last { width = leftmost.hit.lowerBound - 12 - 8 }
+    if zed { return }
     let paragraph = NSMutableParagraphStyle()
     paragraph.lineBreakMode = .byTruncatingTail
     NSAttributedString(
@@ -222,12 +292,18 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     let left = metrics.blameWidth
     drawBlameColumn()
     let gutter = metrics.gutterWidth
+    // Style Zed: one number column, the new side's; removed lines have none.
+    let gutters: CGFloat = Theme.shared.isZed ? 1 : 2
     Self.gutterBackground(line.kind).setFill()
-    NSRect(x: left, y: 0, width: 2 * gutter, height: bounds.height).fill()
-    drawNumber(line.oldNumber, rightEdge: left + gutter - 6)
-    drawNumber(line.newNumber, rightEdge: left + 2 * gutter - 6)
+    NSRect(x: left, y: 0, width: gutters * gutter, height: bounds.height).fill()
+    if Theme.shared.isZed {
+      drawNumber(line.newNumber, rightEdge: left + gutter - 6, kind: line.kind)
+    } else {
+      drawNumber(line.oldNumber, rightEdge: left + gutter - 6)
+      drawNumber(line.newNumber, rightEdge: left + 2 * gutter - 6)
+    }
     drawCode(
-      line, x: left + 2 * gutter, width: metrics.textWidth(rowWidth: bounds.width, split: false),
+      line, x: left + gutters * gutter, width: metrics.textWidth(rowWidth: bounds.width, split: false),
       inline: line.kind == .deletion ? nil : inlineBlame)
   }
 
@@ -248,7 +324,7 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     NSRect(x: x, y: 0, width: width, height: bounds.height).fill()
     Self.gutterBackground(line?.kind).setFill()
     NSRect(x: x, y: 0, width: gutter, height: bounds.height).fill()
-    drawNumber(number, rightEdge: x + gutter - 6)
+    drawNumber(number, rightEdge: x + gutter - 6, kind: line?.kind)
     if let line {
       drawCode(line, x: x + gutter, width: metrics.textWidth(rowWidth: bounds.width, split: true), inline: inline)
     }
@@ -308,11 +384,16 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
       in: context)
   }
 
-  private func drawNumber(_ number: Int?, rightEdge: CGFloat) {
+  private func drawNumber(_ number: Int?, rightEdge: CGFloat, kind: DiffLine.Kind? = nil) {
     guard let number, let context = NSGraphicsContext.current?.cgContext else { return }
     let text = String(number)
+    // Style Zed colours a changed line's number like the change.
+    let color: NSColor =
+      Theme.shared.isZed && kind == .addition
+      ? Theme.shared.createdLabel
+      : Theme.shared.isZed && kind == .deletion ? Theme.shared.deletedLabel : Theme.shared.lineNumber
     CodeText.drawSingleLine(
-      text, color: Theme.shared.lineNumber,
+      text, color: color,
       at: NSPoint(x: rightEdge - CGFloat(text.count) * DiffMetrics.advance, y: DiffMetrics.verticalPadding),
       in: context)
   }
@@ -325,7 +406,13 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     case .deletion: marker = "-"
     case .context, .noNewline: marker = ""
     }
-    if !marker.isEmpty {
+    if Theme.shared.isZed {
+      // Zed marks a changed line with a bar at the edge, not + or -.
+      if line.kind == .addition || line.kind == .deletion {
+        (line.kind == .addition ? ZedPalette.versionAdded : ZedPalette.versionDeleted).setFill()
+        NSRect(x: x, y: 0, width: 3, height: bounds.height).fill()
+      }
+    } else if !marker.isEmpty {
       CodeText.drawSingleLine(
         marker, color: .secondaryLabelColor,
         at: NSPoint(x: x + (DiffMetrics.markerWidth - DiffMetrics.advance) / 2, y: DiffMetrics.verticalPadding),
@@ -369,7 +456,9 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   }
 
   private static func gutterBackground(_ kind: DiffLine.Kind?) -> NSColor {
-    switch kind {
+    // Style Zed: the gutter takes the line's own colour, one band per line.
+    if Theme.shared.isZed { return kind.map(background) ?? Theme.shared.editorBackground }
+    return switch kind {
     case .addition: Theme.shared.added.withAlphaComponent(0.22)
     case .deletion: Theme.shared.removed.withAlphaComponent(0.22)
     case .context, .noNewline: NSColor.secondaryLabelColor.withAlphaComponent(tint(0.05))

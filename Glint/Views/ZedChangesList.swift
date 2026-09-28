@@ -1,27 +1,31 @@
 import SwiftUI
 
-/// The Changes list as Zed's git panel draws it: one row per file with a
-/// checkbox for its staged state (checked, partly, or not), the name in its
-/// status colour and the folder dimmed, grouped into Conflicts, Tracked and
-/// Untracked, flat or as a tree. Used in Style Zed.
+/// The Changes list as Zed's git panel draws it (crates/git_ui/src/
+/// git_panel.rs): a View Diff row with the total line counts, then
+/// collapsible Conflicts / Tracked / Untracked sections. Each row is a status
+/// icon, the name, the folder dimmed, the file's `+N −N`, and a staged
+/// checkbox on the right. Rows are 28 pt, as in Zed (1.75 rem), with Zed's
+/// selection tint. Used in Style Zed.
 struct ZedChangesList: View {
   @Bindable var session: RepositorySession
   @AppStorage("gitPanelTree") private var isTree = false
+  @State private var collapsed: Set<String> = []
 
   var body: some View {
     VStack(spacing: 0) {
       header
       Hairline()
       ScrollViewReader { proxy in
-        List(selection: $session.selectedChange) {
-          section("Conflicts", entries.filter { $0.kind == .conflicted })
-          section("Tracked", entries.filter { $0.kind != .conflicted && $0.kind != .untracked })
-          section("Untracked", entries.filter { $0.kind == .untracked })
+        ScrollView {
+          LazyVStack(spacing: 0) {
+            section("Conflicts", entries.filter { $0.kind == .conflicted })
+            section("Tracked", entries.filter { $0.kind != .conflicted && $0.kind != .untracked })
+            section("Untracked", entries.filter { $0.kind == .untracked })
+          }
+          .padding(.vertical, 2)
         }
-        .scrollContentBackground(.hidden)
-        .environment(\.defaultMinListRowHeight, 22)
         .onChange(of: session.selectedChange) { _, selection in
-          if let selection, selection.path != nil { proxy.scrollTo(selection) }
+          if let path = selection?.path { proxy.scrollTo(path) }
         }
       }
     }
@@ -29,36 +33,81 @@ struct ZedChangesList: View {
 
   // MARK: Header
 
-  /// Zed's panel header: how many changes, flat or tree, and Stage All.
+  /// Zed's changes header: View Diff with the totals, view options, and a
+  /// Stage All split button.
   private var header: some View {
-    HStack(spacing: 8) {
-      Text(entries.count == 1 ? "1 change" : "\(entries.count) changes")
-        .foregroundStyle(.secondary)
-      Spacer()
+    HStack(spacing: 6) {
       Button {
-        isTree.toggle()
+        session.selectedChange = ChangeSelection(staged: false, path: nil)
       } label: {
-        Image(systemName: isTree ? "list.bullet.indent" : "list.bullet").hitTarget()
+        HStack(spacing: 4) {
+          Text("\u{00B1} View Diff")
+          LineStatLabel(stat: totals)
+        }
       }
-      .buttonStyle(.borderless)
-      .accessibilityLabel(isTree ? "Show as a list" : "Show as a tree")
-      .help(isTree ? "Show as a list" : "Show as a tree")
-      Button(allStaged ? "Unstage All" : "Stage All") {
+      .buttonStyle(.plain)
+      .help("Every change in one diff")
+      Spacer()
+      Menu {
+        Toggle("Tree View", isOn: $isTree)
+        Toggle(
+          "Sort by Path",
+          isOn: Binding(get: { FileOrder.current == .path }, set: { FileOrder.set($0 ? .path : .smart) }))
+      } label: {
+        Image(systemName: "slider.horizontal.3")
+      }
+      .menuStyle(.borderlessButton)
+      .tint(.secondary)
+      .menuIndicator(.hidden)
+      .fixedSize()
+      .help("View options")
+      Menu {
+        Button("Stage All", action: session.stageAll)
+        Button("Unstage All", action: session.unstageAll)
+        Divider()
+        Button("Restore Tracked Changes\u{2026}") {
+          session.requestDiscard(session.status.unstaged.filter { $0.kind != .untracked }.map(\.path))
+        }
+        Button("Trash Untracked Files\u{2026}") {
+          session.requestDiscard(session.status.unstaged.filter { $0.kind == .untracked }.map(\.path))
+        }
+      } label: {
+        Text(allStaged ? "Unstage All" : "Stage All")
+      } primaryAction: {
         allStaged ? session.unstageAll() : session.stageAll()
       }
-      .buttonStyle(.borderless)
-      .help(allStaged ? AppCommand.unstageAll.hint("Unstage every file") : AppCommand.stageAll.hint("Stage every file"))
+      .menuStyle(.borderedButton)
+      .controlSize(.small)
+      .fixedSize()
     }
     .font(.app(.callout))
-    .padding(.horizontal, 10)
-    .frame(height: 30)
+    .padding(.leading, 10)
+    .padding(.trailing, 4)
+    .frame(height: 28)
   }
 
   // MARK: Sections and rows
 
   @ViewBuilder private func section(_ title: String, _ items: [Entry]) -> some View {
     if !items.isEmpty {
-      Section {
+      let isCollapsed = collapsed.contains(title)
+      HStack(spacing: 4) {
+        Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
+          .font(.app(.caption2))
+          .frame(width: 12)
+        Text(title).font(.app(.caption))
+        Spacer()
+        StageBox(state: Self.state(of: items)) { stage(items, Self.state(of: items) != .all) }
+      }
+      .foregroundStyle(.secondary)
+      .padding(.leading, 10)
+      .padding(.trailing, 4)
+      .frame(height: 28)
+      .contentShape(Rectangle())
+      .onTapGesture {
+        if isCollapsed { collapsed.remove(title) } else { collapsed.insert(title) }
+      }
+      if !isCollapsed {
         ForEach(rows(for: items)) { row in
           switch row {
           case .folder(let path, let depth):
@@ -67,36 +116,47 @@ struct ZedChangesList: View {
             fileRow(entry, depth: depth)
           }
         }
-      } header: {
-        HStack(spacing: 6) {
-          StageBox(state: Self.state(of: items)) { stage(items, Self.state(of: items) != .all) }
-          Text(title)
-          Text("\(items.count)").foregroundStyle(.tertiary)
-          Spacer()
-        }
-        .font(.app(.caption))
       }
     }
   }
 
   private func fileRow(_ entry: Entry, depth: Int) -> some View {
-    HStack(spacing: 6) {
-      StageBox(state: entry.state) { session.setStaged(entry.path, entry.state != .all) }
-      Text(entry.fileName)
-        .foregroundStyle(Color(nsColor: Self.labelColor(entry.kind)))
-        .strikethrough(entry.kind == .deleted)
-        .lineLimit(1)
-      if !isTree {
-        Text(entry.directory)
-          .foregroundStyle(.tertiary)
+    let isSelected = session.selectedChange?.path == entry.path
+    return HStack(spacing: 6) {
+      HStack(spacing: 4) {
+        StatusIcon(kind: entry.kind)
+        Text(entry.fileName)
+          .foregroundStyle(entry.kind == .deleted ? .tertiary : .primary)
+          .strikethrough(entry.kind == .deleted)
           .lineLimit(1)
-          .truncationMode(.head)
+        if !isTree {
+          Text(entry.directory)
+            .foregroundStyle(entry.kind == .deleted ? .tertiary : .secondary)
+            .strikethrough(entry.kind == .deleted)
+            .lineLimit(1)
+            .truncationMode(.head)
+        }
       }
-      Spacer(minLength: 0)
+      .padding(.leading, CGFloat(depth) * 16)
+      Spacer(minLength: 4)
+      if let stat = session.lineStats[entry.path] {
+        LineStatLabel(stat: stat).font(.app(.caption))
+      }
+      StageBox(state: entry.state) { session.setStaged(entry.path, entry.state != .all) }
     }
     .font(.app(.body))
-    .padding(.leading, CGFloat(depth) * 12)
-    .tag(entry.selection)
+    .padding(.leading, 10)
+    .padding(.trailing, 4)
+    .frame(height: 28)
+    // Zed: the info colour at 8% behind the selected row, and a border in
+    // the accent when the panel has focus.
+    .background(isSelected ? Color.themeAccent.opacity(0.08) : .clear)
+    .overlay {
+      if isSelected { Rectangle().strokeBorder(Color.themeAccent, lineWidth: 1) }
+    }
+    .contentShape(Rectangle())
+    .onTapGesture { session.selectedChange = entry.selection }
+    .id(entry.path)
     .help(entry.path)
     .contextMenu { menu(for: entry) }
   }
@@ -166,9 +226,16 @@ struct ZedChangesList: View {
     }
   }
 
+  private var totals: LineStat {
+    session.lineStats.values.reduce(LineStat(added: 0, deleted: 0)) {
+      LineStat(added: $0.added + $1.added, deleted: $0.deleted + $1.deleted)
+    }
+  }
+
   private var allStaged: Bool { !entries.isEmpty && entries.allSatisfy { $0.state == .all } }
 
-  /// Flat: the files. Tree: each folder once, before its files, indented.
+  /// Flat: the files. Tree: each folder once, before its files, indented
+  /// 16 pt a level, as in Zed.
   private func rows(for items: [Entry]) -> [Row] {
     guard isTree else { return items.map { .file($0, depth: 0) } }
     var rows: [Row] = []
@@ -189,42 +256,94 @@ struct ZedChangesList: View {
     if items.allSatisfy({ $0.state == .none }) { return .none }
     return .partial
   }
+}
 
-  @MainActor private static func labelColor(_ kind: ChangedFile.Kind) -> NSColor {
+/// Zed's `+N −N`, added in green and deleted in red.
+struct LineStatLabel: View {
+  let stat: LineStat
+
+  var body: some View {
+    HStack(spacing: 4) {
+      Text("+\(stat.added)").foregroundStyle(Color(nsColor: Theme.shared.createdLabel))
+      Text("\u{2212}\(stat.deleted)").foregroundStyle(Color(nsColor: Theme.shared.deletedLabel))
+    }
+    .monospacedDigit()
+  }
+}
+
+/// Zed's git status icon: a small rounded square in the status colour, with
+/// a dot for modified, a plus for added and a minus for deleted.
+struct StatusIcon: View {
+  let kind: ChangedFile.Kind
+
+  var body: some View {
+    ZStack {
+      RoundedRectangle(cornerRadius: 2.5).strokeBorder(color, lineWidth: 1.25)
+      switch kind {
+      case .added, .untracked: Image(systemName: "plus").font(.system(size: 7, weight: .bold))
+      case .deleted: Image(systemName: "minus").font(.system(size: 7, weight: .bold))
+      case .conflicted: Image(systemName: "exclamationmark").font(.system(size: 7, weight: .bold))
+      case .renamed: Image(systemName: "arrow.right").font(.system(size: 6, weight: .bold))
+      case .modified, .typeChanged: Circle().frame(width: 3.5, height: 3.5)
+      }
+    }
+    .foregroundStyle(color)
+    .frame(width: 12, height: 12)
+    .accessibilityLabel(label)
+  }
+
+  private var color: Color {
     let theme = Theme.shared
-    return switch kind {
-    case .added, .untracked: theme.createdLabel
-    case .deleted: theme.deletedLabel
-    case .modified, .typeChanged: theme.modified
-    case .renamed: theme.renamed
-    case .conflicted: theme.conflicted
+    let color: NSColor =
+      switch kind {
+      case .added, .untracked: theme.createdLabel
+      case .deleted: theme.deletedLabel
+      case .modified, .typeChanged: theme.modified
+      case .renamed: theme.renamed
+      case .conflicted: theme.conflicted
+      }
+    return Color(nsColor: color)
+  }
+
+  private var label: String {
+    switch kind {
+    case .added: "Added"
+    case .untracked: "Untracked"
+    case .deleted: "Deleted"
+    case .modified: "Modified"
+    case .typeChanged: "Type changed"
+    case .renamed: "Renamed"
+    case .conflicted: "Conflicted"
     }
   }
 }
 
-/// Zed's staged checkbox: checked, a dash when partly staged, or empty.
+/// Zed's filled checkbox: accent-filled with a check when staged, a dash
+/// when partly staged, an outline when not.
 private struct StageBox: View {
   let state: ZedChangesList.StageState
   let toggle: () -> Void
 
   var body: some View {
     Button(action: toggle) {
-      Image(systemName: icon)
-        .foregroundStyle(state == .none ? Color.secondary : Color.themeAccent)
-        .hitTarget()
+      ZStack {
+        RoundedRectangle(cornerRadius: 3)
+          .fill(state == .none ? Color.clear : Color.themeAccent)
+        RoundedRectangle(cornerRadius: 3)
+          .strokeBorder(state == .none ? Color.secondary.opacity(0.6) : Color.themeAccent, lineWidth: 1)
+        if state != .none {
+          Image(systemName: state == .all ? "checkmark" : "minus")
+            .font(.system(size: 8, weight: .bold))
+            .foregroundStyle(.white)
+        }
+      }
+      .frame(width: 14, height: 14)
+      .hitTarget()
     }
     .buttonStyle(.plain)
     .accessibilityLabel(state == .all ? "Unstage" : "Stage")
     .accessibilityValue(state == .all ? "Staged" : state == .partial ? "Partly staged" : "Not staged")
     .help(AppCommand.toggleStaged.hint(state == .all ? "Unstage" : "Stage"))
-  }
-
-  private var icon: String {
-    switch state {
-    case .all: "checkmark.square.fill"
-    case .partial: "minus.square.fill"
-    case .none: "square"
-    }
   }
 }
 
@@ -233,11 +352,14 @@ private struct FolderRow: View {
   let depth: Int
 
   var body: some View {
-    Label(name, systemImage: "folder")
-      .labelStyle(.titleAndIcon)
-      .foregroundStyle(.secondary)
-      .font(.app(.body))
-      .padding(.leading, CGFloat(depth) * 12 + 28)
-      .selectionDisabled()
+    HStack(spacing: 4) {
+      Image(systemName: "folder").font(.app(.caption))
+      Text(name).lineLimit(1)
+      Spacer()
+    }
+    .foregroundStyle(.secondary)
+    .font(.app(.body))
+    .padding(.leading, 10 + CGFloat(depth) * 16)
+    .frame(height: 28)
   }
 }
