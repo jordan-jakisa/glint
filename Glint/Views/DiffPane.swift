@@ -6,9 +6,10 @@ struct DiffPane: View {
 
   var body: some View {
     if let error = session.diffError {
+      // Minimal shows no title, so the description says what failed.
       EmptyState(
         "Couldn't load this diff", systemImage: "exclamationmark.triangle",
-        description: Text(error))
+        description: Text(Theme.shared.isMinimal ? "Couldn't load this diff. \(error)" : error))
     } else if let diff = session.diff {
       VStack(spacing: 0) {
         header(for: diff)
@@ -78,7 +79,7 @@ struct DiffPane: View {
   private func emptyDescription(for source: DiffSource) -> String {
     switch source {
     case .commit: "This commit doesn't change any files."
-    case .workingTree(true, _): "Nothing staged here."
+    case .workingTree(true, _): "Nothing staged here. Press \(AppCommand.toggleStaged.keys) on a file to stage it."
     case .workingTree(false, _): "Nothing changed here."
     case .branch: "This branch doesn't change anything yet."
     }

@@ -102,14 +102,18 @@ struct EmptyState<LabelContent: View, Description: View, Actions: View>: View {
   @ViewBuilder let actions: Actions
 
   var body: some View {
-    // Minimal: one line of text, no icon or title.
+    // Minimal: the line of text and its one action, no icon or title.
     if Theme.shared.isMinimal {
-      description
-        .font(.app(.body))
-        .foregroundStyle(.secondary)
-        .multilineTextAlignment(.center)
-        .padding()
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+      VStack(spacing: 8) {
+        description
+          .font(.app(.body))
+          .foregroundStyle(.secondary)
+          .multilineTextAlignment(.center)
+        actions
+          .buttonStyle(.link)
+      }
+      .padding()
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
     } else {
       standard
     }

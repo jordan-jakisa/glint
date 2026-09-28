@@ -607,7 +607,8 @@ final class RepositorySession {
       } catch {
         guard selectedSource == source else { return }
         diff = nil
-        diffError = "\(error)"
+        // Plain advice, like alerts; git's own text isn't for reading here.
+        diffError = UserAlert("Couldn't load this diff", error: error).message
         isLoadingDiff = false
       }
     }
