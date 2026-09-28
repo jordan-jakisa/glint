@@ -158,6 +158,8 @@ final class RepositorySession {
   // MARK: Branches
 
   internal(set) var branches: [Branch] = []
+  /// This repository's worktrees, main first, for the branch picker.
+  internal(set) var worktrees: [Worktree] = []
   var isBranchPickerShown = false {
     didSet { if isBranchPickerShown, !oldValue { loadBranches() } }
   }

@@ -77,6 +77,12 @@ struct UserAlert: Equatable, Sendable {
     if has("index.lock") {
       return "Another git process is using this repository. Try again in a moment."
     }
+    if has("use --force to delete it", "contains modified or untracked files") {
+      return "That worktree has changes that aren't committed. Open it, commit or discard them, then remove it."
+    }
+    if has("is already used by worktree", "is already checked out at") {
+      return "That branch is already checked out in another worktree. Pick it in the branch picker to open that worktree."
+    }
     if has("would be overwritten by") {
       return "That would overwrite changes you haven't committed. Commit or stash them first, then try again."
     }

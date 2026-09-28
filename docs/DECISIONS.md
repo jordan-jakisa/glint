@@ -72,6 +72,23 @@ with them means becoming slow.
 The test for any proposed feature: does it make the look, stage, commit loop
 faster? If not, it does not belong.
 
+## Worktrees are first-class (2026-09-28)
+
+Linked worktrees are how you run two branches at once: an agent on one, you
+reviewing another, a hotfix beside a feature. Opening them used to mean the
+terminal and ⌘O. Glint now treats them as places a branch lives:
+
+- The branch picker marks a branch that's checked out in another worktree;
+  picking it opens that worktree instead of failing to switch.
+- ⌥↩ (or Option-click) on any branch, or on "Create branch", makes a new
+  worktree for it beside the repository (`<repo>-<branch>`) and opens it.
+- A worktree can be removed from the picker; git refuses one with
+  uncommitted work, and Glint says so in plain words.
+
+It passes the scope test: it removes the slowest part of reviewing a second
+branch (stash, switch, lose your place). Still out: moving, locking, pruning
+and repairing worktrees. The terminal does those.
+
 ## Build order: viewer before AI (2026-09-26)
 
 The diff viewer ships first, with no AI at all. Three reasons:

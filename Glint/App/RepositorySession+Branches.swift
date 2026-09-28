@@ -6,6 +6,7 @@ import Foundation
 extension RepositorySession {
   func loadBranches() {
     guard let repository else { return }
+    loadWorktrees()
     Task {
       do {
         branches = try await repository.branches()
