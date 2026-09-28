@@ -15,6 +15,14 @@ struct RootView: View {
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         session.refresh()
       }
+      .sheet(
+        item: Binding(get: { session.editingHunk }, set: { session.editingHunk = $0 })
+      ) { edit in
+        HunkEditor(edit: edit, save: session.saveEdit) { session.editingHunk = nil }
+          .font(.app(.body))
+          .tint(.themeAccent)
+          .themedTextLevels()
+      }
       .confirmationDialog(
         discardTitle,
         isPresented: Binding(

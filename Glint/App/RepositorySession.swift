@@ -193,6 +193,8 @@ final class RepositorySession {
 
   /// Changed lines selected in a working-tree diff, for line staging.
   internal(set) var selectedLineRows: [DiffRowID] = []
+  /// The hunk open in the editor sheet, if any.
+  var editingHunk: HunkEdit?
   /// Hands keyboard jumps straight to the table, skipping a SwiftUI update.
   @ObservationIgnored let diffScroller = DiffScroller()
 

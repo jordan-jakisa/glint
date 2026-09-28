@@ -30,7 +30,8 @@ struct DiffPane: View {
             didPaint: session.diffDidAppear,
             partialAction: session.partialAction,
             selectionChanged: session.lineSelectionChanged,
-            hunkAction: session.stageHunk)
+            hunkAction: session.stageHunk,
+            editLines: editLines)
         }
       }
     } else if session.tab == .changes, session.status.isClean {
@@ -50,6 +51,13 @@ struct DiffPane: View {
       // nothing rather than a spinner that would only flicker.
       Color.clear
     }
+  }
+
+  /// Edits go to your working copy, so only its diff offers them.
+  private var editLines: ((DiffRowID) -> Void)? {
+    guard session.canEditDiff else { return nil }
+    let session = session
+    return { session.beginEdit($0) }
   }
 
   @ViewBuilder private func header(for diff: Diff) -> some View {

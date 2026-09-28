@@ -25,11 +25,14 @@ struct DiffTableView: NSViewRepresentable {
   var partialAction: String? = nil
   var selectionChanged: ([DiffRowID]) -> Void = { _ in }
   var hunkAction: (DiffRowID) -> Void = { _ in }
+  /// Opens the line's hunk for editing; nil where the diff isn't your
+  /// working copy (commits, staged changes).
+  var editLines: ((DiffRowID) -> Void)? = nil
 
   func makeCoordinator() -> Coordinator { Coordinator() }
 
   func makeNSView(context: Context) -> NSScrollView {
-    let table = NSTableView()
+    let table = DiffTable()
     table.headerView = nil
     table.style = .plain
     table.intercellSpacing = .zero
@@ -50,6 +53,8 @@ struct DiffTableView: NSViewRepresentable {
     table.delegate = coordinator
     table.target = coordinator
     table.action = #selector(Coordinator.clicked(_:))
+    table.doubleAction = #selector(Coordinator.doubleClicked(_:))
+    table.coordinator = coordinator
 
     let scrollView = NSScrollView()
     scrollView.documentView = table
@@ -83,6 +88,7 @@ struct DiffTableView: NSViewRepresentable {
     private var didPaint: (DiffSource) -> Void = { _ in }
     private var partialAction: String?
     private var selectionChanged: ([DiffRowID]) -> Void = { _ in }
+    private var editLines: ((DiffRowID) -> Void)?
     private var hunkAction: (DiffRowID) -> Void = { _ in }
     private var observers: [NSObjectProtocol] = []
 
@@ -109,6 +115,7 @@ struct DiffTableView: NSViewRepresentable {
       didPaint = view.didPaint
       selectionChanged = view.selectionChanged
       hunkAction = view.hunkAction
+      editLines = view.editLines
       guard let table else { return }
       let actionChanged = view.partialAction != partialAction
       partialAction = view.partialAction
@@ -220,19 +227,71 @@ struct DiffTableView: NSViewRepresentable {
       return rowView
     }
 
+    /// Any line can be selected, to copy it; only changed lines count
+    /// towards staging.
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
-      guard partialAction != nil else { return false }
       switch rows[row].content {
-      case .line(let line): return line.kind == .addition || line.kind == .deletion
-      case .split(let pair):
-        return pair.left?.kind == .deletion || pair.right?.kind == .addition
-      default: return false
+      case .line(let line): line.kind != .noNewline
+      case .split: true
+      default: false
       }
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
       guard let table else { return }
-      selectionChanged(table.selectedRowIndexes.compactMap { rows.indices.contains($0) ? rows[$0].id : nil })
+      guard partialAction != nil else { return selectionChanged([]) }
+      selectionChanged(
+        table.selectedRowIndexes.compactMap { index in
+          guard rows.indices.contains(index), Self.isChange(rows[index]) else { return nil }
+          return rows[index].id
+        })
+    }
+
+    private static func isChange(_ row: DiffRow) -> Bool {
+      switch row.content {
+      case .line(let line): line.kind == .addition || line.kind == .deletion
+      case .split(let pair): pair.left?.kind == .deletion || pair.right?.kind == .addition
+      default: false
+      }
+    }
+
+    // MARK: Copy and edit
+
+    /// The selected lines as plain text: the new side where there is one, so
+    /// what you paste is the code as it stands.
+    func copySelection() {
+      guard let table else { return }
+      let text = table.selectedRowIndexes.compactMap { index -> String? in
+        guard rows.indices.contains(index) else { return nil }
+        switch rows[index].content {
+        case .line(let line): return line.kind == .noNewline ? nil : line.text
+        case .split(let pair): return (pair.right ?? pair.left)?.text
+        default: return nil
+        }
+      }
+      guard !text.isEmpty else { return }
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(text.joined(separator: "\n"), forType: .string)
+    }
+
+    var canCopy: Bool { !(table?.selectedRowIndexes.isEmpty ?? true) }
+
+    /// The line row to edit: the clicked one, else the first selected.
+    func editableRow(at index: Int) -> DiffRowID? {
+      guard editLines != nil, rows.indices.contains(index) else { return nil }
+      switch rows[index].content {
+      case .line, .split: return rows[index].id
+      default: return nil
+      }
+    }
+
+    func edit(row index: Int) {
+      guard let id = editableRow(at: index) else { return }
+      editLines?(id)
+    }
+
+    @objc func doubleClicked(_ sender: NSTableView) {
+      edit(row: sender.clickedRow)
     }
 
     @objc func clicked(_ sender: NSTableView) {
@@ -292,6 +351,43 @@ struct DiffTableView: NSViewRepresentable {
       }
       return nil
     }
+  }
+}
+
+/// The diff's table: ⌘C copies the selected lines, and right-click offers
+/// Copy and, on your working copy, Edit.
+final class DiffTable: NSTableView {
+  weak var coordinator: DiffTableView.Coordinator?
+
+  @objc func copy(_ sender: Any?) {
+    coordinator?.copySelection()
+  }
+
+  override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+    if item.action == #selector(copy(_:)) { return coordinator?.canCopy ?? false }
+    return super.validateUserInterfaceItem(item)
+  }
+
+  override func menu(for event: NSEvent) -> NSMenu? {
+    let row = self.row(at: convert(event.locationInWindow, from: nil))
+    guard row >= 0, let coordinator else { return nil }
+    // Right-clicking outside the selection selects that line, as lists do.
+    if !selectedRowIndexes.contains(row), coordinator.tableView(self, shouldSelectRow: row) {
+      selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+    }
+    let menu = NSMenu()
+    let copy = menu.addItem(withTitle: "Copy", action: #selector(copy(_:)), keyEquivalent: "c")
+    copy.target = self
+    if coordinator.editableRow(at: row) != nil {
+      let edit = menu.addItem(withTitle: "Edit These Lines\u{2026}", action: #selector(editClicked(_:)), keyEquivalent: "")
+      edit.target = self
+      edit.tag = row
+    }
+    return menu
+  }
+
+  @objc private func editClicked(_ sender: NSMenuItem) {
+    coordinator?.edit(row: sender.tag)
   }
 }
 
