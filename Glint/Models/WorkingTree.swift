@@ -7,7 +7,7 @@ struct ChangedFile: Identifiable, Hashable, Sendable {
     case added, modified, deleted, renamed, typeChanged
     /// New and never staged.
     case untracked
-    /// Unresolved merge conflict. Glint shows these but doesn't resolve them.
+    /// Unresolved merge conflict. Selecting one shows its conflicts to resolve.
     case conflicted
   }
 

@@ -195,6 +195,9 @@ final class RepositorySession {
   internal(set) var selectedLineRows: [DiffRowID] = []
   /// The hunk open in the editor sheet, if any.
   var editingHunk: HunkEdit?
+  /// The conflicted file on screen, as last read from disk, for resolving
+  /// its conflicts. See `+Conflicts`.
+  internal(set) var conflictDocument: ConflictDocument?
   /// Hands keyboard jumps straight to the table, skipping a SwiftUI update.
   @ObservationIgnored let diffScroller = DiffScroller()
 

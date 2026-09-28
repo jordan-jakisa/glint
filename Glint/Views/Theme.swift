@@ -101,6 +101,10 @@ final class Theme {
   var modified: NSColor { diffColors == .greenRed ? .systemOrange : .systemPurple }
   var renamed: NSColor { diffColors == .greenRed ? .systemBlue : .systemTeal }
   var conflicted: NSColor { diffColors == .greenRed ? .systemRed : .systemPink }
+  /// The incoming side of a merge conflict; the current side uses `added`.
+  /// Blue beside green, as in Zed; purple beside blue, so the two sides
+  /// never look alike.
+  var incoming: NSColor { diffColors == .greenRed ? .systemBlue : .systemPurple }
 
   // MARK: Changing
 
