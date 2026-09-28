@@ -222,6 +222,18 @@ final class RepositorySession {
   /// Hands keyboard jumps straight to the table, skipping a SwiftUI update.
   @ObservationIgnored let diffScroller = DiffScroller()
 
+  // MARK: Blame (+Blame)
+
+  /// The blame column in the diff's gutter. Remembered between launches.
+  var isBlameShown = UserDefaults.standard.bool(forKey: "blameShown") {
+    didSet { UserDefaults.standard.set(isBlameShown, forKey: "blameShown") }
+  }
+  /// Bumped when a file's blame arrives, so the diff redraws just its gutter.
+  internal(set) var blameVersion = 0
+  /// Blames loaded so far and the ones on their way. Not observed: lookups
+  /// from drawing start loads, and only `blameVersion` should redraw.
+  @ObservationIgnored var blames = BlameStore()
+
   // MARK: Internal state for the extensions
 
   @ObservationIgnored var repository: GitRepository?

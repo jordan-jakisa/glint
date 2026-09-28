@@ -105,6 +105,12 @@ struct ChangesView: View {
         Divider()
         Button("Reveal in Finder") { session.revealInFinder(file.path) }
         Button("Copy Path") { session.copyPath(file.path) }
+        // Links point at your last commit, which a new file isn't in yet.
+        if file.kind != .added, file.kind != .untracked {
+          Divider()
+          Button("Copy File Permalink") { session.copyFilePermalink(file.path) }
+          Button("Open File Permalink") { session.openFilePermalink(file.path) }
+        }
       }
   }
 }

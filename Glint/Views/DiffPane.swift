@@ -34,7 +34,11 @@ struct DiffPane: View {
             partialAction: session.partialAction,
             selectionChanged: session.lineSelectionChanged,
             hunkAction: session.stageHunk,
-            editLines: editLines)
+            editLines: editLines,
+            blame: { [session] in session.blame(file: $0, line: $1) },
+            showsBlame: session.isBlameShown,
+            blameVersion: session.blameVersion,
+            permalinks: permalinks)
         }
       }
     } else if session.tab == .changes, session.status.isClean {
@@ -61,6 +65,15 @@ struct DiffPane: View {
     guard session.canEditDiff else { return nil }
     let session = session
     return { session.beginEdit($0) }
+  }
+
+  private var permalinks: DiffPermalinks {
+    let session = session
+    return DiffPermalinks(
+      canLink: { session.canLinkToLine($0) },
+      copy: { session.copyPermalink(to: $0) },
+      open: { session.openPermalink(to: $0) },
+      note: { session.permalinkNote(for: $0) })
   }
 
   @ViewBuilder private func header(for diff: Diff) -> some View {
