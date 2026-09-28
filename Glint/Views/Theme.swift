@@ -96,6 +96,11 @@ final class Theme {
   var accentColor: NSColor { accent.color }
   var added: NSColor { diffColors == .greenRed ? .systemGreen : .systemBlue }
   var removed: NSColor { diffColors == .greenRed ? .systemRed : .systemOrange }
+  /// The other status colours stay clear of whichever pair diffs use, so
+  /// in blue and orange a rename never reads as an addition.
+  var modified: NSColor { diffColors == .greenRed ? .systemOrange : .systemPurple }
+  var renamed: NSColor { diffColors == .greenRed ? .systemBlue : .systemTeal }
+  var conflicted: NSColor { diffColors == .greenRed ? .systemRed : .systemPink }
 
   // MARK: Changing
 
@@ -157,6 +162,8 @@ extension Color {
   @MainActor static var themeAccent: Color { Color(nsColor: Theme.shared.accentColor) }
   @MainActor static var added: Color { Color(nsColor: Theme.shared.added) }
   @MainActor static var removed: Color { Color(nsColor: Theme.shared.removed) }
+  /// "Has changes": the modified colour, so it never means removed.
+  @MainActor static var modified: Color { Color(nsColor: Theme.shared.modified) }
 }
 
 extension View {

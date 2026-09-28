@@ -52,7 +52,7 @@ struct RepositoryPicker: View {
           .font(.app(.caption).monospacedDigit())
           .padding(.horizontal, 6)
           .padding(.vertical, 2)
-          .background(.orange.opacity(0.2), in: Capsule())
+          .background(Color.modified.opacity(0.2), in: Capsule())
       }
       if index < 9 {
         Text("\u{2318}\(index + 1)")

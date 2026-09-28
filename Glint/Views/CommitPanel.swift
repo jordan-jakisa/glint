@@ -151,7 +151,7 @@ struct BranchBar: View {
             Text(session.info?.name ?? "")
               .lineLimit(1)
             if session.otherRepositoriesHaveChanges {
-              Circle().fill(.orange).frame(width: 5, height: 5)
+              Circle().fill(Color.modified).frame(width: 5, height: 5)
             }
             Image(systemName: "chevron.down")
               .font(.app(.caption2))

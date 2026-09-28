@@ -34,12 +34,12 @@ struct StatusMark {
   init(_ kind: ChangedFile.Kind) {
     switch kind {
     case .added: (letter, color, label) = ("A", Theme.shared.added, "Added")
-    case .modified: (letter, color, label) = ("M", .systemOrange, "Modified")
+    case .modified: (letter, color, label) = ("M", Theme.shared.modified, "Modified")
     case .deleted: (letter, color, label) = ("D", Theme.shared.removed, "Deleted")
-    case .renamed: (letter, color, label) = ("R", .systemBlue, "Renamed")
-    case .typeChanged: (letter, color, label) = ("T", .systemOrange, "Type changed")
+    case .renamed: (letter, color, label) = ("R", Theme.shared.renamed, "Renamed")
+    case .typeChanged: (letter, color, label) = ("T", Theme.shared.modified, "Type changed")
     case .untracked: (letter, color, label) = ("U", Theme.shared.added, "Untracked")
-    case .conflicted: (letter, color, label) = ("!", .systemRed, "Conflicted")
+    case .conflicted: (letter, color, label) = ("!", Theme.shared.conflicted, "Conflicted")
     }
   }
 
@@ -47,10 +47,10 @@ struct StatusMark {
     switch status {
     case .added: (letter, color, label) = ("A", Theme.shared.added, "Added")
     case .deleted: (letter, color, label) = ("D", Theme.shared.removed, "Deleted")
-    case .modified: (letter, color, label) = ("M", .systemOrange, "Modified")
-    case .renamed: (letter, color, label) = ("R", .systemBlue, "Renamed")
-    case .copied: (letter, color, label) = ("C", .systemBlue, "Copied")
-    case .typeChanged: (letter, color, label) = ("T", .systemOrange, "Type changed")
+    case .modified: (letter, color, label) = ("M", Theme.shared.modified, "Modified")
+    case .renamed: (letter, color, label) = ("R", Theme.shared.renamed, "Renamed")
+    case .copied: (letter, color, label) = ("C", Theme.shared.renamed, "Copied")
+    case .typeChanged: (letter, color, label) = ("T", Theme.shared.modified, "Type changed")
     }
   }
 
