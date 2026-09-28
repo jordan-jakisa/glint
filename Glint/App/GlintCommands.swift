@@ -135,6 +135,11 @@ struct GlintCommands: Commands {
     // Zed's git actions that aren't about moving around: stash, and later
     // blame and permalinks.
     CommandMenu("Git") {
+      Toggle(AppCommand.toggleBlame.title, isOn: Binding(
+        get: { session?.isBlameShown ?? false }, set: { _ in session?.toggleBlame() }))
+        .shortcut(.toggleBlame)
+        .disabled(!isReady)
+      Divider()
       Button(AppCommand.stashAll.title) { session?.requestStash(.all) }
         .shortcut(.stashAll)
         .disabled(!isReady)

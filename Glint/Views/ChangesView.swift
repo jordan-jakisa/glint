@@ -98,6 +98,9 @@ struct ChangesView: View {
     ChangeRow(file: file, staged: staged) { session.setStaged(file.path, $0) }
       .tag(ChangeSelection(staged: staged, path: file.path))
       .contextMenu {
+        Button("Open File") { session.openFile(file.path) }
+        Button("View File History") { session.showHistory(for: file.path) }
+        Divider()
         Button(staged ? "Unstage" : "Stage") { session.setStaged(file.path, !staged) }
         if !staged, file.kind != .conflicted {
           Button("Discard Changes…") { session.requestDiscard([file.path]) }

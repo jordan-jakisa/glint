@@ -105,7 +105,7 @@ struct Shortcut: Codable, Hashable, Sendable {
 enum AppCommand: String, CaseIterable, Identifiable, Sendable {
   case openRepository, reload, toggleLayout, showTerminal, maximizeTerminal, newTerminalTab, closeTerminalTab, openExternalTerminal
   case biggerText, smallerText, actualTextSize, toggleMinimal
-  case stashAll, popStash, viewStashes
+  case stashAll, popStash, viewStashes, toggleBlame
   case splitTerminalRight, splitTerminalDown, focusPaneLeft, focusPaneRight, focusPaneUp, focusPaneDown
   case switchProject, switchRepository, switchBranch, writeMessage, commit
   case fetch, pull, push
@@ -129,6 +129,7 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .stashAll: "Stash All\u{2026}"
     case .popStash: "Pop Latest Stash"
     case .viewStashes: "View Stashes\u{2026}"
+    case .toggleBlame: "Git Blame"
     case .biggerText: "Bigger Text"
     case .smallerText: "Smaller Text"
     case .actualTextSize: "Default Text Size"
@@ -186,6 +187,7 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .stashAll: Shortcut("s", option: true, control: true)
     case .popStash: Shortcut("s", option: true, control: true, shift: true)
     case .viewStashes: Shortcut("l", option: true, control: true, shift: true)
+    case .toggleBlame: Shortcut("b", command: true, option: true)
     case .biggerText: Shortcut("=", command: true)
     case .smallerText: Shortcut("-", command: true)
     case .actualTextSize: Shortcut("0", command: true)

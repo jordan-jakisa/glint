@@ -112,6 +112,11 @@ struct ZedChangesList: View {
     } else if entry.kind != .conflicted, entry.hasUnstaged {
       Button("Restore File\u{2026}") { session.requestDiscard([entry.path]) }
     }
+    if entry.kind != .added, entry.kind != .untracked {
+      Divider()
+      Button("Copy File Permalink") { session.copyFilePermalink(entry.path) }
+      Button("Open File Permalink") { session.openFilePermalink(entry.path) }
+    }
     Divider()
     Button("Reveal in Finder") { session.revealInFinder(entry.path) }
     Button("Copy Path") { session.copyPath(entry.path) }
