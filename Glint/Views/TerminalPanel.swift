@@ -226,7 +226,7 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
       forName: TextSize.didChange, object: nil, queue: .main
     ) { [weak self] _ in
       MainActor.assumeIsolated {
-        let font = AppFont.ns(size: AppFont.body)
+        let font = AppFont.ns(size: AppFont.codeBody)
         for view in self?.tabs.values.flatMap({ $0 }).flatMap(\.panes) ?? [] { view.font = font }
       }
     }
@@ -364,7 +364,7 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
   private func makeShell(in folder: URL) -> GlintTerminalView {
     let start = ContinuousClock.now
     let view = GlintTerminalView(frame: NSRect(x: 0, y: 0, width: 600, height: 240))
-    view.font = AppFont.ns(size: AppFont.body)
+    view.font = AppFont.ns(size: AppFont.codeBody)
     view.applyColors()
     view.processDelegate = self
     view.onFocus = { [weak self, weak view] in

@@ -8,7 +8,9 @@ import SwiftUI
 @Observable
 final class TextSize {
   static let shared = TextSize()
-  static let standard: CGFloat = 14
+  /// Zed's default interface size; code sits a point under it, like Zed's
+  /// 15 pt buffer.
+  static let standard: CGFloat = 16
   static let range: ClosedRange<CGFloat> = 10...20
   static let didChange = Notification.Name("GlintTextSizeDidChange")
   private static let key = "textSize"
@@ -51,9 +53,12 @@ enum AppFont {
   }
 
   /// The whole type scale: four sizes, two weights, all following your
-  /// text size (14 by default, giving 12, 14, 18, 28). Hierarchy past that
+  /// text size (16 by default, giving 14, 16, 20, 32). Hierarchy past that
   /// comes from colour (primary, secondary, tertiary), not more sizes.
   static var body: CGFloat { TextSize.shared.body }
+  /// Code (diffs, the terminal, commit messages): a point under the
+  /// interface, as in Zed.
+  static var codeBody: CGFloat { body - 1 }
   static var small: CGFloat { body - 2 }
   static var title: CGFloat { body + 4 }
   static var display: CGFloat { body * 2 }
@@ -102,7 +107,7 @@ extension Font {
   /// Code in the interface: commit messages, ids, keys. Same scale.
   @MainActor
   static func code(_ style: Font.TextStyle) -> Font {
-    let font = Font.custom(AppFont.codeFamily, size: AppFont.size(style), relativeTo: style)
+    let font = Font.custom(AppFont.codeFamily, size: AppFont.size(style) - 1, relativeTo: style)
     return AppFont.isSemibold(style) ? font.weight(.semibold) : font
   }
 }

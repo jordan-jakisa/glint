@@ -462,9 +462,9 @@ struct DiffMetrics {
     }
   }
 
-  private static var measured = Measures(size: AppFont.body)
+  private static var measured = Measures(size: AppFont.codeBody)
   private static var measures: Measures {
-    if measured.size != AppFont.body { measured = Measures(size: AppFont.body) }
+    if measured.size != AppFont.codeBody { measured = Measures(size: AppFont.codeBody) }
     return measured
   }
 

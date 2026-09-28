@@ -72,6 +72,24 @@ with them means becoming slow.
 The test for any proposed feature: does it make the look, stage, commit loop
 faster? If not, it does not belong.
 
+## Scope: everything Zed's git does (2026-09-28, replaces the scope above)
+
+Asked for directly: Glint covers all of Zed's git features, not only its
+panel. On top of the look, stage, commit loop that means stash (create, list,
+apply, pop, drop), blame (inline and per file), conflict resolution (use
+current, incoming, or both), file history, word-level diff highlighting,
+restoring hunks, a tree view, deleting branches, choosing a remote, force
+push, pull with rebase, and permalinks. The "not a full git client" line above
+no longer holds for these; rebase, merge and history rewriting beyond amend
+are still out, as Zed leaves them to the terminal too.
+
+With Liquid Glass off, Glint also looks like Zed: One Dark and One Light
+colours, a flat panel, and Zed's default sizes (16 pt interface, 15 pt code),
+which are now Glint's defaults everywhere.
+
+Speed stays the product: each feature has to stay off the hot path (opening,
+j/k, staging), and the budgets in the v0.1 plan still apply.
+
 ## Worktrees are first-class (2026-09-28)
 
 Linked worktrees are how you run two branches at once: an agent on one, you
