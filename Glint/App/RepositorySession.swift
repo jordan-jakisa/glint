@@ -284,6 +284,9 @@ final class RepositorySession {
   /// Files waiting for a partial status; nil when a full one is queued.
   @ObservationIgnored var pendingStatusPaths: Set<String>?
   @ObservationIgnored var cache = DiffCache(capacity: 32)
+  /// Word highlights as the cached diffs were built, to rebuild them when
+  /// the setting changes.
+  @ObservationIgnored var builtWithWordDiff = WordDiff.isEnabled
   @ObservationIgnored var diffRequestedAt: ContinuousClock.Instant?
   /// The reader's position in the diff: the top-most visible row, or the last
   /// place a keyboard jump landed. Not observed: it changes on every scroll.
@@ -325,6 +328,11 @@ final class RepositorySession {
     }
     let all = defaults.bool(forKey: "showsAllRepositories")
     if all != showsAllRepositories { showsAllRepositories = all }
+    if WordDiff.isEnabled != builtWithWordDiff {
+      builtWithWordDiff = WordDiff.isEnabled
+      cache = DiffCache(capacity: 32)
+      showSelectedDiff(inPlace: true)
+    }
     let terminal = defaults.bool(forKey: "terminalShown")
     if terminal != isTerminalShown { isTerminalShown = terminal }
   }

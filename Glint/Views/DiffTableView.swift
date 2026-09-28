@@ -55,7 +55,7 @@ struct DiffTableView: NSViewRepresentable {
     table.allowsEmptySelection = true
     table.usesAutomaticRowHeights = false
     table.floatsGroupRows = true
-    table.backgroundColor = .textBackgroundColor
+    table.backgroundColor = Theme.shared.editorBackground
     table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
     let column = NSTableColumn(identifier: .init("diff"))
     column.resizingMask = .autoresizingMask
@@ -75,7 +75,7 @@ struct DiffTableView: NSViewRepresentable {
     scrollView.hasHorizontalScroller = false
     scrollView.autohidesScrollers = true
     scrollView.drawsBackground = true
-    scrollView.backgroundColor = .textBackgroundColor
+    scrollView.backgroundColor = Theme.shared.editorBackground
     coordinator.attach(table: table, scrollView: scrollView)
     return scrollView
   }
@@ -149,6 +149,10 @@ struct DiffTableView: NSViewRepresentable {
         view.textSize != textSize || view.themeVersion != themeVersion || view.showsBlame != showsBlame
       textSize = view.textSize
       themeVersion = view.themeVersion
+      // Style Zed swaps the editor colour; the table and its scroll view
+      // paint it behind the rows.
+      table.backgroundColor = Theme.shared.editorBackground
+      scrollView?.backgroundColor = Theme.shared.editorBackground
       showsBlame = view.showsBlame
       let blameArrived = view.blameVersion != blameVersion
       blameVersion = view.blameVersion

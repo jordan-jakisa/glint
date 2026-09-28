@@ -109,7 +109,7 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   }
 
   override func draw(_ dirtyRect: NSRect) {
-    NSColor.textBackgroundColor.setFill()
+    Theme.shared.editorBackground.setFill()
     bounds.fill()
     guard let row else { return }
     switch row.content {
@@ -130,7 +130,8 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   // MARK: - Headers
 
   private func drawFileHeader(_ file: FileChange, collapsed: Bool) {
-    NSColor.windowBackgroundColor.setFill()
+    // Zed draws file headers on its panel colour.
+    (Theme.shared.panelBackground ?? .windowBackgroundColor).setFill()
     bounds.fill()
     Hairline.nsColor.setFill()
     let pixel = 1 / (window?.backingScaleFactor ?? 2)
@@ -311,7 +312,7 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     guard let number, let context = NSGraphicsContext.current?.cgContext else { return }
     let text = String(number)
     CodeText.drawSingleLine(
-      text, color: .secondaryLabelColor,
+      text, color: Theme.shared.lineNumber,
       at: NSPoint(x: rightEdge - CGFloat(text.count) * DiffMetrics.advance, y: DiffMetrics.verticalPadding),
       in: context)
   }
@@ -337,7 +338,7 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
       ? [] : WordDiff.displayRanges(line.emphasis, in: line.text, tabWidth: DiffMetrics.tabWidth)
     CodeText.draw(
       DiffMetrics.displayText(line.text),
-      color: line.kind == .noNewline ? .secondaryLabelColor : .labelColor,
+      color: line.kind == .noNewline ? .secondaryLabelColor : Theme.shared.codeText,
       at: NSPoint(x: x + DiffMetrics.markerWidth, y: DiffMetrics.verticalPadding),
       width: DiffMetrics.textDrawWidth(width), in: context,
       highlights: emphasis, highlightColor: Self.emphasis(line.kind))
@@ -354,7 +355,7 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     switch kind {
     case .addition: Theme.shared.added.withAlphaComponent(0.14)
     case .deletion: Theme.shared.removed.withAlphaComponent(0.14)
-    case .context, .noNewline: .textBackgroundColor
+    case .context, .noNewline: Theme.shared.editorBackground
     }
   }
 

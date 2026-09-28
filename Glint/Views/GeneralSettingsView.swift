@@ -7,6 +7,7 @@ struct GeneralSettingsView: View {
   @State private var fileOrder = FileOrder.current
   @AppStorage("diffLayout") private var layout = DiffLayout.split
   @AppStorage("gitPanelTree") private var isTree = false
+  @AppStorage("wordDiff") private var wordDiff = true
   @AppStorage("showsAllRepositories") private var showsAllRepositories = false
   @AppStorage("terminalShown") private var terminalShown = false
   @State private var recentsCleared = false
@@ -31,6 +32,8 @@ struct GeneralSettingsView: View {
         }
         .pickerStyle(.segmented)
         .help("In Style Zed, list changed files flat or by folder, like Zed's git panel")
+        Toggle("Highlight changed words", isOn: $wordDiff)
+          .help("Inside a changed line, mark the words that changed, like Zed")
         Toggle("Show every repository's changes", isOn: $showsAllRepositories)
           .help("In a folder of repositories, list the others' changes under the active one's")
       }
@@ -65,6 +68,7 @@ struct GeneralSettingsView: View {
     .onChange(of: layout) { preferencesChanged() }
     .onChange(of: showsAllRepositories) { preferencesChanged() }
     .onChange(of: terminalShown) { preferencesChanged() }
+    .onChange(of: wordDiff) { preferencesChanged() }
   }
 
   private func preferencesChanged() {

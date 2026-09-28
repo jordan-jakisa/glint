@@ -112,6 +112,7 @@ final class Theme {
   var barBackground: NSColor? { isZed ? ZedPalette.tabBar : nil }
   var statusBarBackground: NSColor? { isZed ? ZedPalette.statusBar : nil }
   var titleBarBackground: NSColor? { isZed ? ZedPalette.titleBar : nil }
+  var codeText: NSColor { isZed ? ZedPalette.text : .labelColor }
   var lineNumber: NSColor { isZed ? ZedPalette.lineNumber : .secondaryLabelColor }
   var separator: NSColor {
     isZed ? ZedPalette.borderVariant : NSColor.separatorColor.withAlphaComponent(0.55)

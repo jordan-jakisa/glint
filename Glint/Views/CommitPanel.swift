@@ -42,10 +42,12 @@ struct CommitPanel: View {
       GenerateButton(session: session)
       Toggle("Amend", isOn: $session.isAmending)
         .toggleStyle(.checkbox)
+        .fixedSize()
         .disabled(session.lastCommit == nil)
         .help("Replace the last commit instead of adding a new one")
       Toggle("Sign Off", isOn: $session.signsOff)
         .toggleStyle(.checkbox)
+        .fixedSize()
         .help("Add a Signed-off-by line with your name and email")
       Spacer()
       // Zed's 72-character guide for the summary line, as a count.
