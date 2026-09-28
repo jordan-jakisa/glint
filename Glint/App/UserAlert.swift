@@ -71,6 +71,26 @@ struct UserAlert: Equatable, Sendable {
     if has("repository not found", "does not appear to be a git repository") {
       return "The remote isn't there, or you don't have access to it. Check the remote's URL with git remote -v \(inTerminal)."
     }
+    // Stashes, before the general conflict advice: a conflicting pop keeps
+    // the stash, which is worth knowing.
+    if has("stash entry is kept") {
+      return "The stash conflicts with your changes. Fix the files marked !, then stage them. The stash is still in the list, so drop it once you're done."
+    }
+    if has("no stash entries found", "log for 'stash' only has", "is not a stash reference", "no stash found") {
+      return "You don't have any stashes."
+    }
+    if has("no local changes to save") {
+      return "You don't have any changes to stash."
+    }
+    if has("unknown option `staged'", "unknown option 'staged'") {
+      return "Your git is too old to stash only staged changes. It needs 2.35 or later. Update git, or stash all changes instead."
+    }
+    if has("already exists, no checkout", "could not restore untracked files from stash") {
+      return "New files in the stash already exist here. Move or delete your copies, then try again."
+    }
+    if has("cannot apply a stash in the middle of a merge") {
+      return "You're in the middle of a merge. Finish or abort it \(inTerminal), then apply the stash."
+    }
     if has("unmerged files", "resolve your current index first", "fix conflicts", "conflict (") {
       return "Some files have conflicts. Fix the ones marked !, stage them, then commit."
     }

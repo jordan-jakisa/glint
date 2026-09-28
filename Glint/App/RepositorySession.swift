@@ -177,6 +177,15 @@ final class RepositorySession {
   }
   internal(set) var isSwitchingBranch = false
 
+  // MARK: Stashes (see +Stash)
+
+  /// This repository's stashes, newest first, for the stash picker.
+  internal(set) var stashes: [Stash] = []
+  /// The stash sheet on screen: naming a new stash, or the stash list.
+  var stashSheet: StashSheet?
+  /// A stash command is running; others wait for it.
+  internal(set) var isStashing = false
+
   // MARK: Remotes
 
   enum NetworkOperation: String {
