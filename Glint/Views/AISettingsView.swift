@@ -9,7 +9,7 @@ struct AISettingsView: View {
 
   var body: some View {
     Form {
-      Section {
+      Section("Commit messages") {
         Toggle("Write commit messages with AI", isOn: $settings.isEnabled)
         Text("Sends your diff to the provider only when you press \u{2728}.")
           .font(.app(.callout))
@@ -69,7 +69,7 @@ struct AISettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .frame(width: 520)
+    .frame(height: 560)
     .onAppear {
       if settings.models.isEmpty { settings.loadModels() }
     }

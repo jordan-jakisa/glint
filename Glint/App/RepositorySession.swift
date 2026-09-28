@@ -255,9 +255,17 @@ final class RepositorySession {
   static let pageSize = 200
   private static let layoutKey = "diffLayout"
 
+  /// Posted by Settings after it changes a preference a window holds, so
+  /// every open window picks it up.
+  static let preferencesChanged = Notification.Name("GlintPreferencesChanged")
+
   init() {
     layout = UserDefaults.standard.string(forKey: Self.layoutKey)
       .flatMap(DiffLayout.init(rawValue:)) ?? .unified
+    NotificationCenter.default.addObserver(forName: Self.preferencesChanged, object: nil, queue: .main) {
+      [weak self] _ in
+      MainActor.assumeIsolated { self?.reloadPreferences() }
+    }
     terminals.paneCommand = { [weak self] command, folder in
       guard let self, folder == self.repositoryURL?.standardizedFileURL else { return }
       switch command {
@@ -270,6 +278,17 @@ final class RepositorySession {
       guard let self, folder == self.repositoryURL?.standardizedFileURL else { return }
       self.isTerminalShown = false
     }
+  }
+
+  private func reloadPreferences() {
+    let defaults = UserDefaults.standard
+    if let saved = defaults.string(forKey: Self.layoutKey).flatMap(DiffLayout.init(rawValue:)), saved != layout {
+      layout = saved
+    }
+    let all = defaults.bool(forKey: "showsAllRepositories")
+    if all != showsAllRepositories { showsAllRepositories = all }
+    let terminal = defaults.bool(forKey: "terminalShown")
+    if terminal != isTerminalShown { isTerminalShown = terminal }
   }
 
   private func rebuildRows(_ change: RowsChange) {

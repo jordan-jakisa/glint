@@ -117,7 +117,10 @@ private struct ArrowKeys: ViewModifier {
           switch event.keyCode {
           case 125: move(1)
           case 126: move(-1)
-          case 36, 76 where choose != nil: choose?()
+          // Return and Enter, only when the picker handles them itself;
+          // otherwise they reach its search field's onSubmit. Each pattern
+          // needs its own `where`: one at the end binds only to the last.
+          case 36 where choose != nil, 76 where choose != nil: choose?()
           default: return event
           }
           return nil

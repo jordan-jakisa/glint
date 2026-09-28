@@ -26,19 +26,12 @@ struct GlintApp: App {
     }
 
     Settings {
-      TabView {
-        GeneralSettingsView()
-          .tabItem { Label("General", systemImage: "gearshape") }
-        AppearanceSettingsView()
-          .tabItem { Label("Appearance", systemImage: "paintbrush") }
-        AISettingsView()
-          .tabItem { Label("AI", systemImage: "sparkles") }
-        ShortcutsSettingsView()
-          .tabItem { Label("Shortcuts", systemImage: "keyboard") }
-      }
+      SettingsView()
       .font(.app(.body))
       .tint(.themeAccent)
       .themedTextLevels()
     }
+    // The window fits each tab rather than keeping one fixed height.
+    .windowResizability(.contentSize)
   }
 }

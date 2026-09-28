@@ -36,7 +36,7 @@ struct ShortcutsSettingsView: View {
       }
     }
     .formStyle(.grouped)
-    .frame(width: 520, height: 560)
+    .frame(height: 560)
     .onDisappear(perform: stopRecording)
   }
 
