@@ -132,6 +132,27 @@ struct GlintCommands: Commands {
       Divider()
     }
 
+    // Zed's git actions that aren't about moving around: stash, and later
+    // blame and permalinks.
+    CommandMenu("Git") {
+      Button(AppCommand.stashAll.title) { session?.requestStash(.all) }
+        .shortcut(.stashAll)
+        .disabled(!isReady)
+      Button("Stash Tracked\u{2026}") { session?.requestStash(.tracked) }
+        .disabled(!isReady)
+      Button("Stash Staged\u{2026}") { session?.requestStash(.staged) }
+        .disabled(!isReady)
+      Divider()
+      Button("Apply Latest Stash") { session?.applyLatestStash() }
+        .disabled(!isReady)
+      Button(AppCommand.popStash.title) { session?.popLatestStash() }
+        .shortcut(.popStash)
+        .disabled(!isReady)
+      Button(AppCommand.viewStashes.title) { session?.isStashPickerShown = true }
+        .shortcut(.viewStashes)
+        .disabled(!isReady)
+    }
+
     CommandMenu("Go") {
       Group {
         Button(AppCommand.nextItem.title) { session?.selectNextItem() }
