@@ -156,8 +156,9 @@ here.
 Also done during the pass, on request: Zed's fonts (IBM Plex Sans for the
 interface, Lilex for code) replace JetBrains Mono, and ⌃⌘M toggles Minimal.
 
-Not done: Tier 3.2 (switching Interface or Liquid Glass still rebuilds the
-window, losing scroll). macOS 15's toolbar builder can't drop items
-conditionally without a rebuild; it's a rare, deliberate switch. The pane
-context menu from Tier 4.1 is left out: SwiftTerm owns the terminal's
-right-click.
+Follow-up (same day): Tier 3.2 is done for Interface: the toolbar and status
+line stay in the view tree and only their contents change, so switching keeps
+your place in the diff. Liquid Glass still rebuilds the detail column, since
+toolbar glass is fixed when items are first built. The pane right-click menu
+from Tier 4.1 is done too (Copy, Paste, Split Right, Split Down, Close Pane):
+SwiftTerm leaves `menu(for:)` to the host after all.

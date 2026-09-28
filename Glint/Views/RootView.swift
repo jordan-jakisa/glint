@@ -211,30 +211,35 @@ private struct DiffToolbar: ViewModifier {
   @Bindable var session: RepositorySession
   @Binding var columns: NavigationSplitViewVisibility
 
+  // Minimal empties the toolbar rather than dropping the modifier, so
+  // switching Interface doesn't rebuild the window and lose your place.
   func body(content: Content) -> some View {
-    if Theme.shared.isMinimal {
-      content
-    } else if #available(macOS 26, *) {
+    let minimal = Theme.shared.isMinimal
+    if #available(macOS 26, *) {
       let glass: Visibility = Theme.shared.usesLiquidGlass ? .automatic : .hidden
       content.toolbar {
-        // The system's sidebar button is glass and can't be flattened, so
-        // with glass off it's removed and this one stands in.
-        if !Theme.shared.usesLiquidGlass {
-          ToolbarItem(placement: .navigation) { sidebarButton }
-            .sharedBackgroundVisibility(.hidden)
+        if !minimal {
+          // The system's sidebar button is glass and can't be flattened, so
+          // with glass off it's removed and this one stands in.
+          if !Theme.shared.usesLiquidGlass {
+            ToolbarItem(placement: .navigation) { sidebarButton }
+              .sharedBackgroundVisibility(.hidden)
+          }
+          ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
+            .sharedBackgroundVisibility(glass)
+          ToolbarSpacer(.flexible)
+          ToolbarItem { terminalButton }
+            .sharedBackgroundVisibility(glass)
+          ToolbarItem { layoutPicker }
+            .sharedBackgroundVisibility(glass)
         }
-        ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
-          .sharedBackgroundVisibility(glass)
-        ToolbarSpacer(.flexible)
-        ToolbarItem { terminalButton }
-          .sharedBackgroundVisibility(glass)
-        ToolbarItem { layoutPicker }
-          .sharedBackgroundVisibility(glass)
       }
     } else {
       content.toolbar {
-        ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
-        controls
+        if !minimal {
+          ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
+          controls
+        }
       }
     }
   }
@@ -271,19 +276,19 @@ private struct MinimalChrome: ViewModifier {
   let session: RepositorySession
   @Binding var columns: NavigationSplitViewVisibility
 
+  // Always inset, with the status line inside, so switching Interface
+  // doesn't rebuild the window.
   func body(content: Content) -> some View {
-    if Theme.shared.isMinimal {
-      content
-        .safeAreaInset(edge: .bottom, spacing: 0) {
+    content
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        if Theme.shared.isMinimal {
           VStack(spacing: 0) {
             Hairline()
             StatusLine(session: session, columns: $columns)
           }
           .background(.bar)
         }
-    } else {
-      content
-    }
+      }
   }
 }
 

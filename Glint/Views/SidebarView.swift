@@ -21,17 +21,21 @@ struct SidebarView: View {
 private struct TabPickerToolbar: ViewModifier {
   @Bindable var session: RepositorySession
 
+  // Empty in Minimal rather than removed, so switching doesn't rebuild.
   func body(content: Content) -> some View {
-    if Theme.shared.isMinimal {
-      content
-    } else if #available(macOS 26, *) {
+    let minimal = Theme.shared.isMinimal
+    if #available(macOS 26, *) {
       content.toolbar {
-        ToolbarItem { picker }
-          .sharedBackgroundVisibility(Theme.shared.usesLiquidGlass ? .automatic : .hidden)
+        if !minimal {
+          ToolbarItem { picker }
+            .sharedBackgroundVisibility(Theme.shared.usesLiquidGlass ? .automatic : .hidden)
+        }
       }
     } else {
       content.toolbar {
-        ToolbarItem { picker }
+        if !minimal {
+          ToolbarItem { picker }
+        }
       }
     }
   }
