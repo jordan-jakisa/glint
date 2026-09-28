@@ -69,7 +69,7 @@ struct CommitPanel: View {
 
   private var messageEditor: some View {
     TextEditor(text: $session.commitMessage)
-      .font(.app(.body))
+      .font(.code(.body))
       .scrollContentBackground(.hidden)
       .focused($messageFocused)
       .frame(height: isExpanded ? 84 : 24)
@@ -78,6 +78,7 @@ struct CommitPanel: View {
       .overlay(alignment: .topLeading) {
         if session.commitMessage.isEmpty {
           Text(placeholder)
+            .font(.code(.body))
             .foregroundStyle(.tertiary)
             .lineLimit(1)
             .padding(.horizontal, 11)

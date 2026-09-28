@@ -34,12 +34,13 @@ final class TextSize {
   func reset() { set(Self.standard) }
 }
 
-/// JetBrains Mono, bundled, for the whole app: the interface, diffs, commit
-/// messages, and the terminal. Bundled rather than looked up, so it looks the
-/// same on a Mac that doesn't have it installed.
+/// Zed's pairing, bundled: IBM Plex Sans for the interface and Lilex for
+/// code (diffs, the terminal, commit messages, ids and keys). Bundled rather
+/// than looked up, so it looks the same on a Mac that has neither installed.
 @MainActor
 enum AppFont {
-  static let family = "JetBrains Mono"
+  static let family = "IBM Plex Sans"
+  static let codeFamily = "Lilex"
 
   /// Registers the bundled faces for this process. Runs before any view
   /// draws, so no text lays out in the fallback first.
@@ -57,16 +58,21 @@ enum AppFont {
   static var title: CGFloat { body + 4 }
   static var display: CGFloat { body * 2 }
 
-  /// For AppKit drawing. Semibold or heavier gets SemiBold, anything
-  /// lighter Regular. Falls back to the system monospace if a face is
-  /// missing, so a broken bundle still reads as code.
+  /// Code, for AppKit drawing: diffs and the terminal. Semibold or heavier
+  /// gets SemiBold, anything lighter Regular. Falls back to the system
+  /// monospace if a face is missing, so a broken bundle still reads as code.
   nonisolated static func ns(size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
-    let face = weight >= .semibold ? "JetBrainsMono-SemiBold" : "JetBrainsMono-Regular"
+    let face = weight >= .semibold ? "Lilex-SemiBold" : "Lilex-Regular"
     return NSFont(name: face, size: size) ?? .monospacedSystemFont(ofSize: size, weight: weight)
   }
 
-  /// SwiftUI's text styles folded onto the scale. 12 pt JetBrains Mono sits
-  /// where 13 pt SF Pro does, since a monospace face runs wider.
+  /// Interface text, for AppKit drawing (labels inside the diff, About).
+  nonisolated static func nsSans(size: CGFloat, weight: NSFont.Weight = .regular) -> NSFont {
+    let face = weight >= .semibold ? "IBMPlexSans-SmBld" : "IBMPlexSans"
+    return NSFont(name: face, size: size) ?? .systemFont(ofSize: size, weight: weight)
+  }
+
+  /// SwiftUI's text styles folded onto the scale.
   static func size(_ style: Font.TextStyle) -> CGFloat {
     switch style {
     case .largeTitle: display
@@ -90,6 +96,13 @@ extension Font {
   @MainActor
   static func app(_ style: Font.TextStyle) -> Font {
     let font = Font.custom(AppFont.family, size: AppFont.size(style), relativeTo: style)
+    return AppFont.isSemibold(style) ? font.weight(.semibold) : font
+  }
+
+  /// Code in the interface: commit messages, ids, keys. Same scale.
+  @MainActor
+  static func code(_ style: Font.TextStyle) -> Font {
+    let font = Font.custom(AppFont.codeFamily, size: AppFont.size(style), relativeTo: style)
     return AppFont.isSemibold(style) ? font.weight(.semibold) : font
   }
 }

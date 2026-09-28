@@ -44,7 +44,7 @@ private struct CommitRow: View {
         .lineLimit(1)
       HStack(spacing: 6) {
         Text(commit.shortID)
-          .font(.app(.caption))
+          .font(.code(.caption))
         Text(commit.authorName)
           .lineLimit(1)
         Spacer(minLength: 4)

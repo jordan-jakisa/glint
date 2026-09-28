@@ -192,6 +192,7 @@ private struct CommitHeader: View {
       }
       HStack(spacing: 12) {
         Text(String((diff.source.commitID ?? "").prefix(10)))
+          .font(.code(.callout))
           .textSelection(.enabled)
         if let commit {
           Text(commit.authorName)

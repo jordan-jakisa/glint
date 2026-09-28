@@ -58,7 +58,7 @@ struct StatusMark {
   static var size: CGFloat { AppFont.small + 4 }
   static let radius: CGFloat = 3
   static let tint: CGFloat = 0.15
-  static var font: NSFont { AppFont.ns(size: AppFont.small - 2, weight: .semibold) }
+  static var font: NSFont { AppFont.nsSans(size: AppFont.small - 2, weight: .semibold) }
 }
 
 /// A file's status as a small tinted tile, the same one the diff draws.

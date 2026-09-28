@@ -48,9 +48,13 @@ links for purple vary the most across cultures (Jonauskaite et al. 2020).
 
 ## Type
 
-JetBrains Mono everywhere: the interface, diffs, commit messages, and the
-terminal. It's bundled with the app (SIL Open
-Font License), so it looks the same whether or not you have it installed.
+Zed's pairing, bundled with the app (both SIL Open Font License), so it looks
+the same whether or not you have them installed:
+
+- **IBM Plex Sans** for the interface: lists, headers, buttons, Settings.
+- **Lilex** for code: diffs, the terminal, commit messages, commit ids and
+  shortcut keys.
+
 Menus, alerts, and native controls stay in the system font.
 
 Four sizes, two weights, set in `AppFont`. They follow your text size

@@ -131,7 +131,7 @@ final class DiffRowCell: NSView {
     if let hunkAction {
       let label = NSAttributedString(
         string: hunkAction,
-        attributes: [.font: AppFont.ns(size: AppFont.small), .foregroundColor: Theme.shared.accentColor])
+        attributes: [.font: AppFont.nsSans(size: AppFont.small), .foregroundColor: Theme.shared.accentColor])
       let size = label.size()
       label.draw(at: NSPoint(x: bounds.width - 12 - size.width, y: (bounds.height - size.height) / 2))
       width -= Self.hunkActionWidth
@@ -149,7 +149,7 @@ final class DiffRowCell: NSView {
   private func drawNote(_ text: String) {
     let note = NSAttributedString(
       string: text,
-      attributes: [.font: AppFont.ns(size: AppFont.body), .foregroundColor: NSColor.secondaryLabelColor])
+      attributes: [.font: AppFont.nsSans(size: AppFont.body), .foregroundColor: NSColor.secondaryLabelColor])
     note.draw(at: NSPoint(x: 16, y: (bounds.height - note.size().height) / 2))
   }
 

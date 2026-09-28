@@ -48,7 +48,7 @@ struct ShortcutsSettingsView: View {
         recording == command ? stopRecording() : startRecording(command)
       } label: {
         Text(label(for: command))
-          .font(.app(.body))
+          .font(.code(.body))
           .frame(minWidth: 90)
       }
       .buttonStyle(.bordered)

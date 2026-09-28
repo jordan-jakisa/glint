@@ -1516,12 +1516,14 @@ OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION
 WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 ================================================================
-JetBrains Mono (https://github.com/JetBrains/JetBrainsMono), version 2.304
+IBM Plex Sans (https://github.com/IBM/plex), version 1.1.0
+Lilex (https://github.com/mishamyrt/Lilex), version 2.700
 ================================================================
 
-Copyright 2020 The JetBrains Mono Project Authors (https://github.com/JetBrains/JetBrainsMono)
+Copyright © 2017 IBM Corp. with Reserved Font Name "Plex"
+Copyright 2019 The Lilex Project Authors (https://github.com/mishamyrt/Lilex)
 
-This Font Software is licensed under the SIL Open Font License, Version 1.1.
+Both are licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:
 https://openfontlicense.org
 
