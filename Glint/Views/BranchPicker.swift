@@ -9,6 +9,8 @@ struct BranchPicker: View {
   /// The row Return picks: the create row when shown, then the matches.
   @State private var highlighted = 0
   @FocusState private var searchFocused: Bool
+  /// Asked before deleting, like Zed.
+  @State private var pendingDelete: Branch?
 
   var body: some View {
     VStack(spacing: 0) {
@@ -78,6 +80,10 @@ struct BranchPicker: View {
             } else if !branch.isCurrent {
               Button("Open in New Worktree") { session.createWorktree(branch: branch.switchName, isNew: false) }
             }
+            if !branch.isCurrent, !branch.isRemote, worktree == nil {
+              Divider()
+              Button("Delete Branch\u{2026}") { pendingDelete = branch }
+            }
           }
         }
       }
@@ -98,6 +104,19 @@ struct BranchPicker: View {
       .frame(height: 28)
     }
     .frame(width: 340, height: 360)
+    .confirmationDialog(
+      "Delete \(pendingDelete?.name ?? "")?",
+      isPresented: Binding(get: { pendingDelete != nil }, set: { if !$0 { pendingDelete = nil } }),
+      titleVisibility: .visible
+    ) {
+      Button("Delete", role: .destructive) {
+        if let branch = pendingDelete { session.deleteBranch(branch) }
+        pendingDelete = nil
+      }
+      Button("Cancel", role: .cancel) { pendingDelete = nil }
+    } message: {
+      Text("Git only deletes a branch that's merged, so no commits are lost.")
+    }
     .arrowKeys(move: move)
     .onAppear { searchFocused = true }
   }

@@ -101,6 +101,15 @@ final class RepositorySession {
   // MARK: History tab
 
   internal(set) var commits: [Commit] = []
+  /// This repository's remotes, and the one picked for fetch, pull and push
+  /// when there are several.
+  internal(set) var remotes: [String] = []
+  var selectedRemote: String?
+  /// Adds a Signed-off-by line to commits (`git commit -s`), like Zed's
+  /// Sign Off. Remembered between launches.
+  var signsOff = UserDefaults.standard.bool(forKey: "commitSignOff") {
+    didSet { UserDefaults.standard.set(signsOff, forKey: "commitSignOff") }
+  }
   /// View File History: the file History is narrowed to, and its commits.
   internal(set) var historyPath: String?
   internal(set) var fileCommits: [Commit] = []

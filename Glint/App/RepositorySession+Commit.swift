@@ -29,6 +29,7 @@ extension RepositorySession {
     var arguments = ["commit", "--cleanup=strip", "-F", "-"]
     if isAmending { arguments.append("--amend") }
     if !isAmending, commitsTrackedChanges { arguments.append("-a") }
+    if signsOff { arguments.append("--signoff") }
     let message = commitMessage
     let git = SystemGit(directory: repository.url)
     isCommitting = true

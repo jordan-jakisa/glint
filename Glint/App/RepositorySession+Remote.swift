@@ -27,15 +27,54 @@ extension RepositorySession {
     }
   }
 
-  func fetch() { runNetwork(.fetch, ["fetch", "--prune"]) }
+  func fetch() {
+    runNetwork(.fetch, ["fetch", "--prune"] + (chosenRemote.map { [$0] } ?? []))
+  }
 
-  func pull() { runNetwork(.pull, ["pull", "--no-edit"]) }
+  func pull() { runNetwork(.pull, ["pull", "--no-edit"] + remoteAndBranch) }
+
+  /// Zed's Pull (Rebase): replays your commits on top of the remote's.
+  func pullRebase() { runNetwork(.pull, ["pull", "--rebase"] + remoteAndBranch) }
+
+  /// Zed's Force Push, made safe: refuses if the remote has work you
+  /// haven't fetched.
+  func forcePush() {
+    guard sync.upstream != nil || chosenRemote != nil else { return push() }
+    runNetwork(.push, ["push", "--force-with-lease"] + remoteAndBranch)
+  }
+
+  /// With several remotes, the one you picked in the sync menu; nil means
+  /// git's own choice (the upstream).
+  var chosenRemote: String? {
+    guard remotes.count > 1, let remote = selectedRemote, remotes.contains(remote) else { return nil }
+    return remote
+  }
+
+  /// Git's arguments for the picked remote and the current branch.
+  private var remoteAndBranch: [String] {
+    guard let remote = chosenRemote, let branch = info?.branch else { return [] }
+    return [remote, branch]
+  }
+
+  /// Zed shows a remote picker when there's more than one remote.
+  func loadRemotes() {
+    guard let repository else { return }
+    let git = SystemGit(directory: repository.url)
+    Task {
+      let output = (try? await git.run(["remote"])) ?? ""
+      remotes = output.split(separator: "\n").map(String.init)
+    }
+  }
 
   /// Pushes, or publishes the branch when it has no upstream yet.
   func push() {
     guard let repository else { return }
-    guard sync.upstream == nil else {
+    guard sync.upstream == nil || chosenRemote != nil else {
       runNetwork(.push, ["push"])
+      return
+    }
+    if let remote = chosenRemote, let branch = info?.branch {
+      runNetwork(.push, ["push", "--set-upstream", remote, branch])
       return
     }
     guard let branch = info?.branch else {

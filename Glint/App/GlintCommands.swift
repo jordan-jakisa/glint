@@ -62,6 +62,11 @@ struct GlintCommands: Commands {
         .shortcut(.push)
         .disabled(!isReady)
 
+      Button("Pull with Rebase") { session?.pullRebase() }
+        .disabled(!isReady)
+      Button("Force Push") { session?.forcePush() }
+        .disabled(!isReady)
+
       Button(AppCommand.writeMessage.title) {
         session?.tab = .changes
         session?.generateCommitMessage()

@@ -83,6 +83,12 @@ struct UserAlert: Equatable, Sendable {
     if has("is already used by worktree", "is already checked out at") {
       return "That branch is already checked out in another worktree. Pick it in the branch picker to open that worktree."
     }
+    if has("is not fully merged") {
+      return "That branch has commits that aren't merged anywhere. If you're sure, delete it with git branch -D in the terminal (\(terminal))."
+    }
+    if has("stale info", "rejected") && has("force-with-lease", "stale") {
+      return "The remote has work you haven't fetched, so force push stopped to keep it. Fetch, look at what's there, then try again."
+    }
     if has("would be overwritten by") {
       return "That would overwrite changes you haven't committed. Commit or stash them first, then try again."
     }

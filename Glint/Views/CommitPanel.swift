@@ -44,6 +44,9 @@ struct CommitPanel: View {
         .toggleStyle(.checkbox)
         .disabled(session.lastCommit == nil)
         .help("Replace the last commit instead of adding a new one")
+      Toggle("Sign Off", isOn: $session.signsOff)
+        .toggleStyle(.checkbox)
+        .help("Add a Signed-off-by line with your name and email")
       Spacer()
       DelayedSpinner(isActive: session.isCommitting)
       Button(session.commitButtonTitle, action: session.commit)
@@ -227,7 +230,19 @@ private struct SyncButton: View {
     Menu {
       Button("Fetch", action: session.fetch)
       Button("Pull", action: session.pull)
+      Button("Pull with Rebase", action: session.pullRebase)
       Button(session.sync.upstream == nil ? "Publish Branch" : "Push", action: session.push)
+      Button("Force Push", action: session.forcePush)
+        .disabled(session.sync.upstream == nil && session.chosenRemote == nil)
+      // Zed's remote picker, when there's more than one remote.
+      if session.remotes.count > 1 {
+        Divider()
+        Picker("Remote", selection: $session.selectedRemote) {
+          Text("Upstream").tag(String?.none)
+          ForEach(session.remotes, id: \.self) { Text($0).tag(Optional($0)) }
+        }
+        .pickerStyle(.inline)
+      }
     } label: {
       Label(title, systemImage: icon)
         .labelStyle(.titleAndIcon)

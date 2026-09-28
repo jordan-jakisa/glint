@@ -11,6 +11,16 @@ struct RootView: View {
       .navigationTitle(title)
       .focusedSceneValue(\.session, session)
       .background(KeyMonitor(handle: session.handleKey))
+      .background(
+        GitChordMonitor { chord in
+          switch chord {
+          case .push: session.push()
+          case .forcePush: session.forcePush()
+          case .pull: session.pull()
+          case .pullRebase: session.pullRebase()
+          case .fetch: session.fetch()
+          }
+        })
       .onAppear { session.restoreLastRepository() }
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         session.refresh()

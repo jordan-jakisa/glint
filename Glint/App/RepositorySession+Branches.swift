@@ -7,6 +7,7 @@ extension RepositorySession {
   func loadBranches() {
     guard let repository else { return }
     loadWorktrees()
+    loadRemotes()
     Task {
       do {
         branches = try await repository.branches()
@@ -28,6 +29,22 @@ extension RepositorySession {
     let trimmed = name.trimmingCharacters(in: .whitespaces)
     guard !trimmed.isEmpty else { return }
     runSwitch(["switch", "-c", trimmed], describing: "create branch \(trimmed)")
+  }
+
+  /// Zed's delete branch, from the picker. `-d` refuses a branch that isn't
+  /// merged, so no work is lost; the alert says how to force it.
+  func deleteBranch(_ branch: Branch) {
+    guard let repository, !branch.isCurrent, !branch.isRemote else { return }
+    Timing.writes.notice("delete branch")
+    let git = SystemGit(directory: repository.url)
+    Task {
+      do {
+        _ = try await git.run(["branch", "-d", branch.name])
+      } catch {
+        alert = UserAlert("Couldn't delete \(branch.name)", error: error)
+      }
+      loadBranches()
+    }
   }
 
   private func runSwitch(_ arguments: [String], describing action: String) {
