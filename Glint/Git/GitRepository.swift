@@ -182,6 +182,20 @@ actor GitRepository {
       "Those lines no longer match what's staged. The diff was out of date; try again.")
   }
 
+  /// Applies a patch to the working tree only, leaving the index alone, like
+  /// `git apply`. Restoring a hunk applies its reverse: see `Patch.restore`.
+  func applyToWorkdir(_ patch: String) throws {
+    var diff: OpaquePointer?
+    try GitError.check(
+      git_diff_from_buffer(&diff, patch, patch.utf8.count), "Couldn't read the patch for that hunk.")
+    defer { git_diff_free(diff) }
+    var options = git_apply_options()
+    git_apply_options_init(&options, UInt32(GIT_APPLY_OPTIONS_VERSION))
+    try GitError.check(
+      git_apply(handle, diff, GIT_APPLY_LOCATION_WORKDIR, &options),
+      "That hunk no longer matches the file. The diff was out of date; try again.")
+  }
+
   /// Throws away unstaged changes to tracked files by restoring them from the
   /// index, like `git restore`. Staged changes are kept. Untracked files
   /// aren't touched here: the caller moves those to the Trash.
@@ -580,19 +594,21 @@ actor GitRepository {
     var files: [FileChange] = []
     files.reserveCapacity(count)
     var lines = 0
+    // Read once per diff; hunks mark their changed words as they're built.
+    let wordDiff = WordDiff.isEnabled
     for (position, entry) in entries.enumerated() {
       if let lineBudget, lines >= lineBudget {
         return Diff(source: source, files: files, isComplete: false)
       }
       // A file's id is its position, which the diff view relies on.
-      let file = try fileChange(diff: diff, index: entry.index).renumbered(position)
+      let file = try fileChange(diff: diff, index: entry.index, wordDiff: wordDiff).renumbered(position)
       files.append(file)
       lines += file.additions + file.deletions
     }
     return Diff(source: source, files: files)
   }
 
-  private func fileChange(diff: OpaquePointer?, index: Int) throws -> FileChange {
+  private func fileChange(diff: OpaquePointer?, index: Int, wordDiff: Bool) throws -> FileChange {
     var patch: OpaquePointer?
     try GitError.check(git_patch_from_diff(&patch, diff, index), "Couldn't build a file's diff.")
     defer { git_patch_free(patch) }
@@ -618,7 +634,7 @@ actor GitRepository {
       let hunkCount = git_patch_num_hunks(patch)
       hunks.reserveCapacity(hunkCount)
       for hunkIndex in 0..<hunkCount {
-        hunks.append(try hunk(patch: patch, index: hunkIndex))
+        hunks.append(try hunk(patch: patch, index: hunkIndex, wordDiff: wordDiff))
       }
     }
 
@@ -627,7 +643,7 @@ actor GitRepository {
       isBinary: isBinary, hunks: hunks, additions: additions, deletions: deletions)
   }
 
-  private func hunk(patch: OpaquePointer, index: Int) throws -> Hunk {
+  private func hunk(patch: OpaquePointer, index: Int, wordDiff: Bool) throws -> Hunk {
     var hunkPointer: UnsafePointer<git_diff_hunk>?
     var lineCount = 0
     try GitError.check(
@@ -652,7 +668,7 @@ actor GitRepository {
       id: index, header: header,
       oldStart: Int(hunk.old_start), oldCount: Int(hunk.old_lines),
       newStart: Int(hunk.new_start), newCount: Int(hunk.new_lines),
-      lines: lines)
+      lines: lines, wordDiff: wordDiff)
   }
 
   // MARK: - Conversion

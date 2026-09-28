@@ -34,6 +34,7 @@ struct DiffPane: View {
             partialAction: session.partialAction,
             selectionChanged: session.lineSelectionChanged,
             hunkAction: session.stageHunk,
+            restoreHunk: restoreHunk,
             editLines: editLines,
             blame: { [session] in session.blame(file: $0, line: $1) },
             showsBlame: session.isBlameShown,
@@ -74,6 +75,13 @@ struct DiffPane: View {
       copy: { session.copyPermalink(to: $0) },
       open: { session.openPermalink(to: $0) },
       note: { session.permalinkNote(for: $0) })
+  }
+
+  /// Restore sits beside Stage Hunk, only on your unstaged working copy.
+  private var restoreHunk: ((DiffRowID) -> Void)? {
+    guard session.canRestoreHunks else { return nil }
+    let session = session
+    return { session.requestRestoreHunk($0) }
   }
 
   @ViewBuilder private func header(for diff: Diff) -> some View {

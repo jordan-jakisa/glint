@@ -10,6 +10,7 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   private var blame: BlameCommit?
   /// Set on the one selected line: its blame, drawn after the code.
   private var inlineBlame: BlameCommit?
+  private var restoreAction = false
   var isRowSelected = false {
     didSet { if isRowSelected != oldValue { needsDisplay = true } }
   }
@@ -20,8 +21,37 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     NSWorkspace.shared.accessibilityDisplayShouldIncreaseContrast ? alpha * 2 : alpha
   }
 
-  /// Width of the clickable "Stage Hunk" label at the right of a hunk header.
-  static let hunkActionWidth: CGFloat = 110
+  /// A clickable label at the right of a hunk header: "Stage Hunk" (or
+  /// "Unstage Hunk") at the edge, and "Restore" before it on your working
+  /// copy.
+  struct HunkActionZone {
+    enum Kind { case primary, restore }
+    let kind: Kind
+    let label: String
+    /// Where the label is drawn, and its wider hit area.
+    let labelX: CGFloat
+    let hit: ClosedRange<CGFloat>
+  }
+
+  static var hunkActionFont: NSFont { AppFont.nsSans(size: AppFont.small) }
+
+  /// The hunk header's actions, right to left. The table's click handling
+  /// uses these too, so what you see is what you hit.
+  static func hunkActionZones(rowWidth: CGFloat, action: String?, restore: Bool) -> [HunkActionZone] {
+    guard let action else { return [] }
+    let font = hunkActionFont
+    func width(_ text: String) -> CGFloat {
+      ceil((text as NSString).size(withAttributes: [.font: font]).width)
+    }
+    let primaryX = rowWidth - 12 - width(action)
+    var zones = [HunkActionZone(kind: .primary, label: action, labelX: primaryX, hit: (primaryX - 8)...rowWidth)]
+    if restore {
+      let label = "Restore"
+      let x = primaryX - 20 - width(label)
+      zones.append(HunkActionZone(kind: .restore, label: label, labelX: x, hit: (x - 8)...(primaryX - 8)))
+    }
+    return zones
+  }
 
   init(identifier: NSUserInterfaceItemIdentifier) {
     super.init(frame: .zero)
@@ -35,15 +65,16 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
 
   func configure(
     _ row: DiffRow, metrics: DiffMetrics, hunkAction: String? = nil, blame: BlameCommit? = nil,
-    inlineBlame: BlameCommit? = nil
+    inlineBlame: BlameCommit? = nil, restoreAction: Bool = false
   ) {
     self.row = row
     let blameResized = self.metrics.blameWidth != metrics.blameWidth
     self.metrics = metrics
-    let actionChanged = self.hunkAction != hunkAction
+    let actionChanged = self.hunkAction != hunkAction || self.restoreAction != restoreAction
     self.hunkAction = hunkAction
     self.blame = blame
     self.inlineBlame = inlineBlame
+    self.restoreAction = restoreAction
     isRowSelected = (superview as? NSTableRowView)?.isSelected ?? false
     needsDisplay = true
     if actionChanged || blameResized { window?.invalidateCursorRects(for: self) }
@@ -67,9 +98,14 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
       addToolTip(NSRect(x: 0, y: 0, width: metrics.blameWidth, height: 100_000), owner: self, userData: nil)
     }
     guard let hunkAction, case .hunkHeader = row?.content else { return }
-    let action = NSRect(x: bounds.width - Self.hunkActionWidth, y: 0, width: Self.hunkActionWidth, height: bounds.height)
-    addCursorRect(action, cursor: .pointingHand)
-    addToolTip(action, owner: AppCommand.stagePartial.hint(hunkAction) as NSString, userData: nil)
+    for zone in Self.hunkActionZones(rowWidth: bounds.width, action: hunkAction, restore: restoreAction) {
+      let rect = NSRect(x: zone.hit.lowerBound, y: 0, width: zone.hit.upperBound - zone.hit.lowerBound, height: bounds.height)
+      addCursorRect(rect, cursor: .pointingHand)
+      let tip =
+        zone.kind == .primary
+        ? AppCommand.stagePartial.hint(hunkAction) : "Throw away this hunk's changes in your working copy"
+      addToolTip(rect, owner: tip as NSString, userData: nil)
+    }
   }
 
   override func draw(_ dirtyRect: NSRect) {
@@ -151,14 +187,15 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     Theme.shared.accentColor.withAlphaComponent(Self.tint(0.08)).setFill()
     bounds.fill()
     var width = bounds.width - 24
-    if let hunkAction {
+    let zones = Self.hunkActionZones(rowWidth: bounds.width, action: hunkAction, restore: restoreAction)
+    for zone in zones {
+      // Restore is the quieter of the two: it's the one you can't take back.
+      let color = zone.kind == .primary ? Theme.shared.accentColor : NSColor.secondaryLabelColor
       let label = NSAttributedString(
-        string: hunkAction,
-        attributes: [.font: AppFont.nsSans(size: AppFont.small), .foregroundColor: Theme.shared.accentColor])
-      let size = label.size()
-      label.draw(at: NSPoint(x: bounds.width - 12 - size.width, y: (bounds.height - size.height) / 2))
-      width -= Self.hunkActionWidth
+        string: zone.label, attributes: [.font: Self.hunkActionFont, .foregroundColor: color])
+      label.draw(at: NSPoint(x: zone.labelX, y: (bounds.height - label.size().height) / 2))
     }
+    if let leftmost = zones.last { width = leftmost.hit.lowerBound - 12 - 8 }
     let paragraph = NSMutableParagraphStyle()
     paragraph.lineBreakMode = .byTruncatingTail
     NSAttributedString(
@@ -293,11 +330,17 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
         at: NSPoint(x: x + (DiffMetrics.markerWidth - DiffMetrics.advance) / 2, y: DiffMetrics.verticalPadding),
         in: context)
     }
+    // Changed words, worked out when the diff was built; here they only
+    // move past expanded tabs.
+    let emphasis =
+      line.emphasis.isEmpty
+      ? [] : WordDiff.displayRanges(line.emphasis, in: line.text, tabWidth: DiffMetrics.tabWidth)
     CodeText.draw(
       DiffMetrics.displayText(line.text),
       color: line.kind == .noNewline ? .secondaryLabelColor : .labelColor,
       at: NSPoint(x: x + DiffMetrics.markerWidth, y: DiffMetrics.verticalPadding),
-      width: DiffMetrics.textDrawWidth(width), in: context)
+      width: DiffMetrics.textDrawWidth(width), in: context,
+      highlights: emphasis, highlightColor: Self.emphasis(line.kind))
     if let inline, line.kind == .context || line.kind == .addition {
       drawInlineBlame(inline, after: line, x: x + DiffMetrics.markerWidth, width: width, in: context)
     }
@@ -312,6 +355,15 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     case .addition: Theme.shared.added.withAlphaComponent(0.14)
     case .deletion: Theme.shared.removed.withAlphaComponent(0.14)
     case .context, .noNewline: .textBackgroundColor
+    }
+  }
+
+  /// Behind changed words: the line's own colour, stronger.
+  private static func emphasis(_ kind: DiffLine.Kind) -> NSColor? {
+    switch kind {
+    case .addition: Theme.shared.added.withAlphaComponent(0.35)
+    case .deletion: Theme.shared.removed.withAlphaComponent(0.35)
+    case .context, .noNewline: nil
     }
   }
 
