@@ -99,7 +99,8 @@ terminal and ⌘O. Glint now treats them as places a branch lives:
 - The branch picker marks a branch that's checked out in another worktree;
   picking it opens that worktree instead of failing to switch.
 - ⌥↩ (or Option-click) on any branch, or on "Create branch", makes a new
-  worktree for it beside the repository (`<repo>-<branch>`) and opens it.
+  worktree for it in `../worktrees/<repo>-<branch>` (Zed's default folder)
+  and opens it.
 - A worktree can be removed from the picker; git refuses one with
   uncommitted work, and Glint says so in plain words.
 

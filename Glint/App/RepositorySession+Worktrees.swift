@@ -69,12 +69,13 @@ extension RepositorySession {
     }
   }
 
-  /// `<repo>-<branch>` next to the main checkout, so worktrees sit together
-  /// and read as belonging to it. A number is added if the name is taken.
+  /// `../worktrees/<repo>-<branch>`, Zed's default worktree folder beside
+  /// the main checkout. A number is added if the name is taken.
   private func newWorktreeURL(for branch: String) -> URL {
     let main = worktrees.first(where: \.isMain)?.url ?? repository?.url ?? URL(fileURLWithPath: NSHomeDirectory())
     let base = main.lastPathComponent + "-" + branch.replacingOccurrences(of: "/", with: "-")
-    let parent = main.deletingLastPathComponent()
+    let parent = main.deletingLastPathComponent().appendingPathComponent("worktrees")
+    try? FileManager.default.createDirectory(at: parent, withIntermediateDirectories: true)
     var candidate = parent.appendingPathComponent(base)
     var number = 2
     while FileManager.default.fileExists(atPath: candidate.path) {
