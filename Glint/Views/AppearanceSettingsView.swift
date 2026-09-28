@@ -63,10 +63,13 @@ struct AppearanceSettingsView: View {
         }
         .pickerStyle(.segmented)
       }
-      Section("Toolbar") {
-        Toggle(
-          "Liquid Glass toolbar",
-          isOn: Binding(get: { theme.usesLiquidGlass }, set: { theme.setUsesLiquidGlass($0) }))
+      Section("Style") {
+        Picker("Style", selection: Binding(get: { theme.usesLiquidGlass }, set: { theme.setUsesLiquidGlass($0) })) {
+          Text("macOS").tag(true)
+          Text("Zed").tag(false)
+        }
+        .pickerStyle(.segmented)
+        .help("macOS: Liquid Glass and system colours. Zed: flat, with Zed's One Dark and One Light")
       }
     }
     .formStyle(.grouped)

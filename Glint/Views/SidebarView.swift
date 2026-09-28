@@ -13,6 +13,8 @@ struct SidebarView: View {
       case .history: CommitListView(session: session)
       }
     }
+    // Style Zed: the panel's own colour instead of the sidebar material.
+    .background(Theme.shared.panelBackground.map { Color(nsColor: $0) } ?? .clear)
     .modifier(TabPickerToolbar(session: session))
     .onAppear { Timing.reportLaunchIfNeeded() }
   }

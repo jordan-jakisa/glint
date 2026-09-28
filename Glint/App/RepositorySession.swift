@@ -101,6 +101,9 @@ final class RepositorySession {
   // MARK: History tab
 
   internal(set) var commits: [Commit] = []
+  /// View File History: the file History is narrowed to, and its commits.
+  internal(set) var historyPath: String?
+  internal(set) var fileCommits: [Commit] = []
   /// The branch this one is compared with in the pinned branch-diff row, or
   /// nil when there's none (no main or master, or on main itself).
   internal(set) var branchBaseName: String?

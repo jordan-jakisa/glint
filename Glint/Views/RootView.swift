@@ -88,6 +88,7 @@ struct RootView: View {
           .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 480)
       } detail: {
         DiffAndTerminal(session: session)
+          .background(Color(nsColor: Theme.shared.editorBackground))
           .modifier(DiffToolbar(session: session, columns: $columns))
           // SwiftUI keeps toolbar items' glass as first built; flipping the
           // setting rebuilds the column. Rare, so losing the diff's scroll
@@ -95,6 +96,7 @@ struct RootView: View {
           .id(Theme.shared.usesLiquidGlass)
       }
       .toolbar(removing: .title)
+      .modifier(ZedChrome())
       // Remembered between launches, like the terminal.
       .onChange(of: columns) { UserDefaults.standard.set(columns == .detailOnly, forKey: "sidebarHidden") }
       .modifier(MinimalChrome(session: session, columns: $columns))
@@ -277,6 +279,19 @@ private struct DiffToolbar: ViewModifier {
   }
 }
 
+/// Style Zed: the title bar in Zed's colour, solid rather than glass.
+private struct ZedChrome: ViewModifier {
+  func body(content: Content) -> some View {
+    if let bar = Theme.shared.titleBarBackground {
+      content
+        .toolbarBackground(Color(nsColor: bar), for: .windowToolbar)
+        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+    } else {
+      content
+    }
+  }
+}
+
 /// Minimal empties the toolbar, keeping only the window buttons (hiding it
 /// outright takes those too), and puts one status line along the bottom of
 /// the window, across both columns.
@@ -294,7 +309,8 @@ private struct MinimalChrome: ViewModifier {
             Hairline()
             StatusLine(session: session, columns: $columns)
           }
-          .background(.bar)
+          .background(
+            Theme.shared.statusBarBackground.map { AnyShapeStyle(Color(nsColor: $0)) } ?? AnyShapeStyle(.bar))
         }
       }
   }

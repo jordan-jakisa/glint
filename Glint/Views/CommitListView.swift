@@ -4,28 +4,56 @@ struct CommitListView: View {
   @Bindable var session: RepositorySession
 
   var body: some View {
+    VStack(spacing: 0) {
+      // View File History: which file, and the way back to all history.
+      if let path = session.historyPath {
+        HStack(spacing: 6) {
+          Image(systemName: "clock.arrow.circlepath").foregroundStyle(.secondary)
+          Text((path as NSString).lastPathComponent).lineLimit(1).truncationMode(.middle)
+          Spacer()
+          Button {
+            session.clearHistoryFilter()
+          } label: {
+            Image(systemName: "xmark").font(.app(.caption2)).hitTarget()
+          }
+          .buttonStyle(.borderless)
+          .accessibilityLabel("Show all history")
+          .help("Show all history")
+        }
+        .font(.app(.callout))
+        .padding(.horizontal, 10)
+        .frame(height: 30)
+        .help(path)
+        Hairline()
+      }
+      list
+    }
+  }
+
+  private var list: some View {
     ScrollViewReader { proxy in
       List(selection: $session.selectedCommitID) {
-        if let base = session.branchBaseName {
+        if session.historyPath == nil, let base = session.branchBaseName {
           BranchRow(branch: session.info?.branch, base: base)
             .tag(RepositorySession.branchSelectionID)
         }
-        ForEach(session.commits) { commit in
+        ForEach(session.visibleCommits) { commit in
           CommitRow(commit: commit)
             .onAppear {
               // History is read in pages. The last row coming on screen asks
               // for the next one.
-              if commit.id == session.commits.last?.id { session.loadMoreCommits() }
+              if session.historyPath == nil, commit.id == session.commits.last?.id { session.loadMoreCommits() }
             }
         }
       }
+      .scrollContentBackground(Theme.shared.isZed ? .hidden : .automatic)
       .environment(\.defaultMinListRowHeight, Theme.shared.isMinimal ? 20 : 24)
       .onChange(of: session.selectedCommitID) { _, id in
         if let id { proxy.scrollTo(id) }
       }
     }
     .overlay {
-      if session.commits.isEmpty {
+      if session.visibleCommits.isEmpty, session.historyPath == nil {
         EmptyState(
           "No commits yet", systemImage: "circle.dashed",
           description: Text("Commit something and it shows up here."))

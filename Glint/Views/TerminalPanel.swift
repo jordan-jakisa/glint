@@ -75,10 +75,21 @@ final class GlintTerminalView: LocalProcessTerminalView {
   }
 
   func applyColors() {
+    let zed = Theme.shared.isZed
     effectiveAppearance.performAsCurrentDrawingAppearance {
-      nativeBackgroundColor = .textBackgroundColor
-      nativeForegroundColor = .textColor
+      nativeBackgroundColor = zed ? ZedPalette.terminalBackground : .textBackgroundColor
+      nativeForegroundColor = zed ? ZedPalette.terminalForeground : .textColor
       caretColor = Theme.shared.accentColor
+    }
+    // Zed's own ANSI colours, so prompts and ls look as they do in Zed.
+    if zed {
+      let ansi = ZedPalette.isDark(effectiveAppearance) ? ZedPalette.ansiDark : ZedPalette.ansiLight
+      installColors(
+        ansi.map { hex in
+          SwiftTerm.Color(
+            red: UInt16((hex >> 16) & 0xff) * 257, green: UInt16((hex >> 8) & 0xff) * 257,
+            blue: UInt16(hex & 0xff) * 257)
+        })
     }
   }
 }
@@ -607,7 +618,7 @@ private struct TerminalTabStrip: View {
     .padding(.horizontal, 6)
     // Matches the branch bar beside it, so the dividers line up.
     .frame(height: 30)
-    .background(.bar)
+    .background(Theme.shared.barBackground.map { AnyShapeStyle(Color(nsColor: $0)) } ?? AnyShapeStyle(.bar))
   }
 }
 

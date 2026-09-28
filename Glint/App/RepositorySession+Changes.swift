@@ -208,6 +208,12 @@ extension RepositorySession {
     NSWorkspace.shared.activateFileViewerSelecting([repository.url.appendingPathComponent(path)])
   }
 
+  /// Opens the file in the app macOS uses for it, like Zed's Open File.
+  func openFile(_ path: String) {
+    guard let repository else { return }
+    NSWorkspace.shared.open(repository.url.appendingPathComponent(path))
+  }
+
   func copyPath(_ path: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(path, forType: .string)

@@ -75,6 +75,9 @@ final class Theme {
   var isMinimal: Bool { interface == .minimal }
   /// Flat controls: Minimal, or Liquid Glass turned off.
   var isFlat: Bool { isMinimal || !usesLiquidGlass }
+  /// Style Zed: Liquid Glass off, and Zed's One Dark and One Light colours
+  /// throughout.
+  var isZed: Bool { !usesLiquidGlass }
   /// Off, toolbar items drop their glass capsules and sit flat. macOS has
   /// no public switch for the rest (the sidebar, menus), and the
   /// undocumented per-app one did nothing on macOS 27, so this covers what
@@ -93,13 +96,37 @@ final class Theme {
 
   // MARK: Colours
 
-  var accentColor: NSColor { accent.color }
-  var added: NSColor { diffColors == .greenRed ? .systemGreen : .systemBlue }
-  var removed: NSColor { diffColors == .greenRed ? .systemRed : .systemOrange }
+  var accentColor: NSColor { isZed && accent == .system ? ZedPalette.accent : accent.color }
+  var added: NSColor {
+    diffColors == .greenRed ? (isZed ? ZedPalette.versionAdded : .systemGreen) : .systemBlue
+  }
+  var removed: NSColor {
+    diffColors == .greenRed ? (isZed ? ZedPalette.versionDeleted : .systemRed) : .systemOrange
+  }
+
+  // MARK: Surfaces (Zed's colours in Style Zed, the system's otherwise)
+
+  var editorBackground: NSColor { isZed ? ZedPalette.editor : .textBackgroundColor }
+  /// Nil keeps the system's sidebar material.
+  var panelBackground: NSColor? { isZed ? ZedPalette.panel : nil }
+  var barBackground: NSColor? { isZed ? ZedPalette.tabBar : nil }
+  var statusBarBackground: NSColor? { isZed ? ZedPalette.statusBar : nil }
+  var titleBarBackground: NSColor? { isZed ? ZedPalette.titleBar : nil }
+  var lineNumber: NSColor { isZed ? ZedPalette.lineNumber : .secondaryLabelColor }
+  var separator: NSColor {
+    isZed ? ZedPalette.borderVariant : NSColor.separatorColor.withAlphaComponent(0.55)
+  }
+  /// Git panel label colours: Zed's softer ones in Style Zed.
+  var createdLabel: NSColor { isZed && diffColors == .greenRed ? ZedPalette.created : added }
+  var deletedLabel: NSColor { isZed && diffColors == .greenRed ? ZedPalette.deleted : removed }
   /// The other status colours stay clear of whichever pair diffs use, so
   /// in blue and orange a rename never reads as an addition.
-  var modified: NSColor { diffColors == .greenRed ? .systemOrange : .systemPurple }
-  var renamed: NSColor { diffColors == .greenRed ? .systemBlue : .systemTeal }
+  var modified: NSColor {
+    diffColors == .greenRed ? (isZed ? ZedPalette.modified : .systemOrange) : .systemPurple
+  }
+  var renamed: NSColor {
+    diffColors == .greenRed ? (isZed ? ZedPalette.renamed : .systemBlue) : .systemTeal
+  }
   var conflicted: NSColor { diffColors == .greenRed ? .systemRed : .systemPink }
 
   // MARK: Changing
@@ -180,7 +207,14 @@ extension View {
   /// The text levels for your contrast setting: `.secondary` and
   /// `.tertiary` below this resolve to these.
   @MainActor func themedTextLevels() -> some View {
-    let contrast = Theme.shared.contrast
+    let theme = Theme.shared
+    // Style Zed: its text, muted and placeholder colours, as in Zed.
+    if theme.isZed {
+      return foregroundStyle(
+        Color(nsColor: ZedPalette.text), Color(nsColor: ZedPalette.textMuted),
+        Color(nsColor: ZedPalette.textPlaceholder))
+    }
+    let contrast = theme.contrast
     return foregroundStyle(
       Color.primary, Color.primary.opacity(contrast.secondary), Color.primary.opacity(contrast.tertiary))
   }
@@ -192,8 +226,8 @@ struct Hairline: View {
   var axis: Axis = .horizontal
   @Environment(\.displayScale) private var scale
 
-  static let color = Color(nsColor: .separatorColor).opacity(0.55)
-  static let nsColor = NSColor.separatorColor.withAlphaComponent(0.55)
+  @MainActor static var color: Color { Color(nsColor: Theme.shared.separator) }
+  @MainActor static var nsColor: NSColor { Theme.shared.separator }
 
   var body: some View {
     Rectangle()

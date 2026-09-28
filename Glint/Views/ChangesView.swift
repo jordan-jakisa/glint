@@ -14,6 +14,8 @@ struct ChangesView: View {
           .multilineTextAlignment(.center)
           .padding(.horizontal, 16)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if Theme.shared.isZed {
+        ZedChangesList(session: session)
       } else {
         list
       }
@@ -77,6 +79,7 @@ struct ChangesView: View {
           }
         }
       }
+      .scrollContentBackground(Theme.shared.isZed ? .hidden : .automatic)
       .environment(\.defaultMinListRowHeight, Theme.shared.isMinimal ? 20 : 24)
       .onChange(of: session.selectedChange) { _, selection in
         if let selection, selection.path != nil { proxy.scrollTo(selection) }
