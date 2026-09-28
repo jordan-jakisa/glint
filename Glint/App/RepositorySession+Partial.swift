@@ -28,7 +28,8 @@ extension RepositorySession {
   /// deleted file's hunk is the whole file, so that goes through the file
   /// discard, which knows to use the Trash or the index.
   func requestRestoreHunk(_ row: DiffRowID) {
-    guard canRestoreHunks, let pick = pick(file: row.file, hunk: row.hunk, lines: nil) else { return }
+    guard canRestoreHunks, let pick = pick(file: row.file, hunk: row.hunk, lines: nil), !pick.file.isStaged
+    else { return }
     let file = pick.file
     if file.status == .added || file.status == .deleted || file.status == .renamed {
       requestDiscard([file.path])
@@ -129,21 +130,25 @@ extension RepositorySession {
     // the whole file, and only the whole-file path keeps the file's mode and
     // records a deletion as a deletion rather than as an empty file.
     var partial: [Pick] = []
-    var wholeFiles: [String] = []
+    // A fully staged file in Style Zed's Uncommitted Changes unstages.
+    let isStaged = { (file: FileChange) in staged || file.isStaged }
+    var wholeFiles: [FileChange] = []
     for filePicks in Dictionary(grouping: picks, by: { $0.file.id }).values {
       let file = filePicks[0].file
       if file.status == .added || file.status == .deleted, Self.coversEveryChange(file, filePicks) {
-        wholeFiles.append(file.path)
+        wholeFiles.append(file)
       } else {
         partial.append(contentsOf: filePicks)
       }
     }
-    for path in wholeFiles { setStaged(path, !staged) }
+    for file in wholeFiles { setStaged(file.path, !isStaged(file)) }
     guard !partial.isEmpty else {
       selectedLineRows = []
       return
     }
-    applyPatches(partial, staged: staged, repository: repository)
+    for (fileStaged, group) in Dictionary(grouping: partial, by: { isStaged($0.file) }) {
+      applyPatches(group, staged: fileStaged, repository: repository)
+    }
   }
 
   private static func coversEveryChange(_ file: FileChange, _ picks: [Pick]) -> Bool {

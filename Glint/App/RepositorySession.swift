@@ -464,8 +464,14 @@ final class RepositorySession {
     var firstDiff: Diff?
     if let firstChange {
       // Style Zed opens on every file's diff, like Zed's Uncommitted Changes.
-      let path = await MainActor.run { Theme.shared.isZed } ? nil : firstChange.path
-      firstDiff = try? await repository.workingTreeDiff(staged: firstChange.staged, path: path)
+      if await MainActor.run(body: { Theme.shared.isZed }) {
+        firstDiff =
+          firstChange.staged
+          ? try? await repository.workingTreeDiff(staged: true, path: nil)
+          : try? await uncommittedDiff(repository)
+      } else {
+        firstDiff = try? await repository.workingTreeDiff(staged: firstChange.staged, path: firstChange.path)
+      }
     }
     stage("open: first diff")
     return Opened(
@@ -682,6 +688,8 @@ final class RepositorySession {
         switch source {
         case .commit(let id):
           loaded = try await repository.diff(commitID: id, lineBudget: firstScreen)
+        case .workingTree(false, nil) where Theme.shared.isZed:
+          loaded = try await Self.uncommittedDiff(repository)
         case .workingTree(let staged, let path):
           loaded = try await repository.workingTreeDiff(staged: staged, path: path)
         case .branch:
@@ -713,6 +721,22 @@ final class RepositorySession {
         isLoadingDiff = false
       }
     }
+  }
+
+  /// Style Zed's Uncommitted Changes: every unstaged file, then the files
+  /// that are fully staged, like Zed's project diff. The staged ones are
+  /// marked, so their hunks unstage.
+  nonisolated static func uncommittedDiff(_ repository: GitRepository) async throws -> Diff {
+    let unstaged = try await repository.workingTreeDiff(staged: false, path: nil)
+    let staged = try await repository.workingTreeDiff(staged: true, path: nil)
+    let shown = Set(unstaged.files.map(\.path))
+    var files = unstaged.files
+    for file in staged.files where !shown.contains(file.path) {
+      var extra = file.renumbered(files.count)
+      extra.isStaged = true
+      files.append(extra)
+    }
+    return Diff(source: unstaged.source, files: files, isComplete: unstaged.isComplete)
   }
 
   /// Called by the diff view once the selected diff is on screen.

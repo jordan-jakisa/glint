@@ -258,8 +258,8 @@ struct DiffTableView: NSViewRepresentable {
         ?? DiffRowCell(identifier: identifier)
       let (column, inline) = blame(forRow: row)
       cell.configure(
-        rows[row], metrics: metrics, hunkAction: hunkActionTitle, blame: column, inlineBlame: inline,
-        restoreAction: restoreHunk != nil, openFile: openFile != nil)
+        rows[row], metrics: metrics, hunkAction: hunkActionTitle(for: rows[row]), blame: column, inlineBlame: inline,
+        restoreAction: restoreHunk != nil && !rows[row].fileIsStaged, openFile: openFile != nil)
       return cell
     }
 
@@ -360,6 +360,12 @@ struct DiffTableView: NSViewRepresentable {
 
     /// "Stage Hunk" or "Unstage Hunk", where hunks can be staged.
     var hunkActionTitle: String? { partialAction.map { "\($0) Hunk" } }
+
+    /// A fully staged file's hunks unstage, whatever the diff's side.
+    func hunkActionTitle(for row: DiffRow) -> String? {
+      guard partialAction != nil else { return nil }
+      return row.fileIsStaged ? "Unstage Hunk" : hunkActionTitle
+    }
     var canRestoreHunks: Bool { restoreHunk != nil }
 
     /// The hunk a row belongs to, for the right-click hunk actions.
@@ -446,13 +452,26 @@ struct DiffTableView: NSViewRepresentable {
         } else {
           toggleCollapsed(file.id)
         }
+      // Style Zed: the hovered line's hunk actions.
+      case .line, .split where Theme.shared.isZed && partialAction != nil:
+        guard let event = NSApp.currentEvent else { return }
+        let point = sender.convert(event.locationInWindow, from: nil)
+        let zones = DiffRowCell.hunkActionZones(
+          rowWidth: sender.bounds.width, action: hunkActionTitle(for: rows[row]),
+          restore: canRestoreHunks && !rows[row].fileIsStaged)
+        switch zones.first(where: { $0.hit.contains(point.x) })?.kind {
+        case .primary: hunkAction(rows[row].id)
+        case .restore: restoreHunk?(rows[row].id)
+        case nil: break
+        }
       case .hunkHeader where partialAction != nil:
         // Only the action label at the right edge acts; the rest of the
         // header is just a header.
         guard let event = NSApp.currentEvent else { return }
         let point = sender.convert(event.locationInWindow, from: nil)
         let zones = DiffRowCell.hunkActionZones(
-          rowWidth: sender.bounds.width, action: hunkActionTitle, restore: canRestoreHunks)
+          rowWidth: sender.bounds.width, action: hunkActionTitle(for: rows[row]),
+          restore: canRestoreHunks && !rows[row].fileIsStaged)
         switch zones.first(where: { $0.hit.contains(point.x) })?.kind {
         case .primary: hunkAction(rows[row].id)
         case .restore: restoreHunk?(rows[row].id)
@@ -688,7 +707,9 @@ struct DiffMetrics {
 
   static var fileHeaderHeight: CGFloat { lineHeight + 14 }
   /// Style Zed shows no @@ line, only the hunk's actions in a thin row.
-  static var hunkHeaderHeight: CGFloat { Theme.shared.isZed ? lineHeight : lineHeight + 6 }
+  /// Style Zed shows no hunk row, only a small gap; the actions appear on
+  /// the line under the mouse.
+  static var hunkHeaderHeight: CGFloat { Theme.shared.isZed ? 6 : lineHeight + 6 }
   static var noteHeight: CGFloat { lineHeight + 16 }
   static let verticalPadding: CGFloat = 1
   static let markerWidth: CGFloat = 16

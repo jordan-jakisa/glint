@@ -7,14 +7,17 @@ extension RepositorySession {
   /// want next.
   var suggestedSync: NetworkOperation {
     if sync.behind > 0 { return .pull }
-    if sync.ahead > 0 || (sync.upstream == nil && sync.hasRemotes && info?.branch != nil) { return .push }
+    // Style Zed offers Publish for any branch without an upstream, as Zed
+    // does; with no remote, pushing says how to add one.
+    let canPublish = sync.hasRemotes || Theme.shared.isZed
+    if sync.ahead > 0 || (sync.upstream == nil && canPublish && info?.branch != nil) { return .push }
     return .fetch
   }
 
   var suggestedSyncTitle: String {
     switch suggestedSync {
     case .pull: "Pull \(sync.behind)"
-    case .push: sync.upstream == nil ? "Publish Branch" : "Push \(sync.ahead)"
+    case .push: sync.upstream == nil ? (Theme.shared.isZed ? "Publish" : "Publish Branch") : "Push \(sync.ahead)"
     case .fetch: "Fetch"
     }
   }

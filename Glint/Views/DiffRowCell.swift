@@ -65,12 +65,44 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   override var isFlipped: Bool { true }
   override var isOpaque: Bool { true }
 
+  // MARK: Hover (Style Zed)
+
+  /// Style Zed shows a hunk's actions on the line under the mouse, as Zed
+  /// does, instead of on a row above the hunk.
+  private var isHovered = false {
+    didSet {
+      guard isHovered != oldValue else { return }
+      needsDisplay = true
+      window?.invalidateCursorRects(for: self)
+    }
+  }
+
+  /// Lines show hover actions only in Style Zed, where hunk rows carry none.
+  var showsHoverActions: Bool {
+    guard Theme.shared.isZed, hunkAction != nil else { return false }
+    switch row?.content {
+    case .line, .split: return true
+    default: return false
+    }
+  }
+
+  override func updateTrackingAreas() {
+    super.updateTrackingAreas()
+    trackingAreas.forEach(removeTrackingArea)
+    addTrackingArea(
+      NSTrackingArea(rect: .zero, options: [.mouseEnteredAndExited, .activeInKeyWindow, .inVisibleRect], owner: self))
+  }
+
+  override func mouseEntered(with event: NSEvent) { isHovered = true }
+  override func mouseExited(with event: NSEvent) { isHovered = false }
+
   func configure(
     _ row: DiffRow, metrics: DiffMetrics, hunkAction: String? = nil, blame: BlameCommit? = nil,
     inlineBlame: BlameCommit? = nil, restoreAction: Bool = false, openFile: Bool = false
   ) {
     self.row = row
     self.openFile = openFile
+    isHovered = false
     let blameResized = self.metrics.blameWidth != metrics.blameWidth
     self.metrics = metrics
     let actionChanged = self.hunkAction != hunkAction || self.restoreAction != restoreAction
@@ -100,7 +132,11 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
       // Taller than any row, so it covers wrapped lines too.
       addToolTip(NSRect(x: 0, y: 0, width: metrics.blameWidth, height: 100_000), owner: self, userData: nil)
     }
-    guard let hunkAction, case .hunkHeader = row?.content else { return }
+    guard let hunkAction else { return }
+    if case .hunkHeader = row?.content {
+    } else if !(showsHoverActions && isHovered) {
+      return
+    }
     for zone in Self.hunkActionZones(rowWidth: bounds.width, action: hunkAction, restore: restoreAction) {
       let rect = NSRect(x: zone.hit.lowerBound, y: 0, width: zone.hit.upperBound - zone.hit.lowerBound, height: bounds.height)
       addCursorRect(rect, cursor: .pointingHand)
@@ -127,6 +163,28 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
       bounds.fill(using: .sourceOver)
       Theme.shared.accentColor.setFill()
       NSRect(x: 0, y: 0, width: 3, height: bounds.height).fill()
+    }
+    if showsHoverActions, isHovered { drawHoverActions() }
+  }
+
+  /// The hunk's Stage and Restore at the right of the hovered line, on a
+  /// small panel so they read over code.
+  private func drawHoverActions() {
+    let zones = Self.hunkActionZones(rowWidth: bounds.width, action: hunkAction, restore: restoreAction)
+    guard let leftmost = zones.last else { return }
+    let height = DiffMetrics.lineHeight
+    let panel = NSRect(
+      x: leftmost.hit.lowerBound, y: 1, width: bounds.width - leftmost.hit.lowerBound - 4, height: height)
+    let path = NSBezierPath(roundedRect: panel, xRadius: 4, yRadius: 4)
+    (Theme.shared.panelBackground ?? .windowBackgroundColor).setFill()
+    path.fill()
+    ZedPalette.border.setStroke()
+    path.lineWidth = 1 / (window?.backingScaleFactor ?? 2)
+    path.stroke()
+    for zone in zones {
+      let color = zone.kind == .primary ? Theme.shared.accentColor : NSColor.secondaryLabelColor
+      let label = NSAttributedString(string: zone.label, attributes: [.font: Self.hunkActionFont, .foregroundColor: color])
+      label.draw(at: NSPoint(x: zone.labelX, y: panel.midY - label.size().height / 2))
     }
   }
 
@@ -250,8 +308,9 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   }
 
   private func drawHunkHeader(_ hunk: Hunk) {
-    // Style Zed: no @@ line and no tint, only the actions, quietly.
-    let zed = Theme.shared.isZed
+    // Style Zed: just a gap between hunks; their actions show on hover.
+    if Theme.shared.isZed { return }
+    let zed = false
     if !zed {
       Theme.shared.accentColor.withAlphaComponent(Self.tint(0.08)).setFill()
       bounds.fill()
@@ -412,8 +471,16 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
         let color =
           row?.inMixedHunk == true
           ? ZedPalette.versionModified : line.kind == .addition ? ZedPalette.versionAdded : ZedPalette.versionDeleted
-        color.setFill()
-        NSRect(x: x, y: 0, width: 3, height: bounds.height).fill()
+        if row?.fileIsStaged == true {
+          // Zed draws staged hunks' bars hollow.
+          color.setStroke()
+          let bar = NSBezierPath(rect: NSRect(x: x + 0.75, y: 0.5, width: 2.25, height: bounds.height - 1))
+          bar.lineWidth = 1.5
+          bar.stroke()
+        } else {
+          color.setFill()
+          NSRect(x: x, y: 0, width: 3, height: bounds.height).fill()
+        }
       }
     } else if !marker.isEmpty {
       CodeText.drawSingleLine(

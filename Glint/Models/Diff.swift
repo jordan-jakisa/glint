@@ -63,6 +63,9 @@ struct FileChange: Identifiable, Sendable {
   let hunks: [Hunk]
   let additions: Int
   let deletions: Int
+  /// Style Zed's Uncommitted Changes shows fully staged files too; their
+  /// hunks are staged (HEAD to index), so their actions unstage.
+  var isStaged = false
 
   var path: String { newPath ?? oldPath ?? "" }
 
@@ -70,7 +73,7 @@ struct FileChange: Identifiable, Sendable {
   func renumbered(_ newID: Int) -> FileChange {
     FileChange(
       id: newID, status: status, oldPath: oldPath, newPath: newPath, isBinary: isBinary, hunks: hunks,
-      additions: additions, deletions: deletions)
+      additions: additions, deletions: deletions, isStaged: isStaged)
   }
 }
 

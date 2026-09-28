@@ -240,9 +240,9 @@ struct ZedChangesList: View {
     var id: String { path }
     var fileName: String { (path as NSString).lastPathComponent }
     var directory: String { (path as NSString).deletingLastPathComponent }
-    /// The diff to show: what's still unstaged if anything is, else what's
-    /// staged.
-    var selection: ChangeSelection { ChangeSelection(staged: !hasUnstaged, path: path) }
+    /// Every file lives in the one Uncommitted Changes view, as in Zed;
+    /// picking it scrolls there.
+    var selection: ChangeSelection { ChangeSelection(staged: false, path: path) }
   }
 
   enum Row: Identifiable {
