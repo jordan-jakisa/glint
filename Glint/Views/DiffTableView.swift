@@ -138,15 +138,27 @@ struct DiffTableView: NSViewRepresentable {
         table.endUpdates()
       } else if view.rowsVersion != version || actionChanged || sizeChanged {
         let isNewSource = view.source != source
+        // Only the look changed (text size, colours): same rows, new heights.
+        let lookOnly = sizeChanged && view.rowsVersion == version && !actionChanged && !isNewSource
+        let topRow = table.rows(in: table.visibleRect).location
+        let anchor = lookOnly && topRow < rows.count ? rows[topRow].id : nil
+        let selection = table.selectedRowIndexes
         rows = view.rows
         version = view.rowsVersion
         source = view.source
         metrics = DiffMetrics(lineNumberDigits: view.lineNumberDigits)
         heightsWidth = -1
         // Line selections refer to the old rows; after staging, the lines
-        // they pointed at are gone.
-        if !table.selectedRowIndexes.isEmpty { table.deselectAll(nil) }
+        // they pointed at are gone. A look change keeps them.
+        if !lookOnly, !table.selectedRowIndexes.isEmpty { table.deselectAll(nil) }
         table.reloadData()
+        if lookOnly {
+          table.selectRowIndexes(selection, byExtendingSelection: false)
+          // Keep the line you were reading at the top, not the pixel offset.
+          // After this pass: the table re-tiles to its new height first and
+          // would otherwise clamp the scroll back.
+          if let anchor { DispatchQueue.main.async { [weak self] in self?.scroll(to: anchor) } }
+        }
         if isNewSource {
           scroll(toY: 0)
           // Runs after this pass's display commit, so it marks the frame the

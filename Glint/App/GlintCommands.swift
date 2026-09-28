@@ -36,13 +36,10 @@ struct GlintCommands: Commands {
         .shortcut(.toggleMinimal)
       Button(AppCommand.biggerText.title) { TextSize.shared.step(1) }
         .shortcut(.biggerText)
-        .disabled(TextSize.shared.body >= TextSize.range.upperBound)
       Button(AppCommand.smallerText.title) { TextSize.shared.step(-1) }
         .shortcut(.smallerText)
-        .disabled(TextSize.shared.body <= TextSize.range.lowerBound)
       Button(AppCommand.actualTextSize.title) { TextSize.shared.reset() }
         .shortcut(.actualTextSize)
-        .disabled(TextSize.shared.body == TextSize.standard)
       Divider()
 
       Button(session?.layout == .split ? "Show Unified Diff" : "Show Split Diff") {
