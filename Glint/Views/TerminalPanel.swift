@@ -25,6 +25,50 @@ final class GlintTerminalView: LocalProcessTerminalView {
     onFocus?()
   }
 
+  enum PaneCommand: Int {
+    case splitRight, splitDown, close
+  }
+
+  /// Runs a pane command from the right-click menu, for this pane.
+  var onPaneCommand: ((PaneCommand) -> Void)?
+
+  /// Right-click: copy and paste, then the pane commands with their keys.
+  /// The pane you right-click becomes the one you're in.
+  override func menu(for event: NSEvent) -> NSMenu? {
+    onFocus?()
+    let menu = NSMenu()
+    menu.addItem(withTitle: "Copy", action: #selector(NSText.copy(_:)), keyEquivalent: "")
+    menu.addItem(withTitle: "Paste", action: #selector(NSText.paste(_:)), keyEquivalent: "")
+    menu.addItem(.separator())
+    menu.addItem(paneItem("Split Right", .splitRight, AppCommand.splitTerminalRight))
+    menu.addItem(paneItem("Split Down", .splitDown, AppCommand.splitTerminalDown))
+    menu.addItem(.separator())
+    menu.addItem(paneItem("Close Pane", .close, AppCommand.closeTerminalTab))
+    return menu
+  }
+
+  private func paneItem(_ title: String, _ command: PaneCommand, _ shortcut: AppCommand) -> NSMenuItem {
+    let item = NSMenuItem(title: title, action: #selector(runPaneCommand(_:)), keyEquivalent: "")
+    item.target = self
+    item.tag = command.rawValue
+    // Shows your key for it, as the menu bar does.
+    if let key = ShortcutStore.shared.shortcut(for: shortcut), key.key.count == 1 {
+      item.keyEquivalent = key.key
+      var flags: NSEvent.ModifierFlags = []
+      if key.command { flags.insert(.command) }
+      if key.option { flags.insert(.option) }
+      if key.control { flags.insert(.control) }
+      if key.shift { flags.insert(.shift) }
+      item.keyEquivalentModifierMask = flags
+    }
+    return item
+  }
+
+  @objc private func runPaneCommand(_ sender: NSMenuItem) {
+    guard let command = PaneCommand(rawValue: sender.tag) else { return }
+    onPaneCommand?(command)
+  }
+
   override func viewDidChangeEffectiveAppearance() {
     super.viewDidChangeEffectiveAppearance()
     applyColors()
@@ -168,6 +212,9 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
   /// Called when a repository's last tab closes on its own (you typed
   /// `exit`), so the panel hides instead of starting a new shell.
   @ObservationIgnored var lastTabClosed: (URL) -> Void = { _ in }
+  /// Runs a right-click pane command through the session, which knows to
+  /// expand the terminal before stacking and to hide it after the last pane.
+  @ObservationIgnored var paneCommand: (GlintTerminalView.PaneCommand, URL) -> Void = { _, _ in }
   @ObservationIgnored private var textSizeObserver: NSObjectProtocol?
   @ObservationIgnored private var themeObserver: NSObjectProtocol?
 
@@ -323,6 +370,11 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
     view.onFocus = { [weak self, weak view] in
       guard let self, let view, let (_, tab) = self.find(view) else { return }
       tab.focused = view
+    }
+    view.onPaneCommand = { [weak self, weak view] command in
+      guard let self, let view, let (folder, tab) = self.find(view) else { return }
+      tab.focused = view
+      self.paneCommand(command, folder)
     }
     Task {
       let environment = await Self.environment()

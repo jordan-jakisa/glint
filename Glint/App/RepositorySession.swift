@@ -256,6 +256,14 @@ final class RepositorySession {
   init() {
     layout = UserDefaults.standard.string(forKey: Self.layoutKey)
       .flatMap(DiffLayout.init(rawValue:)) ?? .unified
+    terminals.paneCommand = { [weak self] command, folder in
+      guard let self, folder == self.repositoryURL?.standardizedFileURL else { return }
+      switch command {
+      case .splitRight: self.splitTerminal(.horizontal)
+      case .splitDown: self.splitTerminal(.vertical)
+      case .close: self.closeTerminalPane()
+      }
+    }
     terminals.lastTabClosed = { [weak self] folder in
       guard let self, folder == self.repositoryURL?.standardizedFileURL else { return }
       self.isTerminalShown = false
