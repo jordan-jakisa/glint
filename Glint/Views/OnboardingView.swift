@@ -144,7 +144,7 @@ private struct AIStep: View {
         status
           .font(.app(.callout))
           .frame(minHeight: 18, alignment: .leading)
-        Text("Your key is kept in your Mac's Keychain. Your diff goes to \(settings.provider.name) only when you press the sparkle button.")
+        Text("Your key is kept in your Mac's Keychain. Your diff goes to \(settings.provider.name) only when you press \u{2728}.")
           .font(.app(.caption))
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)

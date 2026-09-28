@@ -9,9 +9,10 @@ struct GeneralSettingsView: View {
     Form {
       Section {
         Picker("File order", selection: $fileOrder) {
-          Text("Most useful first").tag(FileOrder.smart)
+          Text("Source first").tag(FileOrder.smart)
           Text("By path").tag(FileOrder.path)
         }
+        .help("Source files first, each followed by its tests, then config and docs, lockfiles last")
       }
       Section {
         Picker("External terminal", selection: $terminal) {
@@ -21,6 +22,7 @@ struct GeneralSettingsView: View {
               .disabled(!app.isInstalled)
           }
         }
+        .help(AppCommand.openExternalTerminal.hint("Opens the active repository in this app"))
       }
     }
     .formStyle(.grouped)

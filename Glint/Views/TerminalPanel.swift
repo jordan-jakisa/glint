@@ -93,6 +93,20 @@ indirect enum PaneLayout {
     return first.neighbour(of: target) ?? second.neighbour(of: target)
   }
 
+  /// Panes folded away while docked: each stack shows only the side you're
+  /// in, so the other side's panes are hidden.
+  func foldedCount(focused: GlintTerminalView) -> Int {
+    switch self {
+    case .pane: return 0
+    case .split(_, let axis, let first, let second):
+      guard axis == .vertical else {
+        return first.foldedCount(focused: focused) + second.foldedCount(focused: focused)
+      }
+      let (shown, hidden) = first.panes.contains { $0 === focused } ? (first, second) : (second, first)
+      return hidden.panes.count + shown.foldedCount(focused: focused)
+    }
+  }
+
   /// Where each pane sits, for moving focus by direction.
   func frames(in rect: CGRect, fractions: [UUID: CGFloat]) -> [(GlintTerminalView, CGRect)] {
     switch self {
@@ -380,6 +394,7 @@ struct TerminalPanel: View {
   let store: TerminalStore
   let isMaximized: Bool
   let toggleMaximized: () -> Void
+  let split: (SplitAxis) -> Void
   let hide: () -> Void
 
   var body: some View {
@@ -387,7 +402,7 @@ struct TerminalPanel: View {
       VStack(spacing: 0) {
         TerminalTabStrip(
           folder: folder, store: store, current: current, isMaximized: isMaximized,
-          toggleMaximized: toggleMaximized, hide: hide)
+          toggleMaximized: toggleMaximized, split: split, hide: hide)
         PaneLayoutView(layout: current.layout, tab: current, isDocked: !isMaximized)
       }
     } else {
@@ -487,9 +502,11 @@ private struct TerminalTabStrip: View {
   let current: TerminalTab
   let isMaximized: Bool
   let toggleMaximized: () -> Void
+  let split: (SplitAxis) -> Void
   let hide: () -> Void
 
   var body: some View {
+    let folded = isMaximized ? 0 : current.layout.foldedCount(focused: current.focused)
     HStack(spacing: 2) {
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 2) {
@@ -501,6 +518,22 @@ private struct TerminalTabStrip: View {
           }
         }
       }
+      // Stacked panes fold away while docked; say so, and expand on click.
+      if folded > 0 {
+        Button(folded == 1 ? "+1 pane" : "+\(folded) panes", action: toggleMaximized)
+          .buttonStyle(.borderless)
+          .font(.app(.caption))
+          .foregroundStyle(.secondary)
+          .help(AppCommand.maximizeTerminal.hint("Expand the terminal to see every pane"))
+      }
+      Button {
+        split(NSEvent.modifierFlags.contains(.option) ? .vertical : .horizontal)
+      } label: {
+        Image(systemName: "rectangle.split.2x1").hitTarget()
+      }
+      .buttonStyle(.borderless)
+      .accessibilityLabel("Split terminal")
+      .help(AppCommand.splitTerminalRight.hint("Split right") + ". " + AppCommand.splitTerminalDown.hint("Option-click splits down"))
       Button {
         store.newTab(for: folder)
       } label: {

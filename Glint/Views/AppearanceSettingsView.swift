@@ -14,6 +14,7 @@ struct AppearanceSettingsView: View {
           ForEach(Theme.Interface.allCases) { Text($0.title).tag($0) }
         }
         .pickerStyle(.segmented)
+        .help(AppCommand.toggleMinimal.hint("Minimal: no toolbar, one status line along the bottom"))
         Picker(
           "Theme", selection: Binding(get: { theme.appearance }, set: { theme.set($0) })
         ) {
@@ -36,7 +37,7 @@ struct AppearanceSettingsView: View {
         }
         .pickerStyle(.segmented)
         Picker(
-          "Diff colours", selection: Binding(get: { theme.diffColors }, set: { theme.set($0) })
+          "Diff colors", selection: Binding(get: { theme.diffColors }, set: { theme.set($0) })
         ) {
           ForEach(Theme.DiffColors.allCases) { Text($0.title).tag($0) }
         }
@@ -60,6 +61,7 @@ struct AppearanceSettingsView: View {
             .labelsHidden()
           }
         }
+        .help("\(AppCommand.biggerText.keys) and \(AppCommand.smallerText.keys) change it from anywhere")
       }
       Section {
         Toggle(

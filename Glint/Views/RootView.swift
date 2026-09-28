@@ -169,7 +169,7 @@ private struct DiffAndTerminal: View {
           if !maximized { divider(in: geometry.size.height) }
           TerminalPanel(
             folder: folder, store: session.terminals, isMaximized: maximized,
-            toggleMaximized: session.toggleTerminalMaximized
+            toggleMaximized: session.toggleTerminalMaximized, split: session.splitTerminal
           ) { session.isTerminalShown = false }
           .frame(height: maximized ? geometry.size.height : clamped(terminalHeight, in: geometry.size.height))
         }
