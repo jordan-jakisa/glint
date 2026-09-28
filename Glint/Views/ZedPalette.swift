@@ -29,6 +29,7 @@ enum ZedPalette {
   /// Diff hunks.
   static let versionAdded = pair(0x27a657, 0x27a657)
   static let versionDeleted = pair(0xe06c76, 0xe06c76)
+  static let versionModified = pair(0xd3b020, 0xd3b020)
 
   static let terminalBackground = pair(0x282c34, 0xfafafa)
   static let terminalForeground = pair(0xabb2bf, 0x2a2c33)

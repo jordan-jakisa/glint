@@ -44,6 +44,9 @@ struct DiffRow: Identifiable, Sendable {
 
   let id: DiffRowID
   let content: Content
+  /// The line's hunk both removes and adds lines. Style Zed marks such a
+  /// hunk's changed lines with the modified colour, as Zed does.
+  var inMixedHunk = false
 
   /// Why a file with no hunks is in the diff at all.
   static func emptyNote(_ status: FileChange.Status) -> String {
@@ -74,14 +77,16 @@ struct DiffRow: Identifiable, Sendable {
 
       for hunk in file.hunks {
         rows.append(DiffRow(id: .hunk(file.id, hunk.id), content: .hunkHeader(hunk)))
+        let mixed =
+          hunk.lines.contains { $0.kind == .addition } && hunk.lines.contains { $0.kind == .deletion }
         switch layout {
         case .unified:
           for (index, line) in hunk.lines.enumerated() {
-            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .line(line)))
+            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .line(line), inMixedHunk: mixed))
           }
         case .split:
           for (index, row) in hunk.splitRows.enumerated() {
-            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .split(row)))
+            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .split(row), inMixedHunk: mixed))
           }
         }
       }

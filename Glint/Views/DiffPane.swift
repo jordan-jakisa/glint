@@ -296,6 +296,11 @@ private struct ZedDiffToolbar: View {
 
   var body: some View {
     HStack(spacing: 10) {
+      // Zed's unified and split buttons, the current one highlighted.
+      HStack(spacing: 0) {
+        layoutButton(.unified, icon: "rectangle", label: "Unified")
+        layoutButton(.split, icon: "rectangle.split.2x1", label: "Split")
+      }
       Text(staged ? "Staged Changes" : "Uncommitted Changes")
         .font(.app(.body))
       LineStatLabel(stat: LineStat(added: diff.additions, deleted: diff.deletions))
@@ -324,9 +329,31 @@ private struct ZedDiffToolbar: View {
       }
       .buttonStyle(.borderless)
       .help(staged ? AppCommand.unstageAll.hint("Unstage every file") : AppCommand.stageAll.hint("Stage every file"))
+      Hairline(axis: .vertical).frame(height: 16)
+      Button("Commit") { session.messageFocusRequest = true }
+        .buttonStyle(.borderless)
+        .help(AppCommand.focusCommitMessage.hint("Write the commit message"))
     }
     .font(.app(.callout))
     .padding(.horizontal, 12)
     .frame(height: 36)
+  }
+
+  private func layoutButton(_ layout: DiffLayout, icon: String, label: String) -> some View {
+    Button {
+      session.layout = layout
+    } label: {
+      Image(systemName: icon)
+        .frame(width: 24, height: 22)
+        .background(
+          RoundedRectangle(cornerRadius: 4)
+            .fill(session.layout == layout ? Color(nsColor: ZedPalette.elementSelected) : .clear))
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .foregroundStyle(session.layout == layout ? .primary : .secondary)
+    .accessibilityLabel(label)
+    .accessibilityAddTraits(session.layout == layout ? .isSelected : [])
+    .help(AppCommand.toggleLayout.hint(label))
   }
 }

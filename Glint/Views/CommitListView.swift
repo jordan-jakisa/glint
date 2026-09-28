@@ -66,6 +66,35 @@ private struct CommitRow: View {
   let commit: Commit
 
   var body: some View {
+    if Theme.shared.isZed {
+      zedRow
+    } else {
+      standardRow
+    }
+  }
+
+  /// Zed's history entry: the summary, then author, age and short id, each
+  /// dimmed and separated by dots.
+  private var zedRow: some View {
+    VStack(alignment: .leading, spacing: 2) {
+      Text(commit.summary)
+        .font(.app(.body))
+        .lineLimit(1)
+      HStack(spacing: 4) {
+        Image(systemName: "person")
+        Text(commit.authorName).lineLimit(1)
+        Text("\u{2022}")
+        Text(RelativeDate.string(for: commit.date)).lineLimit(1)
+        Text("\u{2022}")
+        Text(commit.shortID).font(.code(.caption))
+      }
+      .font(.app(.caption))
+      .foregroundStyle(.secondary)
+    }
+    .padding(.vertical, 2)
+  }
+
+  private var standardRow: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(commit.summary)
         .font(.app(.body))

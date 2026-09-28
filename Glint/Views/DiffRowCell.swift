@@ -409,7 +409,10 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     if Theme.shared.isZed {
       // Zed marks a changed line with a bar at the edge, not + or -.
       if line.kind == .addition || line.kind == .deletion {
-        (line.kind == .addition ? ZedPalette.versionAdded : ZedPalette.versionDeleted).setFill()
+        let color =
+          row?.inMixedHunk == true
+          ? ZedPalette.versionModified : line.kind == .addition ? ZedPalette.versionAdded : ZedPalette.versionDeleted
+        color.setFill()
         NSRect(x: x, y: 0, width: 3, height: bounds.height).fill()
       }
     } else if !marker.isEmpty {
