@@ -28,6 +28,16 @@ struct DiffTableView: NSViewRepresentable {
   /// Opens the line's hunk for editing; nil where the diff isn't your
   /// working copy (commits, staged changes).
   var editLines: ((DiffRowID) -> Void)? = nil
+  /// Who last changed a new-side line of the file at an index; nil until
+  /// that file's blame is loaded (asking starts the load). Feeds the blame
+  /// column and the selected line's inline blame.
+  var blame: ((Int, DiffLine) -> BlameCommit?)? = nil
+  /// The blame column in the gutter.
+  var showsBlame = false
+  /// Bumped when blame arrives; redraws the rows on screen, nothing else.
+  var blameVersion = 0
+  /// "Copy Permalink to Line" and "Open Permalink to Line" in the menu.
+  var permalinks: DiffPermalinks? = nil
 
   func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -90,6 +100,13 @@ struct DiffTableView: NSViewRepresentable {
     private var selectionChanged: ([DiffRowID]) -> Void = { _ in }
     private var editLines: ((DiffRowID) -> Void)?
     private var hunkAction: (DiffRowID) -> Void = { _ in }
+    private var blame: ((Int, DiffLine) -> BlameCommit?)?
+    private var showsBlame = false
+    private var blameVersion = 0
+    private(set) var permalinks: DiffPermalinks?
+    /// The one selected line, which shows its blame inline; nil when none
+    /// or several are selected.
+    private var inlineRow: Int?
     private var observers: [NSObjectProtocol] = []
 
     func attach(table: NSTableView, scrollView: NSScrollView) {
@@ -116,16 +133,23 @@ struct DiffTableView: NSViewRepresentable {
       selectionChanged = view.selectionChanged
       hunkAction = view.hunkAction
       editLines = view.editLines
+      blame = view.blame
+      permalinks = view.permalinks
       guard let table else { return }
       let actionChanged = view.partialAction != partialAction
       partialAction = view.partialAction
-      let sizeChanged = view.textSize != textSize || view.themeVersion != themeVersion
+      // Showing blame narrows the code, so it reflows like a size change.
+      let sizeChanged =
+        view.textSize != textSize || view.themeVersion != themeVersion || view.showsBlame != showsBlame
       textSize = view.textSize
       themeVersion = view.themeVersion
+      showsBlame = view.showsBlame
+      let blameArrived = view.blameVersion != blameVersion
+      blameVersion = view.blameVersion
 
       if view.rowsVersion != version, !actionChanged, !sizeChanged, view.source == source,
         case .file(let file) = view.rowsChange,
-        DiffMetrics(lineNumberDigits: view.lineNumberDigits).gutterWidth == metrics.gutterWidth
+        DiffMetrics(lineNumberDigits: view.lineNumberDigits, showsBlame: showsBlame).sameWidths(as: metrics)
       {
         // Collapsing or expanding one file: swap only its rows. A full reload
         // rebuilt every visible row for this and missed the frame budget.
@@ -143,6 +167,7 @@ struct DiffTableView: NSViewRepresentable {
           table.reloadData(forRowIndexes: IndexSet(integer: header), columnIndexes: IndexSet(integer: 0))
         }
         table.endUpdates()
+        syncInlineRow()
       } else if view.rowsVersion != version || actionChanged || sizeChanged {
         let isNewSource = view.source != source
         // Only the look changed (text size, colours): same rows, new heights.
@@ -153,14 +178,16 @@ struct DiffTableView: NSViewRepresentable {
         rows = view.rows
         version = view.rowsVersion
         source = view.source
-        metrics = DiffMetrics(lineNumberDigits: view.lineNumberDigits)
+        metrics = DiffMetrics(lineNumberDigits: view.lineNumberDigits, showsBlame: showsBlame)
         heightsWidth = -1
         // Line selections refer to the old rows; after staging, the lines
         // they pointed at are gone. A look change keeps them.
         if !lookOnly, !table.selectedRowIndexes.isEmpty { table.deselectAll(nil) }
+        inlineRow = nil
         table.reloadData()
         if lookOnly {
           table.selectRowIndexes(selection, byExtendingSelection: false)
+          syncInlineRow()
           // Keep the line you were reading at the top, not the pixel offset.
           // After this pass: the table re-tiles to its new height first and
           // would otherwise clamp the scroll back.
@@ -173,6 +200,9 @@ struct DiffTableView: NSViewRepresentable {
           let source = view.source
           DispatchQueue.main.async { [weak self] in self?.didPaint(source) }
         }
+      } else if blameArrived {
+        // Blame for a file came in: fill in the rows on screen, no reload.
+        refreshBlame(in: visibleRowIndexes())
       }
 
       view.scroller.perform = { [weak self] target, rowsVersion in
@@ -211,8 +241,65 @@ struct DiffTableView: NSViewRepresentable {
       let cell =
         tableView.makeView(withIdentifier: identifier, owner: nil) as? DiffRowCell
         ?? DiffRowCell(identifier: identifier)
-      cell.configure(rows[row], metrics: metrics, hunkAction: partialAction.map { "\($0) Hunk" })
+      let (column, inline) = blame(forRow: row)
+      cell.configure(
+        rows[row], metrics: metrics, hunkAction: partialAction.map { "\($0) Hunk" }, blame: column,
+        inlineBlame: inline)
       return cell
+    }
+
+    // MARK: Blame
+
+    /// The new side of a line row: the line blame describes. Removed lines
+    /// have none.
+    private func newSideLine(_ row: Int) -> DiffLine? {
+      let line: DiffLine?
+      switch rows[row].content {
+      case .line(let unified): line = unified
+      case .split(let pair): line = pair.right
+      default: line = nil
+      }
+      guard let line, line.kind == .context || line.kind == .addition else { return nil }
+      return line
+    }
+
+    /// Blame for the column (when shown) and for the inline note (on the one
+    /// selected line). Only asks for rows that draw it, so only files on
+    /// screen get blamed.
+    private func blame(forRow row: Int) -> (column: BlameCommit?, inline: BlameCommit?) {
+      let isInline = row == inlineRow
+      guard let blame, showsBlame || isInline, rows.indices.contains(row), let line = newSideLine(row) else {
+        return (nil, nil)
+      }
+      let commit = blame(rows[row].id.file, line)
+      return (showsBlame ? commit : nil, isInline ? commit : nil)
+    }
+
+    private func refreshBlame(in indexes: IndexSet) {
+      guard let table else { return }
+      for index in indexes where rows.indices.contains(index) {
+        guard let cell = table.view(atColumn: 0, row: index, makeIfNecessary: false) as? DiffRowCell else { continue }
+        let (column, inline) = blame(forRow: index)
+        cell.setBlame(column, inline: inline)
+      }
+    }
+
+    private func visibleRowIndexes() -> IndexSet {
+      guard let table else { return [] }
+      let range = table.rows(in: table.visibleRect)
+      guard range.location != NSNotFound, range.length > 0 else { return [] }
+      return IndexSet(integersIn: range.location..<(range.location + range.length))
+    }
+
+    /// Moves the inline blame to the one selected line, if there is one.
+    private func syncInlineRow() {
+      guard let table else { return }
+      let selected = table.selectedRowIndexes
+      let row = selected.count == 1 ? selected.first : nil
+      guard row != inlineRow else { return }
+      let old = inlineRow
+      inlineRow = row
+      refreshBlame(in: IndexSet([old, row].compactMap { $0 }))
     }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
@@ -239,6 +326,7 @@ struct DiffTableView: NSViewRepresentable {
 
     func tableViewSelectionDidChange(_ notification: Notification) {
       guard let table else { return }
+      syncInlineRow()
       guard partialAction != nil else { return selectionChanged([]) }
       selectionChanged(
         table.selectedRowIndexes.compactMap { index in
@@ -281,6 +369,17 @@ struct DiffTableView: NSViewRepresentable {
       guard editLines != nil, rows.indices.contains(index) else { return nil }
       switch rows[index].content {
       case .line, .split: return rows[index].id
+      default: return nil
+      }
+    }
+
+    /// The line a permalink can point at: the clicked line row, if the
+    /// session can link to it.
+    func linkableRow(at index: Int) -> DiffRowID? {
+      guard let permalinks, rows.indices.contains(index) else { return nil }
+      switch rows[index].content {
+      case .line(let line) where line.kind == .noNewline: return nil
+      case .line, .split: return permalinks.canLink(rows[index].id) ? rows[index].id : nil
       default: return nil
       }
     }
@@ -355,7 +454,7 @@ struct DiffTableView: NSViewRepresentable {
 }
 
 /// The diff's table: ⌘C copies the selected lines, and right-click offers
-/// Copy and, on your working copy, Edit.
+/// Copy, Edit on your working copy, and permalinks to the line.
 final class DiffTable: NSTableView {
   weak var coordinator: DiffTableView.Coordinator?
 
@@ -383,12 +482,44 @@ final class DiffTable: NSTableView {
       edit.target = self
       edit.tag = row
     }
+    if let permalinks = coordinator.permalinks, let line = coordinator.linkableRow(at: row) {
+      menu.addItem(.separator())
+      let note = permalinks.note(line)
+      for (title, action) in [
+        ("Copy Permalink to Line", #selector(copyPermalinkClicked(_:))),
+        ("Open Permalink to Line", #selector(openPermalinkClicked(_:))),
+      ] {
+        let item = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.tag = row
+        item.toolTip = note
+      }
+    }
     return menu
   }
 
   @objc private func editClicked(_ sender: NSMenuItem) {
     coordinator?.edit(row: sender.tag)
   }
+
+  @objc private func copyPermalinkClicked(_ sender: NSMenuItem) {
+    guard let coordinator, let line = coordinator.linkableRow(at: sender.tag) else { return }
+    coordinator.permalinks?.copy(line)
+  }
+
+  @objc private func openPermalinkClicked(_ sender: NSMenuItem) {
+    guard let coordinator, let line = coordinator.linkableRow(at: sender.tag) else { return }
+    coordinator.permalinks?.open(line)
+  }
+}
+
+/// Links to a diff line on the remote's site, from the session.
+struct DiffPermalinks {
+  let canLink: (DiffRowID) -> Bool
+  let copy: (DiffRowID) -> Void
+  let open: (DiffRowID) -> Void
+  /// A caveat for the menu item's tooltip, like a line that isn't committed.
+  let note: (DiffRowID) -> String?
 }
 
 /// Carries keyboard jumps from the session to the table directly. A jump that
@@ -452,10 +583,14 @@ struct DiffMetrics {
     let boldFont: NSFont
     let advance: CGFloat
     let lineHeight: CGFloat
+    let smallFont: NSFont
+    let smallAdvance: CGFloat
 
     init(size: CGFloat) {
       self.size = size
       font = AppFont.ns(size: size)
+      smallFont = AppFont.ns(size: max(size - 2, 8))
+      smallAdvance = ("0" as NSString).size(withAttributes: [.font: smallFont]).width
       boldFont = AppFont.ns(size: size, weight: .semibold)
       advance = ("0" as NSString).size(withAttributes: [.font: font]).width
       lineHeight = ceil(font.ascender - font.descender + font.leading)
@@ -472,6 +607,9 @@ struct DiffMetrics {
   static var boldFont: NSFont { measures.boldFont }
   static var advance: CGFloat { measures.advance }
   static var lineHeight: CGFloat { measures.lineHeight }
+  /// The blame column's font: the code font, a size down.
+  static var smallFont: NSFont { measures.smallFont }
+  static var smallAdvance: CGFloat { measures.smallAdvance }
   static let tabWidth = 4
 
   static var fileHeaderHeight: CGFloat { lineHeight + 14 }
@@ -482,17 +620,31 @@ struct DiffMetrics {
   static let trailingPadding: CGFloat = 8
 
   let gutterWidth: CGFloat
+  /// The blame column at the left of line rows; zero when blame is off.
+  let blameWidth: CGFloat
 
-  init(lineNumberDigits: Int) {
+  /// Blame reads "a1b2c3d Jordan   13 days ago": an id, a short name, a date.
+  static let blameIDColumns = 7
+  static let blameNameColumns = 8
+  static var blameColumns: Int { blameIDColumns + 1 + blameNameColumns + 1 + BlameDate.maxLength }
+  static let blamePadding: CGFloat = 8
+
+  init(lineNumberDigits: Int, showsBlame: Bool = false) {
     gutterWidth = CGFloat(lineNumberDigits) * Self.advance + 12
+    blameWidth = showsBlame ? CGFloat(Self.blameColumns) * Self.smallAdvance + 2 * Self.blamePadding : 0
+  }
+
+  /// Whether rows lay out the same with these metrics as with `other`.
+  func sameWidths(as other: DiffMetrics) -> Bool {
+    gutterWidth == other.gutterWidth && blameWidth == other.blameWidth
   }
 
   /// Width available for code on one side of a row.
   func textWidth(rowWidth: CGFloat, split: Bool) -> CGFloat {
     if split {
-      return (rowWidth - 1) / 2 - gutterWidth - Self.markerWidth - Self.trailingPadding
+      return (rowWidth - blameWidth - 1) / 2 - gutterWidth - Self.markerWidth - Self.trailingPadding
     }
-    return rowWidth - 2 * gutterWidth - Self.markerWidth - Self.trailingPadding
+    return rowWidth - blameWidth - 2 * gutterWidth - Self.markerWidth - Self.trailingPadding
   }
 
   func columns(forWidth width: CGFloat) -> Int {

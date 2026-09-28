@@ -2,10 +2,14 @@ import AppKit
 
 /// Draws one diff row directly: no subviews, no Auto Layout. The table reuses
 /// these as rows scroll by, so only what is on screen ever exists.
-final class DiffRowCell: NSView {
+final class DiffRowCell: NSView, NSViewToolTipOwner {
   private var row: DiffRow?
   private var metrics = DiffMetrics(lineNumberDigits: 3)
   private var hunkAction: String?
+  /// The new-side line's blame, for the gutter column; nil until loaded.
+  private var blame: BlameCommit?
+  /// Set on the one selected line: its blame, drawn after the code.
+  private var inlineBlame: BlameCommit?
   var isRowSelected = false {
     didSet { if isRowSelected != oldValue { needsDisplay = true } }
   }
@@ -29,20 +33,39 @@ final class DiffRowCell: NSView {
   override var isFlipped: Bool { true }
   override var isOpaque: Bool { true }
 
-  func configure(_ row: DiffRow, metrics: DiffMetrics, hunkAction: String? = nil) {
+  func configure(
+    _ row: DiffRow, metrics: DiffMetrics, hunkAction: String? = nil, blame: BlameCommit? = nil,
+    inlineBlame: BlameCommit? = nil
+  ) {
     self.row = row
+    let blameResized = self.metrics.blameWidth != metrics.blameWidth
     self.metrics = metrics
     let actionChanged = self.hunkAction != hunkAction
     self.hunkAction = hunkAction
+    self.blame = blame
+    self.inlineBlame = inlineBlame
     isRowSelected = (superview as? NSTableRowView)?.isSelected ?? false
     needsDisplay = true
-    if actionChanged { window?.invalidateCursorRects(for: self) }
+    if actionChanged || blameResized { window?.invalidateCursorRects(for: self) }
+  }
+
+  /// Blame arrived, or the selection moved: redraw only if it changed.
+  func setBlame(_ blame: BlameCommit?, inline: BlameCommit?) {
+    guard blame != self.blame || inline != inlineBlame else { return }
+    self.blame = blame
+    inlineBlame = inline
+    needsDisplay = true
   }
 
   /// The hunk action is drawn text, not a button, so it says it's clickable
-  /// with the pointing hand and a tooltip.
+  /// with the pointing hand and a tooltip. The blame column's tooltip is
+  /// asked for on hover, so it follows the cell as it's reused.
   override func resetCursorRects() {
     removeAllToolTips()
+    if metrics.blameWidth > 0 {
+      // Taller than any row, so it covers wrapped lines too.
+      addToolTip(NSRect(x: 0, y: 0, width: metrics.blameWidth, height: 100_000), owner: self, userData: nil)
+    }
     guard let hunkAction, case .hunkHeader = row?.content else { return }
     let action = NSRect(x: bounds.width - Self.hunkActionWidth, y: 0, width: Self.hunkActionWidth, height: bounds.height)
     addCursorRect(action, cursor: .pointingHand)
@@ -158,24 +181,30 @@ final class DiffRowCell: NSView {
   private func drawUnified(_ line: DiffLine) {
     Self.background(line.kind).setFill()
     bounds.fill()
+    let left = metrics.blameWidth
+    drawBlameColumn()
     let gutter = metrics.gutterWidth
     Self.gutterBackground(line.kind).setFill()
-    NSRect(x: 0, y: 0, width: 2 * gutter, height: bounds.height).fill()
-    drawNumber(line.oldNumber, rightEdge: gutter - 6)
-    drawNumber(line.newNumber, rightEdge: 2 * gutter - 6)
-    drawCode(line, x: 2 * gutter, width: metrics.textWidth(rowWidth: bounds.width, split: false))
+    NSRect(x: left, y: 0, width: 2 * gutter, height: bounds.height).fill()
+    drawNumber(line.oldNumber, rightEdge: left + gutter - 6)
+    drawNumber(line.newNumber, rightEdge: left + 2 * gutter - 6)
+    drawCode(
+      line, x: left + 2 * gutter, width: metrics.textWidth(rowWidth: bounds.width, split: false),
+      inline: line.kind == .deletion ? nil : inlineBlame)
   }
 
   private func drawSplit(_ pair: SplitRow) {
     let pixel = 1 / (window?.backingScaleFactor ?? 2)
-    let half = (bounds.width - pixel) / 2
-    drawSide(pair.left, number: pair.left?.oldNumber, x: 0, width: half)
+    let left = metrics.blameWidth
+    drawBlameColumn()
+    let half = (bounds.width - left - pixel) / 2
+    drawSide(pair.left, number: pair.left?.oldNumber, x: left, width: half, inline: nil)
     Hairline.nsColor.setFill()
-    NSRect(x: half, y: 0, width: pixel, height: bounds.height).fill()
-    drawSide(pair.right, number: pair.right?.newNumber, x: half + pixel, width: half)
+    NSRect(x: left + half, y: 0, width: pixel, height: bounds.height).fill()
+    drawSide(pair.right, number: pair.right?.newNumber, x: left + half + pixel, width: half, inline: inlineBlame)
   }
 
-  private func drawSide(_ line: DiffLine?, number: Int?, x: CGFloat, width: CGFloat) {
+  private func drawSide(_ line: DiffLine?, number: Int?, x: CGFloat, width: CGFloat, inline: BlameCommit?) {
     let gutter = metrics.gutterWidth
     (line.map { Self.background($0.kind) } ?? Self.emptySide).setFill()
     NSRect(x: x, y: 0, width: width, height: bounds.height).fill()
@@ -183,8 +212,62 @@ final class DiffRowCell: NSView {
     NSRect(x: x, y: 0, width: gutter, height: bounds.height).fill()
     drawNumber(number, rightEdge: x + gutter - 6)
     if let line {
-      drawCode(line, x: x + gutter, width: metrics.textWidth(rowWidth: bounds.width, split: true))
+      drawCode(line, x: x + gutter, width: metrics.textWidth(rowWidth: bounds.width, split: true), inline: inline)
     }
+  }
+
+  // MARK: - Blame
+
+  /// "a1b2c3d Jordan   3 days ago" at the left of a line row, dimmed and a
+  /// size down. Empty until the file's blame loads; drawing never waits.
+  private func drawBlameColumn() {
+    let width = metrics.blameWidth
+    guard width > 0 else { return }
+    Self.gutterBackground(.context).setFill()
+    NSRect(x: 0, y: 0, width: width, height: bounds.height).fill()
+    guard let blame, let context = NSGraphicsContext.current?.cgContext else { return }
+    let font = DiffMetrics.smallFont
+    let advance = DiffMetrics.smallAdvance
+    let x = DiffMetrics.blamePadding
+    let y = DiffMetrics.verticalPadding
+    func draw(_ text: String, at x: CGFloat) {
+      CodeText.drawSingleLine(text, color: .secondaryLabelColor, at: NSPoint(x: x, y: y), font: font, in: context)
+    }
+    guard blame.isCommitted else { return draw("Not committed yet", at: x) }
+    draw(blame.shortID, at: x)
+    draw(
+      blame.shortAuthor(limit: DiffMetrics.blameNameColumns),
+      at: x + CGFloat(DiffMetrics.blameIDColumns + 1) * advance)
+    let date = BlameDate.text(for: blame.date)
+    draw(date, at: width - DiffMetrics.blamePadding - CGFloat(date.count) * advance)
+  }
+
+  /// The blame column's tooltip: the full summary, author, and date.
+  func view(
+    _ view: NSView, stringForToolTip tag: NSView.ToolTipTag, point: NSPoint, userData data: UnsafeMutableRawPointer?
+  ) -> String {
+    blame?.tooltip ?? ""
+  }
+
+  /// Zed's inline blame: "Jordan, 3 days ago · Fix the thing" after the
+  /// selected line's text, on its last wrapped line, cut to what fits.
+  private func drawInlineBlame(_ blame: BlameCommit, after line: DiffLine, x: CGFloat, width: CGFloat, in context: CGContext) {
+    // Non-ASCII text has no column count to place it by.
+    guard line.columns >= 0 else { return }
+    let perLine = max(1, Int(width / DiffMetrics.advance))
+    let lastLine = line.columns == 0 ? 0 : (line.columns - 1) / perLine
+    let used = line.columns - lastLine * perLine
+    let gap = 3
+    let room = perLine - used - gap
+    guard room >= 8 else { return }
+    var text = blame.inlineText()
+    if text.count > room { text = String(text.prefix(room - 1)) + "\u{2026}" }
+    CodeText.drawSingleLine(
+      text, color: .tertiaryLabelColor,
+      at: NSPoint(
+        x: x + CGFloat(used + gap) * DiffMetrics.advance,
+        y: DiffMetrics.verticalPadding + CGFloat(lastLine) * DiffMetrics.lineHeight),
+      in: context)
   }
 
   private func drawNumber(_ number: Int?, rightEdge: CGFloat) {
@@ -196,7 +279,7 @@ final class DiffRowCell: NSView {
       in: context)
   }
 
-  private func drawCode(_ line: DiffLine, x: CGFloat, width: CGFloat) {
+  private func drawCode(_ line: DiffLine, x: CGFloat, width: CGFloat, inline: BlameCommit? = nil) {
     guard let context = NSGraphicsContext.current?.cgContext else { return }
     let marker: String
     switch line.kind {
@@ -215,6 +298,9 @@ final class DiffRowCell: NSView {
       color: line.kind == .noNewline ? .secondaryLabelColor : .labelColor,
       at: NSPoint(x: x + DiffMetrics.markerWidth, y: DiffMetrics.verticalPadding),
       width: DiffMetrics.textDrawWidth(width), in: context)
+    if let inline, line.kind == .context || line.kind == .addition {
+      drawInlineBlame(inline, after: line, x: x + DiffMetrics.markerWidth, width: width, in: context)
+    }
   }
 
   // MARK: - Colors

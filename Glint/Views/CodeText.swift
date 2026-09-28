@@ -25,9 +25,12 @@ enum CodeText {
     }
   }
 
-  /// One unwrapped line: line numbers, markers.
-  static func drawSingleLine(_ text: String, color: NSColor, at origin: NSPoint, in context: CGContext) {
-    let line = CTLineCreateWithAttributedString(attributed(text, color: color))
+  /// One unwrapped line: line numbers, markers, blame. `font` defaults to
+  /// the diff's; a smaller one sits on the same baseline as the code.
+  static func drawSingleLine(
+    _ text: String, color: NSColor, at origin: NSPoint, font: NSFont = DiffMetrics.font, in context: CGContext
+  ) {
+    let line = CTLineCreateWithAttributedString(attributed(text, color: color, font: font))
     drawLine(line, x: origin.x, top: origin.y, in: context)
   }
 
@@ -45,11 +48,11 @@ enum CodeText {
     return max(lines, 1)
   }
 
-  private static func attributed(_ text: String, color: NSColor) -> CFAttributedString {
+  private static func attributed(_ text: String, color: NSColor, font: NSFont = DiffMetrics.font) -> CFAttributedString {
     // Core Text wants a CGColor. Resolving here, inside drawing, picks the
     // view's light or dark appearance.
     let attributes: [CFString: Any] = [
-      kCTFontAttributeName: DiffMetrics.font,
+      kCTFontAttributeName: font,
       kCTForegroundColorAttributeName: color.cgColor,
     ]
     return CFAttributedStringCreate(nil, text as CFString, attributes as CFDictionary)
