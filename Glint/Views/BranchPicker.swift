@@ -17,7 +17,7 @@ struct BranchPicker: View {
         .padding(10)
         .onSubmit(submit)
         .onChange(of: query) { highlighted = 0 }
-      Divider()
+      Hairline()
       List {
         if canCreate {
           Button {
@@ -41,13 +41,13 @@ struct BranchPicker: View {
           } label: {
             HStack {
               Image(systemName: branch.isCurrent ? "checkmark" : (branch.isRemote ? "cloud" : "arrow.triangle.branch"))
-                .foregroundStyle(branch.isCurrent ? Color.accentColor : .secondary)
+                .foregroundStyle(branch.isCurrent ? Color.themeAccent : .secondary)
                 .frame(width: 16)
               Text(branch.name)
                 .lineLimit(1)
               Spacer()
               Text(branch.date, format: .relative(presentation: .named))
-                .font(.caption)
+                .font(.app(.caption))
                 .foregroundStyle(.secondary)
             }
             .contentShape(Rectangle())
@@ -58,7 +58,7 @@ struct BranchPicker: View {
       }
       .listStyle(.plain)
       if session.isSwitchingBranch {
-        Divider()
+        Hairline()
         ProgressView().controlSize(.small).padding(6)
       }
     }

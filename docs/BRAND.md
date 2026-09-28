@@ -48,8 +48,30 @@ links for purple vary the most across cultures (Jonauskaite et al. 2020).
 
 ## Type
 
-System fonts only: SF Pro for the interface, SF Mono (the system monospaced
-font) at 12 pt for code and line numbers.
+JetBrains Mono everywhere: the interface, diffs, commit messages, and the
+terminal. It's bundled with the app (SIL Open
+Font License), so it looks the same whether or not you have it installed.
+Menus, alerts, and native controls stay in the system font.
+
+Four sizes, two weights, set in `AppFont`. They follow your text size
+(Settings, Appearance, or ⌘+ and ⌘-), 14 pt by default:
+
+| Size | Default | Use | Weight |
+|---|---|---|---|
+| text size − 2 | 12 pt | captions, metadata | regular |
+| text size | 14 pt | body, code, terminal, headings in lists | regular, semibold for headings |
+| text size + 4 | 18 pt | titles (empty states, onboarding steps) | semibold |
+| text size × 2 | 28 pt | the welcome and onboarding title | semibold |
+
+SwiftUI text styles fold onto these, so no view picks a raw point size. Past
+that, hierarchy comes from colour: primary, secondary, tertiary.
+
+Interface (Standard, or Minimal: no toolbar, one status line along the
+bottom like Zed's, a one-line commit box until you use it, tighter lists,
+one-line empty states), text contrast (Standard, High), theme (System,
+Light, Dark), accent, diff colours (green and red, or blue and
+orange for red-green colour blindness), and a flat toolbar without Liquid
+Glass are in Settings, Appearance.
 
 ## Voice
 

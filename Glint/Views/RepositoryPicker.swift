@@ -8,7 +8,7 @@ struct RepositoryPicker: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       Text(session.workspace?.name ?? "")
-        .font(.headline)
+        .font(.app(.headline))
         .padding(.horizontal, 12)
         .padding(.top, 10)
         .padding(.bottom, 6)
@@ -16,7 +16,7 @@ struct RepositoryPicker: View {
         .toggleStyle(.checkbox)
         .padding(.horizontal, 12)
         .padding(.bottom, 6)
-      Divider()
+      Hairline()
       ForEach(Array((session.workspace?.repositories ?? []).enumerated()), id: \.element.id) { index, repository in
         Button {
           session.isRepositoryPickerShown = false
@@ -36,27 +36,27 @@ struct RepositoryPicker: View {
     let isActive = repository.id == session.activeWorkspaceRepository?.id
     return HStack(spacing: 8) {
       Image(systemName: isActive ? "checkmark" : "folder")
-        .foregroundStyle(isActive ? Color.accentColor : .secondary)
+        .foregroundStyle(isActive ? Color.themeAccent : .secondary)
         .frame(width: 16)
       VStack(alignment: .leading, spacing: 2) {
         Text(repository.relativePath)
           .lineLimit(1)
         Text(summary?.branch ?? "detached HEAD")
-          .font(.caption)
+          .font(.app(.caption))
           .foregroundStyle(.secondary)
           .lineLimit(1)
       }
       Spacer()
       if let count = summary?.changeCount, count > 0 {
         Text("\(count)")
-          .font(.caption.monospacedDigit())
+          .font(.app(.caption).monospacedDigit())
           .padding(.horizontal, 6)
           .padding(.vertical, 2)
           .background(.orange.opacity(0.2), in: Capsule())
       }
       if index < 9 {
         Text("\u{2318}\(index + 1)")
-          .font(.caption)
+          .font(.app(.caption))
           .foregroundStyle(.tertiary)
       }
     }

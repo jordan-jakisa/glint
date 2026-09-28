@@ -11,8 +11,8 @@ struct AISettingsView: View {
     Form {
       Section {
         Toggle("Write commit messages with AI", isOn: $settings.isEnabled)
-        Text("When you ask for a message, Glint sends your diff (up to 20 KB) to the provider below. Nothing is sent until you press the sparkle button.")
-          .font(.callout)
+        Text("Sends your diff to the provider only when you press \u{2728}.")
+          .font(.app(.callout))
           .foregroundStyle(.secondary)
       }
 
@@ -32,7 +32,7 @@ struct AISettingsView: View {
           Spacer()
           Link("Get a Key", destination: settings.provider.keyURL)
         }
-        .font(.callout)
+        .font(.app(.callout))
       }
 
       Section("Free model") {
@@ -52,10 +52,10 @@ struct AISettingsView: View {
           .help("Reload the free models")
         }
         if let error = settings.modelsError {
-          Text(error).font(.callout).foregroundStyle(.red)
+          Text(error).font(.app(.callout)).foregroundStyle(.red)
         }
         Text(settings.provider.privacyNote)
-          .font(.callout)
+          .font(.app(.callout))
           .foregroundStyle(.secondary)
       }
 

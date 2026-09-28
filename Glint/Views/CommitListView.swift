@@ -19,13 +19,14 @@ struct CommitListView: View {
             }
         }
       }
+      .environment(\.defaultMinListRowHeight, Theme.shared.isMinimal ? 20 : 24)
       .onChange(of: session.selectedCommitID) { _, id in
         if let id { proxy.scrollTo(id) }
       }
     }
     .overlay {
       if session.commits.isEmpty {
-        ContentUnavailableView(
+        EmptyState(
           "No commits yet", systemImage: "circle.dashed",
           description: Text("Commit something and it shows up here."))
       }
@@ -39,17 +40,18 @@ private struct CommitRow: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 2) {
       Text(commit.summary)
+        .font(.app(.body))
         .lineLimit(1)
       HStack(spacing: 6) {
         Text(commit.shortID)
-          .font(.caption.monospaced())
+          .font(.app(.caption))
         Text(commit.authorName)
           .lineLimit(1)
         Spacer(minLength: 4)
         Text(RelativeDate.string(for: commit.date))
           .lineLimit(1)
       }
-      .font(.caption)
+      .font(.app(.caption))
       .foregroundStyle(.secondary)
     }
     .padding(.vertical, 2)
@@ -76,14 +78,11 @@ private struct BranchRow: View {
   let base: String
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 2) {
-      Label("All changes on \(branch ?? "this branch")", systemImage: "arrow.triangle.branch")
-        .lineLimit(1)
-      Text("Compared with \(base), uncommitted work included")
-        .font(.caption)
-        .foregroundStyle(.secondary)
-        .lineLimit(1)
-    }
-    .padding(.vertical, 2)
+    // One line; the comparison's detail is in the tooltip.
+    Label("\(branch ?? "This branch") vs \(base)", systemImage: "arrow.triangle.branch")
+      .font(.app(.body))
+      .lineLimit(1)
+      .padding(.vertical, 2)
+      .help("Everything on \(branch ?? "this branch") since it left \(base), uncommitted work included")
   }
 }

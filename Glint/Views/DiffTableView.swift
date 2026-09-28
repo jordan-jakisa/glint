@@ -12,6 +12,10 @@ struct DiffTableView: NSViewRepresentable {
   var rowsChange: RepositorySession.RowsChange = .all
   let source: DiffSource
   let lineNumberDigits: Int
+  /// Your text size; a change reflows every row.
+  var textSize: CGFloat = AppFont.body
+  /// Bumped when the accent or diff colours change; redraws every row.
+  var themeVersion = 0
   let scroller: DiffScroller
   let toggleCollapsed: (Int) -> Void
   let visibleRowsChanged: ([DiffRowID]) -> Void
@@ -72,6 +76,8 @@ struct DiffTableView: NSViewRepresentable {
     private var metrics = DiffMetrics(lineNumberDigits: 3)
     private var heights: [CGFloat] = []
     private var heightsWidth: CGFloat = -1
+    private var textSize: CGFloat = AppFont.body
+    private var themeVersion = 0
     private var toggleCollapsed: (Int) -> Void = { _ in }
     private var visibleRowsChanged: ([DiffRowID]) -> Void = { _ in }
     private var didPaint: (DiffSource) -> Void = { _ in }
@@ -106,8 +112,11 @@ struct DiffTableView: NSViewRepresentable {
       guard let table else { return }
       let actionChanged = view.partialAction != partialAction
       partialAction = view.partialAction
+      let sizeChanged = view.textSize != textSize || view.themeVersion != themeVersion
+      textSize = view.textSize
+      themeVersion = view.themeVersion
 
-      if view.rowsVersion != version, !actionChanged, view.source == source,
+      if view.rowsVersion != version, !actionChanged, !sizeChanged, view.source == source,
         case .file(let file) = view.rowsChange,
         DiffMetrics(lineNumberDigits: view.lineNumberDigits).gutterWidth == metrics.gutterWidth
       {
@@ -127,7 +136,7 @@ struct DiffTableView: NSViewRepresentable {
           table.reloadData(forRowIndexes: IndexSet(integer: header), columnIndexes: IndexSet(integer: 0))
         }
         table.endUpdates()
-      } else if view.rowsVersion != version || actionChanged {
+      } else if view.rowsVersion != version || actionChanged || sizeChanged {
         let isNewSource = view.source != source
         rows = view.rows
         version = view.rowsVersion
@@ -328,15 +337,38 @@ private final class PlainRowView: NSTableRowView {
 /// needed.
 @MainActor
 struct DiffMetrics {
-  static let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-  static let boldFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
-  static let advance: CGFloat = ("0" as NSString).size(withAttributes: [.font: font]).width
-  static let lineHeight: CGFloat = ceil(font.ascender - font.descender + font.leading)
+  /// Measured once per text size; row heights ask for these on every row.
+  private struct Measures {
+    let size: CGFloat
+    let font: NSFont
+    let boldFont: NSFont
+    let advance: CGFloat
+    let lineHeight: CGFloat
+
+    init(size: CGFloat) {
+      self.size = size
+      font = AppFont.ns(size: size)
+      boldFont = AppFont.ns(size: size, weight: .semibold)
+      advance = ("0" as NSString).size(withAttributes: [.font: font]).width
+      lineHeight = ceil(font.ascender - font.descender + font.leading)
+    }
+  }
+
+  private static var measured = Measures(size: AppFont.body)
+  private static var measures: Measures {
+    if measured.size != AppFont.body { measured = Measures(size: AppFont.body) }
+    return measured
+  }
+
+  static var font: NSFont { measures.font }
+  static var boldFont: NSFont { measures.boldFont }
+  static var advance: CGFloat { measures.advance }
+  static var lineHeight: CGFloat { measures.lineHeight }
   static let tabWidth = 4
 
-  static let fileHeaderHeight: CGFloat = 30
-  static let hunkHeaderHeight: CGFloat = 22
-  static let noteHeight: CGFloat = 32
+  static var fileHeaderHeight: CGFloat { lineHeight + 14 }
+  static var hunkHeaderHeight: CGFloat { lineHeight + 6 }
+  static var noteHeight: CGFloat { lineHeight + 16 }
   static let verticalPadding: CGFloat = 1
   static let markerWidth: CGFloat = 16
   static let trailingPadding: CGFloat = 8

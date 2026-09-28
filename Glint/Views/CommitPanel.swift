@@ -7,42 +7,18 @@ struct CommitPanel: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      Divider()
-      BranchBar(session: session)
-      Divider()
-      messageEditor
-      HStack(spacing: 8) {
-        GenerateButton(session: session)
-        Toggle("Amend", isOn: $session.isAmending)
-          .toggleStyle(.checkbox)
-          .disabled(session.lastCommit == nil)
-          .help("Replace the last commit instead of adding a new one")
-        Spacer()
-        if let size = session.commitSize, !session.isAmending {
-          CommitSizeLabel(size: size)
-        }
-        DelayedSpinner(isActive: session.isCommitting)
-        Button(session.commitButtonTitle, action: session.commit)
-          .shortcut(.commit)
-          .disabled(!session.canCommit)
-          .help(commitHelp)
+      Hairline()
+      // Minimal puts the branch in the status line instead.
+      if !Theme.shared.isMinimal {
+        BranchBar(session: session)
+        Hairline()
       }
-      .controlSize(.small)
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
-      // Kept while AI is on, so a note arriving doesn't push the list up.
-      if AISettings.shared.isEnabled || session.aiNote != nil {
-        Text(session.aiNote ?? " ")
-          .font(.caption)
-          .foregroundStyle(.secondary)
-          .lineLimit(1)
-          .truncationMode(.middle)
-          .frame(maxWidth: .infinity, alignment: .leading)
-          .padding(.horizontal, 10)
-          .padding(.bottom, 4)
+      messageEditor
+      if isExpanded {
+        footer
       }
       if let last = session.lastCommit {
-        Divider()
+        Hairline()
         LastCommitRow(commit: last, justCommitted: session.justCommitted, undo: session.undoLastCommit)
       }
     }
@@ -53,18 +29,55 @@ struct CommitPanel: View {
     }
   }
 
+  /// Minimal keeps the box to one line until you click in or press C.
+  private var isExpanded: Bool {
+    !Theme.shared.isMinimal || messageFocused || !session.commitMessage.isEmpty || session.isAmending
+  }
+
+  @ViewBuilder private var footer: some View {
+    HStack(spacing: 8) {
+      GenerateButton(session: session)
+      Toggle("Amend", isOn: $session.isAmending)
+        .toggleStyle(.checkbox)
+        .disabled(session.lastCommit == nil)
+        .help("Replace the last commit instead of adding a new one")
+      Spacer()
+      DelayedSpinner(isActive: session.isCommitting)
+      Button(session.commitButtonTitle, action: session.commit)
+        .shortcut(.commit)
+        .disabled(!session.canCommit)
+        .help(commitHelp)
+    }
+    .controlSize(.small)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 6)
+    // Kept while AI is on, so a note arriving doesn't push the list up.
+    if AISettings.shared.isEnabled || session.aiNote != nil {
+      Text(session.aiNote ?? " ")
+        .font(.app(.caption))
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .truncationMode(.middle)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.bottom, 4)
+    }
+  }
+
   private var messageEditor: some View {
     TextEditor(text: $session.commitMessage)
-      .font(.body)
+      .font(.app(.body))
       .scrollContentBackground(.hidden)
       .focused($messageFocused)
-      .frame(height: 84)
+      .frame(height: isExpanded ? 84 : 24)
+      .animation(.snappy(duration: 0.15), value: isExpanded)
       .padding(.horizontal, 6)
       .padding(.top, 6)
       .overlay(alignment: .topLeading) {
         if session.commitMessage.isEmpty {
           Text(placeholder)
             .foregroundStyle(.tertiary)
+            .lineLimit(1)
             .padding(.horizontal, 11)
             .padding(.top, 6)
             .allowsHitTesting(false)
@@ -113,7 +126,7 @@ private struct LastCommitRow: View {
       .buttonStyle(.borderless)
       .help("Undo this commit and keep its changes staged")
     }
-    .font(.callout)
+    .font(.app(.callout))
     .foregroundStyle(.secondary)
     .padding(.horizontal, 10)
     .padding(.vertical, 6)
@@ -123,6 +136,8 @@ private struct LastCommitRow: View {
 /// `repo / branch`. The branch opens the branch picker.
 struct BranchBar: View {
   @Bindable var session: RepositorySession
+  /// In Minimal's status line, which sets its own height and padding.
+  var isInStatusLine = false
 
   var body: some View {
     HStack(spacing: 4) {
@@ -139,7 +154,7 @@ struct BranchBar: View {
               Circle().fill(.orange).frame(width: 5, height: 5)
             }
             Image(systemName: "chevron.down")
-              .font(.caption2)
+              .font(.app(.caption2))
               .foregroundStyle(.secondary)
           }
         }
@@ -162,7 +177,7 @@ struct BranchBar: View {
           Text(session.info?.branch ?? "detached HEAD")
             .lineLimit(1)
           Image(systemName: "chevron.down")
-            .font(.caption2)
+            .font(.app(.caption2))
             .foregroundStyle(.secondary)
         }
       }
@@ -174,9 +189,10 @@ struct BranchBar: View {
       Spacer()
       SyncButton(session: session)
     }
-    .font(.callout)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
+    .font(.app(.callout))
+    .padding(.horizontal, isInStatusLine ? 0 : 10)
+    // Matches the terminal's tab strip beside it, so the dividers line up.
+    .frame(height: isInStatusLine ? nil : 30)
   }
 }
 
@@ -187,20 +203,30 @@ private struct SyncButton: View {
   var body: some View {
     // One control throughout: while git works it's disabled and says what's
     // happening, then says how it went for a moment.
-    Menu {
-        Button("Fetch", action: session.fetch)
-        Button("Pull", action: session.pull)
-        Button(session.sync.upstream == nil ? "Publish Branch" : "Push", action: session.push)
-      } label: {
-        Label(title, systemImage: icon)
-      } primaryAction: {
-        session.runSuggestedSync()
+    Group {
+      if Theme.shared.isFlat {
+        menu.menuStyle(.borderlessButton)
+      } else {
+        menu.menuStyle(.borderedButton)
       }
-      .menuStyle(.borderedButton)
-      .controlSize(.small)
-      .fixedSize()
-      .disabled(session.networkOperation != nil)
-      .help(help)
+    }
+    .controlSize(.small)
+    .fixedSize()
+    .disabled(session.networkOperation != nil)
+    .help(help)
+  }
+
+  private var menu: some View {
+    Menu {
+      Button("Fetch", action: session.fetch)
+      Button("Pull", action: session.pull)
+      Button(session.sync.upstream == nil ? "Publish Branch" : "Push", action: session.push)
+    } label: {
+      Label(title, systemImage: icon)
+        .labelStyle(.titleAndIcon)
+    } primaryAction: {
+      session.runSuggestedSync()
+    }
   }
 
   private var title: String {
@@ -263,20 +289,5 @@ private struct GenerateButton: View {
     guard settings.isReady, let model = settings.modelID else { return settings.setupHint }
     return AppCommand.writeMessage.hint("Write the message with \(model) on \(settings.provider.name)")
       + ". Sends your diff there."
-  }
-}
-
-/// What the commit would contain, so a big one is visible before it's made.
-private struct CommitSizeLabel: View {
-  let size: ChangeSize
-
-  var body: some View {
-    HStack(spacing: 4) {
-      Text(size.files == 1 ? "1 file" : "\(size.files) files")
-      ChangeStats(additions: size.additions, deletions: size.deletions)
-    }
-    .font(.caption.monospacedDigit())
-    .foregroundStyle(.secondary)
-    .help("What this commit would contain")
   }
 }

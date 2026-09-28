@@ -12,7 +12,8 @@ extension RepositorySession {
   }
 
   func toggleCurrentFileCollapsed() {
-    guard diff?.files.isEmpty == false else { return }
+    // A single file has no header to collapse it under.
+    guard let diff, !diff.files.isEmpty, !diff.source.isSingleFile else { return }
     toggleCollapsed(max(cursor.file, 0))
     scroll(to: .file(max(cursor.file, 0)))
   }

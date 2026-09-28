@@ -61,9 +61,9 @@ final class DiffRowCell: NSView {
     case .split(let pair): drawSplit(pair)
     }
     if isRowSelected {
-      NSColor.controlAccentColor.withAlphaComponent(0.22).setFill()
+      Theme.shared.accentColor.withAlphaComponent(0.22).setFill()
       bounds.fill(using: .sourceOver)
-      NSColor.controlAccentColor.setFill()
+      Theme.shared.accentColor.setFill()
       NSRect(x: 0, y: 0, width: 3, height: bounds.height).fill()
     }
   }
@@ -73,9 +73,10 @@ final class DiffRowCell: NSView {
   private func drawFileHeader(_ file: FileChange, collapsed: Bool) {
     NSColor.windowBackgroundColor.setFill()
     bounds.fill()
-    NSColor.separatorColor.setFill()
-    NSRect(x: 0, y: 0, width: bounds.width, height: 1).fill()
-    NSRect(x: 0, y: bounds.height - 1, width: bounds.width, height: 1).fill()
+    Hairline.nsColor.setFill()
+    let pixel = 1 / (window?.backingScaleFactor ?? 2)
+    NSRect(x: 0, y: 0, width: bounds.width, height: pixel).fill()
+    NSRect(x: 0, y: bounds.height - pixel, width: bounds.width, height: pixel).fill()
 
     let midY = bounds.midY
     var x: CGFloat = 12
@@ -102,7 +103,7 @@ final class DiffRowCell: NSView {
     // Stats on the right, path fills what is left, truncated from the front
     // so the file name stays visible.
     var right = bounds.width - 12
-    for (text, color) in [("-\(file.deletions)", NSColor.systemRed), ("+\(file.additions)", NSColor.systemGreen)] {
+    for (text, color) in [("-\(file.deletions)", Theme.shared.removed), ("+\(file.additions)", Theme.shared.added)] {
       guard text.dropFirst() != "0" else { continue }
       let stat = NSAttributedString(string: text, attributes: [.font: DiffMetrics.font, .foregroundColor: color])
       let size = stat.size()
@@ -124,13 +125,13 @@ final class DiffRowCell: NSView {
   }
 
   private func drawHunkHeader(_ hunk: Hunk) {
-    NSColor.controlAccentColor.withAlphaComponent(Self.tint(0.08)).setFill()
+    Theme.shared.accentColor.withAlphaComponent(Self.tint(0.08)).setFill()
     bounds.fill()
     var width = bounds.width - 24
     if let hunkAction {
       let label = NSAttributedString(
         string: hunkAction,
-        attributes: [.font: NSFont.systemFont(ofSize: 11, weight: .medium), .foregroundColor: NSColor.controlAccentColor])
+        attributes: [.font: AppFont.ns(size: AppFont.small, weight: .semibold), .foregroundColor: Theme.shared.accentColor])
       let size = label.size()
       label.draw(at: NSPoint(x: bounds.width - 12 - size.width, y: (bounds.height - size.height) / 2))
       width -= Self.hunkActionWidth
@@ -148,7 +149,7 @@ final class DiffRowCell: NSView {
   private func drawNote(_ text: String) {
     let note = NSAttributedString(
       string: text,
-      attributes: [.font: NSFont.systemFont(ofSize: 12), .foregroundColor: NSColor.secondaryLabelColor])
+      attributes: [.font: AppFont.ns(size: AppFont.body), .foregroundColor: NSColor.secondaryLabelColor])
     note.draw(at: NSPoint(x: 16, y: (bounds.height - note.size().height) / 2))
   }
 
@@ -168,8 +169,8 @@ final class DiffRowCell: NSView {
   private func drawSplit(_ pair: SplitRow) {
     let half = (bounds.width - 1) / 2
     drawSide(pair.left, number: pair.left?.oldNumber, x: 0, width: half)
-    NSColor.separatorColor.setFill()
-    NSRect(x: half, y: 0, width: 1, height: bounds.height).fill()
+    Hairline.nsColor.setFill()
+    NSRect(x: half, y: 0, width: 1 / (window?.backingScaleFactor ?? 2), height: bounds.height).fill()
     drawSide(pair.right, number: pair.right?.newNumber, x: half + 1, width: half)
   }
 
@@ -221,16 +222,16 @@ final class DiffRowCell: NSView {
 
   private static func background(_ kind: DiffLine.Kind) -> NSColor {
     switch kind {
-    case .addition: NSColor.systemGreen.withAlphaComponent(0.14)
-    case .deletion: NSColor.systemRed.withAlphaComponent(0.14)
+    case .addition: Theme.shared.added.withAlphaComponent(0.14)
+    case .deletion: Theme.shared.removed.withAlphaComponent(0.14)
     case .context, .noNewline: .textBackgroundColor
     }
   }
 
   private static func gutterBackground(_ kind: DiffLine.Kind?) -> NSColor {
     switch kind {
-    case .addition: NSColor.systemGreen.withAlphaComponent(0.22)
-    case .deletion: NSColor.systemRed.withAlphaComponent(0.22)
+    case .addition: Theme.shared.added.withAlphaComponent(0.22)
+    case .deletion: Theme.shared.removed.withAlphaComponent(0.22)
     case .context, .noNewline: NSColor.secondaryLabelColor.withAlphaComponent(tint(0.05))
     case nil: NSColor.secondaryLabelColor.withAlphaComponent(tint(0.08))
     }

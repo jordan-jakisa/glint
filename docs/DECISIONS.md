@@ -116,6 +116,20 @@ which need Xcode's separate Metal Toolchain download to build, and 1.19 adds a
 build plugin Xcode asks you to trust. Revisit when the GPU renderer is worth
 that setup.
 
+## Terminal splits: tmux-lite, nothing more (2026-09-28)
+
+A terminal tab can split into panes: right (⌘D) or down (⌘⇧D), move between
+them with ⌥⌘ and an arrow, close the one you're in with ⌥⌘W, drag a divider
+to resize. Stacking needs height, so Split Down first expands the terminal
+over the diff, and while it's docked each stack shows only the pane you're
+in (the rest keep running). Running a dev server beside a shell while reading the diff is part
+of the look, stage, commit loop, and leaving for another app to get a second
+shell breaks it.
+
+Deliberately left out: saved layouts, auto-tiling, swapping panes, resizing by
+keys, and zooming a pane. Ghostty, iTerm, and tmux (which runs fine inside
+Glint's terminal) do those; `Open in Terminal App` is one key away.
+
 ## Xcode project with a synchronized root group (2026-09-26)
 
 The project uses `PBXFileSystemSynchronizedRootGroup` (Xcode 16 and later), so

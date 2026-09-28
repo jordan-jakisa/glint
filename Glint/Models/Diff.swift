@@ -11,6 +11,12 @@ enum DiffSource: Hashable, Sendable {
   /// uncommitted work included.
   case branch
 
+  /// One working-tree file, whose page header already names it.
+  var isSingleFile: Bool {
+    if case .workingTree(_, let path) = self { return path != nil }
+    return false
+  }
+
   var commitID: String? {
     if case .commit(let id) = self { return id }
     return nil

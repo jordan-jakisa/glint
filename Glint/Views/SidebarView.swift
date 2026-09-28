@@ -1,30 +1,47 @@
 import SwiftUI
 
-/// Changes and History, as tabs, the way Zed's git panel splits them.
+/// Changes and History, as tabs, the way Zed's git panel splits them. The
+/// switch sits in the title bar beside the window buttons, so the list
+/// starts right under it; in Minimal it's in the status line.
 struct SidebarView: View {
   @Bindable var session: RepositorySession
 
   var body: some View {
-    VStack(spacing: 0) {
-      Picker("View", selection: $session.tab) {
-        Text(changesTitle).tag(RepositorySession.Tab.changes)
-        Text("History").tag(RepositorySession.Tab.history)
-      }
-      .pickerStyle(.segmented)
-      .labelsHidden()
-      .padding(.horizontal, 10)
-      .padding(.vertical, 8)
-      Divider()
+    Group {
       switch session.tab {
       case .changes: ChangesView(session: session)
       case .history: CommitListView(session: session)
       }
     }
+    .modifier(TabPickerToolbar(session: session))
     .onAppear { Timing.reportLaunchIfNeeded() }
   }
+}
 
-  private var changesTitle: String {
-    let count = Set(session.status.staged.map(\.path) + session.status.unstaged.map(\.path)).count
-    return count == 0 ? "Changes" : "Changes \(count)"
+private struct TabPickerToolbar: ViewModifier {
+  @Bindable var session: RepositorySession
+
+  func body(content: Content) -> some View {
+    if Theme.shared.isMinimal {
+      content
+    } else if #available(macOS 26, *) {
+      content.toolbar {
+        ToolbarItem { picker }
+          .sharedBackgroundVisibility(Theme.shared.usesLiquidGlass ? .automatic : .hidden)
+      }
+    } else {
+      content.toolbar {
+        ToolbarItem { picker }
+      }
+    }
+  }
+
+  private var picker: some View {
+    Picker("View", selection: $session.tab) {
+      Text("Changes").tag(RepositorySession.Tab.changes)
+      Text("History").tag(RepositorySession.Tab.history)
+    }
+    .pickerStyle(.segmented)
+    .labelsHidden()
   }
 }

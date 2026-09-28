@@ -6,22 +6,24 @@ struct DiffPane: View {
 
   var body: some View {
     if let error = session.diffError {
-      ContentUnavailableView(
+      EmptyState(
         "Couldn't load this diff", systemImage: "exclamationmark.triangle",
         description: Text(error))
     } else if let diff = session.diff {
       VStack(spacing: 0) {
         header(for: diff)
-        Divider()
+        Hairline()
         if diff.files.isEmpty {
-          ContentUnavailableView(
+          EmptyState(
             "No changes", systemImage: "doc",
             description: Text(emptyDescription(for: diff.source)))
         } else {
           DiffTableView(
             rows: session.rows, rowsVersion: session.rowsVersion, rowsChange: session.rowsChange,
             source: diff.source,
-            lineNumberDigits: session.lineNumberDigits, scroller: session.diffScroller,
+            lineNumberDigits: session.lineNumberDigits, textSize: TextSize.shared.body,
+            themeVersion: Theme.shared.version,
+            scroller: session.diffScroller,
             toggleCollapsed: session.toggleCollapsed,
             visibleRowsChanged: session.visibleRowsChanged,
             didPaint: session.diffDidAppear,
@@ -33,13 +35,13 @@ struct DiffPane: View {
     } else if session.tab == .changes, session.status.isClean {
       CaughtUpView(session: session)
     } else if session.tab == .changes {
-      ContentUnavailableView(
+      EmptyState(
         "Pick a file", systemImage: "doc.text",
         description: Text(
           "Press \(AppCommand.nextItem.keys) to start. \(AppCommand.toggleStaged.keys) stages a file, "
             + "\(AppCommand.stagePartial.keys) stages a hunk."))
     } else if session.selectedCommitID == nil {
-      ContentUnavailableView(
+      EmptyState(
         "Pick a commit", systemImage: "list.bullet",
         description: Text("Choose one on the left, or press \(AppCommand.nextItem.keys)."))
     } else {
@@ -90,7 +92,7 @@ private struct CaughtUpView: View {
   var body: some View {
     let sync = session.sync
     if sync.behind > 0 {
-      ContentUnavailableView {
+      EmptyState {
         Label(commits(sync.behind) + " to pull", systemImage: "arrow.down.circle")
       } description: {
         Text("Everything here is committed. \(sync.upstream ?? "The remote") has new work.")
@@ -98,7 +100,7 @@ private struct CaughtUpView: View {
         Button("Pull", action: session.pull)
       }
     } else if sync.ahead > 0 {
-      ContentUnavailableView {
+      EmptyState {
         Label(commits(sync.ahead) + " to push", systemImage: "arrow.up.circle")
       } description: {
         Text("Everything's committed. Push when you're ready.")
@@ -106,7 +108,7 @@ private struct CaughtUpView: View {
         Button("Push", action: session.push)
       }
     } else if sync.upstream == nil, sync.hasRemotes, session.info?.branch != nil {
-      ContentUnavailableView {
+      EmptyState {
         Label("Not published yet", systemImage: "arrow.up.circle")
       } description: {
         Text("Everything's committed. Publish the branch to share it.")
@@ -114,7 +116,7 @@ private struct CaughtUpView: View {
         Button("Publish Branch", action: session.push)
       }
     } else {
-      ContentUnavailableView(
+      EmptyState(
         "All caught up", systemImage: "checkmark.circle",
         description: Text(sync.upstream == nil ? "Everything's committed." : "Everything's committed and pushed."))
     }
@@ -136,7 +138,7 @@ private struct WorkingTreeHeader: View {
     HStack(alignment: .center, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
         Text(path ?? (staged ? "All staged changes" : "All unstaged changes"))
-          .font(.headline)
+          .font(.app(.headline))
           .lineLimit(1)
           .truncationMode(.head)
           .textSelection(.enabled)
@@ -144,7 +146,7 @@ private struct WorkingTreeHeader: View {
           Text(staged ? "Staged" : "Unstaged")
           ChangeStats(additions: diff.additions, deletions: diff.deletions)
         }
-        .font(.callout)
+        .font(.app(.callout))
         .foregroundStyle(.secondary)
       }
       Spacer(minLength: 12)
@@ -181,7 +183,7 @@ private struct CommitHeader: View {
     VStack(alignment: .leading, spacing: 4) {
       HStack(alignment: .firstTextBaseline) {
         Text(commit?.summary ?? "")
-          .font(.headline)
+          .font(.app(.headline))
           .lineLimit(2, reservesSpace: true)
           .textSelection(.enabled)
         Spacer(minLength: 12)
@@ -189,7 +191,6 @@ private struct CommitHeader: View {
       }
       HStack(spacing: 12) {
         Text(String((diff.source.commitID ?? "").prefix(10)))
-          .monospaced()
           .textSelection(.enabled)
         if let commit {
           Text(commit.authorName)
@@ -199,7 +200,7 @@ private struct CommitHeader: View {
         Text(fileCount)
         ChangeStats(additions: diff.additions, deletions: diff.deletions)
       }
-      .font(.callout)
+      .font(.app(.callout))
       .foregroundStyle(.secondary)
     }
     .padding(.horizontal, 16)
@@ -221,19 +222,18 @@ private struct BranchHeader: View {
     HStack(alignment: .center, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
-          .font(.headline)
+          .font(.app(.headline))
           .lineLimit(1)
         HStack(spacing: 12) {
           if let comparison {
             Text(comparison.ahead == 1 ? "1 commit" : "\(comparison.ahead) commits")
             Text("since \(comparison.mergeBase)")
-              .monospaced()
           }
           Text("plus uncommitted work")
           Text(diff.files.count == 1 ? "1 file" : "\(diff.files.count) files")
           ChangeStats(additions: diff.additions, deletions: diff.deletions)
         }
-        .font(.callout)
+        .font(.app(.callout))
         .foregroundStyle(.secondary)
       }
       Spacer(minLength: 12)

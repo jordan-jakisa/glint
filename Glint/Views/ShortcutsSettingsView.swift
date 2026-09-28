@@ -19,7 +19,7 @@ struct ShortcutsSettingsView: View {
       } header: {
         Text("Single keys")
       } footer: {
-        Text("These work while you aren't typing, and never in the commit message or terminal. \u{2318}1 to \u{2318}9 always switch repository.")
+        Text("Only while you're not typing. \u{2318}1 to \u{2318}9 switch repository.")
           .foregroundStyle(.secondary)
       }
       Section {
@@ -48,11 +48,11 @@ struct ShortcutsSettingsView: View {
         recording == command ? stopRecording() : startRecording(command)
       } label: {
         Text(label(for: command))
-          .font(.body.monospaced())
+          .font(.app(.body))
           .frame(minWidth: 90)
       }
       .buttonStyle(.bordered)
-      .tint(recording == command ? .accentColor : nil)
+      .tint(recording == command ? Color.themeAccent : nil)
       Button {
         store.set(nil, for: command)
       } label: {

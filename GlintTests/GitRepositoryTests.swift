@@ -490,23 +490,6 @@ import Testing
   }
 }
 
-@Suite struct CommitSizeTests {
-  @Test func measuresStagedOrTrackedChanges() async throws {
-    let fixture = try FixtureRepository()
-    try fixture.commit("Base", files: ["a.txt": "1\n2\n", "b.txt": "b\n"])
-    try fixture.write("a.txt", "1\ntwo\nthree\n")
-    try fixture.stage("a.txt")
-    try fixture.write("b.txt", "b\nmore\n")
-    try fixture.write("new.txt", "untracked\n")
-    let repository = try await GitRepository.open(at: fixture.url)
-
-    #expect(try await repository.commitSize(trackedOnly: false) == ChangeSize(files: 1, additions: 2, deletions: 1))
-    // Tracked only: b.txt's unstaged edit; a.txt matches the index; new.txt
-    // isn't tracked.
-    #expect(try await repository.commitSize(trackedOnly: true) == ChangeSize(files: 1, additions: 1, deletions: 0))
-  }
-}
-
 @Suite struct PartialStatusTests {
   @Test func checksOnlyTheGivenPathsAndMergesIn() async throws {
     let fixture = try FixtureRepository()

@@ -36,8 +36,13 @@ final class RepositorySession {
 
   /// The terminal panel under the diff. Remembered between launches.
   var isTerminalShown = UserDefaults.standard.bool(forKey: "terminalShown") {
-    didSet { UserDefaults.standard.set(isTerminalShown, forKey: "terminalShown") }
+    didSet {
+      UserDefaults.standard.set(isTerminalShown, forKey: "terminalShown")
+      if !isTerminalShown { isTerminalMaximized = false }
+    }
   }
+  /// The terminal fills the diff's space. Hiding the terminal restores it.
+  var isTerminalMaximized = false
   /// Lists the other repositories' changes under the active one's.
   var showsAllRepositories = UserDefaults.standard.bool(forKey: "showsAllRepositories") {
     didSet { UserDefaults.standard.set(showsAllRepositories, forKey: "showsAllRepositories") }
@@ -58,8 +63,6 @@ final class RepositorySession {
     didSet { if isAmending, !oldValue { prefillAmendMessage() } }
   }
   internal(set) var isCommitting = false
-  /// Size of what Commit would take right now, shown in the commit box.
-  internal(set) var commitSize: ChangeSize?
   /// The last message AI wrote, to measure how much you edit it before
   /// committing. Logged locally, never sent.
   @ObservationIgnored var generatedMessage: String?
@@ -458,7 +461,6 @@ final class RepositorySession {
     commitMessage = messageDrafts[opened.repository.url] ?? Self.savedDraft(for: opened.repository.url)
     info = opened.info
     status = opened.status
-    refreshCommitSize()
     commits = opened.commits
     sync = opened.sync
     branchBaseName = opened.branchBase

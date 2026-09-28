@@ -5,6 +5,26 @@ import SwiftUI
 /// Glint's terminal: SwiftTerm's local-process view, following light and dark
 /// mode. `KeyMonitor` recognises it and leaves typing here alone.
 final class GlintTerminalView: LocalProcessTerminalView {
+  /// Called when you click into this pane, so the tab knows which pane
+  /// you're in. SwiftTerm's responder methods can't be overridden, so a
+  /// click recognizer that doesn't hold back the click stands in.
+  var onFocus: (() -> Void)?
+
+  override init(frame: NSRect) {
+    super.init(frame: frame)
+    let click = NSClickGestureRecognizer(target: self, action: #selector(clicked))
+    click.delaysPrimaryMouseButtonEvents = false
+    addGestureRecognizer(click)
+  }
+
+  required init?(coder: NSCoder) {
+    super.init(coder: coder)
+  }
+
+  @objc private func clicked() {
+    onFocus?()
+  }
+
   override func viewDidChangeEffectiveAppearance() {
     super.viewDidChangeEffectiveAppearance()
     applyColors()
@@ -14,35 +34,126 @@ final class GlintTerminalView: LocalProcessTerminalView {
     effectiveAppearance.performAsCurrentDrawingAppearance {
       nativeBackgroundColor = .textBackgroundColor
       nativeForegroundColor = .textColor
-      caretColor = .controlAccentColor
+      caretColor = Theme.shared.accentColor
     }
   }
 }
 
-/// One terminal tab: a shell and the title it sets (usually the running
-/// command or the folder).
-@MainActor
-final class TerminalTab: Identifiable {
-  let id = UUID()
-  let view: GlintTerminalView
-  var title: String
+enum PaneDirection: Sendable {
+  case left, right, up, down
+}
 
-  init(view: GlintTerminalView, title: String) {
-    self.view = view
-    self.title = title
+/// `.horizontal` puts panes side by side, `.vertical` stacks them.
+enum SplitAxis: Sendable {
+  case horizontal, vertical
+}
+
+/// How a tab's shells are arranged: one pane, or two arrangements side by
+/// side (`.horizontal`) or stacked (`.vertical`), nested like tmux splits.
+@MainActor
+indirect enum PaneLayout {
+  case pane(GlintTerminalView)
+  case split(id: UUID, axis: SplitAxis, first: PaneLayout, second: PaneLayout)
+
+  var panes: [GlintTerminalView] {
+    switch self {
+    case .pane(let view): [view]
+    case .split(_, _, let first, let second): first.panes + second.panes
+    }
+  }
+
+  func replacing(_ target: GlintTerminalView, with replacement: PaneLayout) -> PaneLayout {
+    switch self {
+    case .pane(let view): view === target ? replacement : self
+    case .split(let id, let axis, let first, let second):
+      .split(
+        id: id, axis: axis, first: first.replacing(target, with: replacement),
+        second: second.replacing(target, with: replacement))
+    }
+  }
+
+  /// The layout without `target`, its sibling taking the space. Nil when
+  /// `target` was the only pane.
+  func removing(_ target: GlintTerminalView) -> PaneLayout? {
+    switch self {
+    case .pane(let view): return view === target ? nil : self
+    case .split(let id, let axis, let first, let second):
+      guard let newFirst = first.removing(target) else { return second }
+      guard let newSecond = second.removing(target) else { return first }
+      return .split(id: id, axis: axis, first: newFirst, second: newSecond)
+    }
+  }
+
+  /// Where each pane sits, for moving focus by direction.
+  func frames(in rect: CGRect, fractions: [UUID: CGFloat]) -> [(GlintTerminalView, CGRect)] {
+    switch self {
+    case .pane(let view): return [(view, rect)]
+    case .split(let id, let axis, let first, let second):
+      let fraction = fractions[id] ?? 0.5
+      let (a, b) =
+        axis == .horizontal
+        ? rect.divided(atDistance: rect.width * fraction, from: .minXEdge)
+        : rect.divided(atDistance: rect.height * fraction, from: .minYEdge)
+      return first.frames(in: a, fractions: fractions) + second.frames(in: b, fractions: fractions)
+    }
   }
 }
 
+/// One terminal tab: one or more shells in split panes, and the pane you're
+/// in. The tab shows that pane's title (usually the running command or the
+/// folder).
+@MainActor
+@Observable
+final class TerminalTab: Identifiable {
+  let id = UUID()
+  var layout: PaneLayout
+  var focused: GlintTerminalView
+  /// Each split's share for its first side, by split id. 0.5 when unset.
+  var fractions: [UUID: CGFloat] = [:]
+  var titles: [ObjectIdentifier: String] = [:]
+  private let folderName: String
+
+  init(view: GlintTerminalView, folderName: String) {
+    layout = .pane(view)
+    focused = view
+    self.folderName = folderName
+  }
+
+  var title: String { titles[ObjectIdentifier(focused)] ?? folderName }
+  var panes: [GlintTerminalView] { layout.panes }
+}
+
 /// Each repository's terminal tabs, kept running while the panel is hidden,
-/// so showing it again puts you back where you were. A tab whose shell exits
-/// closes.
+/// so showing it again puts you back where you were. A pane whose shell exits
+/// closes, and a tab closes with its last pane.
 @MainActor
 @Observable
 final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
   private(set) var tabs: [URL: [TerminalTab]] = [:]
   private(set) var selected: [URL: UUID] = [:]
-  /// Bumped when a tab's title changes, so the strip redraws.
-  private(set) var titlesVersion = 0
+  @ObservationIgnored private var textSizeObserver: NSObjectProtocol?
+  @ObservationIgnored private var themeObserver: NSObjectProtocol?
+
+  override init() {
+    super.init()
+    // Every shell follows your text size, including ones in hidden tabs
+    // and other repositories.
+    textSizeObserver = NotificationCenter.default.addObserver(
+      forName: TextSize.didChange, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        let font = AppFont.ns(size: AppFont.body)
+        for view in self?.tabs.values.flatMap({ $0 }).flatMap(\.panes) ?? [] { view.font = font }
+      }
+    }
+    themeObserver = NotificationCenter.default.addObserver(
+      forName: Theme.didChange, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        for view in self?.tabs.values.flatMap({ $0 }).flatMap(\.panes) ?? [] { view.applyColors() }
+      }
+    }
+  }
 
   func tabs(for folder: URL) -> [TerminalTab] { tabs[folder.standardizedFileURL] ?? [] }
 
@@ -57,27 +168,48 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
   @discardableResult
   func newTab(for folder: URL) -> TerminalTab {
     let key = folder.standardizedFileURL
-    let start = ContinuousClock.now
-    let view = GlintTerminalView(frame: NSRect(x: 0, y: 0, width: 600, height: 240))
-    view.font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-    view.applyColors()
-    view.processDelegate = self
-    let tab = TerminalTab(view: view, title: key.lastPathComponent)
+    let tab = TerminalTab(view: makeShell(in: key), folderName: key.lastPathComponent)
     tabs[key, default: []].append(tab)
     selected[key] = tab.id
-    Task {
-      let environment = await Self.environment()
-      let shell = environment["SHELL"] ?? "/bin/zsh"
-      // A leading dash in argv[0] makes it a login shell, like a new
-      // Terminal window.
-      view.startProcess(
-        executable: shell, args: [],
-        environment: environment.map { "\($0.key)=\($0.value)" },
-        execName: "-" + (shell as NSString).lastPathComponent,
-        currentDirectory: key.path)
-      Timing.report("terminal started", since: start, budget: 100)
-    }
     return tab
+  }
+
+  /// Splits the pane you're in and moves you to the new shell: `.horizontal`
+  /// puts it on the right, `.vertical` below.
+  func split(_ axis: SplitAxis, in folder: URL) {
+    guard let tab = current(for: folder) else { return }
+    let shell = makeShell(in: folder.standardizedFileURL)
+    tab.layout = tab.layout.replacing(
+      tab.focused, with: .split(id: UUID(), axis: axis, first: .pane(tab.focused), second: .pane(shell)))
+    tab.focused = shell
+  }
+
+  /// Closes the pane you're in, or its tab when it's the last pane. Returns
+  /// false when that was the last tab.
+  @discardableResult
+  func closePane(in folder: URL) -> Bool {
+    guard let tab = current(for: folder) else { return true }
+    return closePane(tab.focused, of: tab, in: folder)
+  }
+
+  /// Moves you to the nearest pane in `direction`, like tmux's arrow keys.
+  func moveFocus(_ direction: PaneDirection, in folder: URL) {
+    guard let tab = current(for: folder) else { return }
+    let frames = tab.layout.frames(in: CGRect(x: 0, y: 0, width: 1, height: 1), fractions: tab.fractions)
+    guard let from = frames.first(where: { $0.0 === tab.focused })?.1 else { return }
+    let epsilon = 0.001
+    let candidates = frames.filter { _, frame in
+      switch direction {
+      case .left: frame.maxX <= from.minX + epsilon && frame.minY < from.maxY && frame.maxY > from.minY
+      case .right: frame.minX >= from.maxX - epsilon && frame.minY < from.maxY && frame.maxY > from.minY
+      case .up: frame.maxY <= from.minY + epsilon && frame.minX < from.maxX && frame.maxX > from.minX
+      case .down: frame.minY >= from.maxY - epsilon && frame.minX < from.maxX && frame.maxX > from.minX
+      }
+    }
+    let distance = { (frame: CGRect) in hypot(frame.midX - from.midX, frame.midY - from.midY) }
+    guard let target = candidates.min(by: { distance($0.1) < distance($1.1) })?.0 else { return }
+    tab.focused = target
+    target.window?.makeFirstResponder(target)
   }
 
   func select(_ tab: TerminalTab, in folder: URL) {
@@ -91,17 +223,58 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
     select(list[(index + step + list.count) % list.count], in: folder)
   }
 
-  /// Closes a tab and ends its shell. Returns false when it was the last one.
+  /// Closes a tab and ends its shells. Returns false when it was the last one.
   @discardableResult
   func close(_ tab: TerminalTab, in folder: URL) -> Bool {
     let key = folder.standardizedFileURL
     guard var list = tabs[key], let index = list.firstIndex(where: { $0.id == tab.id }) else { return true }
     list.remove(at: index)
-    tab.view.terminate()
-    tab.view.removeFromSuperview()
+    for view in tab.panes {
+      view.terminate()
+      view.removeFromSuperview()
+    }
     tabs[key] = list
     if selected[key] == tab.id { selected[key] = list.isEmpty ? nil : list[max(0, index - 1)].id }
     return !list.isEmpty
+  }
+
+  private func closePane(_ view: GlintTerminalView, of tab: TerminalTab, in folder: URL) -> Bool {
+    guard let rest = tab.layout.removing(view) else { return close(tab, in: folder) }
+    let wasFocused = tab.focused === view
+    tab.layout = rest
+    tab.titles[ObjectIdentifier(view)] = nil
+    view.terminate()
+    view.removeFromSuperview()
+    if wasFocused, let next = rest.panes.first {
+      tab.focused = next
+      next.window?.makeFirstResponder(next)
+    }
+    return true
+  }
+
+  private func makeShell(in folder: URL) -> GlintTerminalView {
+    let start = ContinuousClock.now
+    let view = GlintTerminalView(frame: NSRect(x: 0, y: 0, width: 600, height: 240))
+    view.font = AppFont.ns(size: AppFont.body)
+    view.applyColors()
+    view.processDelegate = self
+    view.onFocus = { [weak self, weak view] in
+      guard let self, let view, let (_, tab) = self.find(view) else { return }
+      tab.focused = view
+    }
+    Task {
+      let environment = await Self.environment()
+      let shell = environment["SHELL"] ?? "/bin/zsh"
+      // A leading dash in argv[0] makes it a login shell, like a new
+      // Terminal window.
+      view.startProcess(
+        executable: shell, args: [],
+        environment: environment.map { "\($0.key)=\($0.value)" },
+        execName: "-" + (shell as NSString).lastPathComponent,
+        currentDirectory: folder.path)
+      Timing.report("terminal started", since: start, budget: 100)
+    }
+    return view
   }
 
   /// Your environment with your login shell's PATH, minus the settings Glint
@@ -118,9 +291,18 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
 
   private func find(_ source: AnyObject) -> (URL, TerminalTab)? {
     for (folder, list) in tabs {
-      if let tab = list.first(where: { $0.view === source }) { return (folder, tab) }
+      if let tab = list.first(where: { tab in tab.panes.contains { $0 === source } }) { return (folder, tab) }
     }
     return nil
+  }
+
+  /// Shells title themselves `user@host:path`; the folder is the part worth
+  /// a tab's width. Anything else, like a running command, stays as is.
+  nonisolated static func shortTitle(_ title: String) -> String {
+    guard let colon = title.firstIndex(of: ":"), title[..<colon].contains("@") else { return title }
+    let path = title[title.index(after: colon)...].trimmingCharacters(in: .whitespaces)
+    guard !path.isEmpty, path != "~" else { return path.isEmpty ? title : "~" }
+    return (path as NSString).lastPathComponent
   }
 
   // MARK: LocalProcessTerminalViewDelegate
@@ -129,33 +311,36 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
   nonisolated func hostCurrentDirectoryUpdate(source: TerminalView, directory: String?) {}
 
   nonisolated func setTerminalTitle(source: LocalProcessTerminalView, title: String) {
-    let id = ObjectIdentifier(source)
+    let short = Self.shortTitle(title)
     Task { @MainActor in
-      guard let (_, tab) = self.find(source), ObjectIdentifier(tab.view) == id, !title.isEmpty else { return }
-      tab.title = title
-      self.titlesVersion += 1
+      guard !short.isEmpty, let (_, tab) = self.find(source) else { return }
+      tab.titles[ObjectIdentifier(source)] = short
     }
   }
 
   nonisolated func processTerminated(source: TerminalView, exitCode: Int32?) {
     Task { @MainActor in
-      guard let (folder, tab) = self.find(source) else { return }
-      self.close(tab, in: folder)
+      guard let (folder, tab) = self.find(source), let view = source as? GlintTerminalView else { return }
+      self.closePane(view, of: tab, in: folder)
     }
   }
 }
 
-/// The panel under the diff: a strip of tabs, and the selected tab's shell.
+/// The panel under the diff: a strip of tabs, and the selected tab's panes.
 struct TerminalPanel: View {
   let folder: URL
   let store: TerminalStore
+  let isMaximized: Bool
+  let toggleMaximized: () -> Void
   let hide: () -> Void
 
   var body: some View {
     if let current = store.current(for: folder) {
       VStack(spacing: 0) {
-        TerminalTabStrip(folder: folder, store: store, current: current, hide: hide)
-        TerminalHost(terminal: current.view)
+        TerminalTabStrip(
+          folder: folder, store: store, current: current, isMaximized: isMaximized,
+          toggleMaximized: toggleMaximized, hide: hide)
+        PaneLayoutView(layout: current.layout, tab: current, isDocked: !isMaximized)
       }
     } else {
       // First time for this repository: start its first shell.
@@ -164,14 +349,101 @@ struct TerminalPanel: View {
   }
 }
 
+/// A tab's panes, drawn recursively. Panes you're not in are dimmed, like
+/// Ghostty's unfocused splits, so you can tell where your typing goes.
+/// Docked under the diff there's no height to stack panes, so each stack
+/// shows only the side you're in; the others keep running and come back
+/// when the terminal expands.
+private struct PaneLayoutView: View {
+  let layout: PaneLayout
+  let tab: TerminalTab
+  let isDocked: Bool
+
+  var body: some View {
+    switch layout {
+    case .pane(let view):
+      let isFocused = tab.focused === view
+      TerminalHost(terminal: view, isFocused: isFocused)
+        .id(ObjectIdentifier(view))
+        .overlay {
+          if !isFocused {
+            Color(nsColor: .textBackgroundColor).opacity(0.4).allowsHitTesting(false)
+          }
+        }
+    case .split(_, .vertical, let first, let second) where isDocked:
+      let focusedIsFirst = first.panes.contains { $0 === tab.focused }
+      PaneLayoutView(layout: focusedIsFirst ? first : second, tab: tab, isDocked: true)
+    case .split(let id, let axis, let first, let second):
+      PaneSplit(
+        axis: axis,
+        fraction: Binding(get: { tab.fractions[id] ?? 0.5 }, set: { tab.fractions[id] = $0 })
+      ) {
+        PaneLayoutView(layout: first, tab: tab, isDocked: isDocked)
+      } second: {
+        PaneLayoutView(layout: second, tab: tab, isDocked: isDocked)
+      }
+    }
+  }
+}
+
+/// Two panes and a divider you drag to resize them.
+private struct PaneSplit<First: View, Second: View>: View {
+  let axis: SplitAxis
+  @Binding var fraction: CGFloat
+  @ViewBuilder let first: First
+  @ViewBuilder let second: Second
+  @State private var dragStart: CGFloat?
+
+  var body: some View {
+    GeometryReader { geometry in
+      let total = axis == .horizontal ? geometry.size.width : geometry.size.height
+      let firstSize = max(0, (total - 1) * fraction)
+      if axis == .horizontal {
+        HStack(spacing: 0) {
+          first.frame(width: firstSize)
+          divider(total: total)
+          second
+        }
+      } else {
+        VStack(spacing: 0) {
+          first.frame(height: firstSize)
+          divider(total: total)
+          second
+        }
+      }
+    }
+  }
+
+  private func divider(total: CGFloat) -> some View {
+    Hairline(axis: axis == .horizontal ? .vertical : .horizontal)
+      .padding(axis == .horizontal ? .horizontal : .vertical, 3)
+      .contentShape(Rectangle())
+      .padding(axis == .horizontal ? .horizontal : .vertical, -3)
+      .onHover { inside in
+        let cursor: NSCursor = axis == .horizontal ? .resizeLeftRight : .resizeUpDown
+        if inside { cursor.push() } else { NSCursor.pop() }
+      }
+      .gesture(
+        DragGesture(minimumDistance: 1, coordinateSpace: .global)
+          .onChanged { drag in
+            let start = dragStart ?? fraction
+            dragStart = start
+            let moved = axis == .horizontal ? drag.translation.width : drag.translation.height
+            fraction = min(0.85, max(0.15, start + moved / max(total, 1)))
+          }
+          .onEnded { _ in dragStart = nil })
+  }
+}
+
 private struct TerminalTabStrip: View {
   let folder: URL
   let store: TerminalStore
   let current: TerminalTab
+  let isMaximized: Bool
+  let toggleMaximized: () -> Void
   let hide: () -> Void
 
   var body: some View {
-    let _ = store.titlesVersion
     HStack(spacing: 2) {
       ScrollView(.horizontal, showsIndicators: false) {
         HStack(spacing: 2) {
@@ -190,9 +462,19 @@ private struct TerminalTabStrip: View {
       }
       .buttonStyle(.borderless)
       .help(AppCommand.newTerminalTab.hint("New tab"))
+      Button(action: toggleMaximized) {
+        Image(
+          systemName: isMaximized
+            ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right"
+        ).hitTarget()
+      }
+      .buttonStyle(.borderless)
+      .accessibilityLabel(isMaximized ? "Restore Terminal" : "Maximize Terminal")
+      .help(AppCommand.maximizeTerminal.hint(isMaximized ? "Put the diff back" : "Give the terminal the diff's space"))
     }
     .padding(.horizontal, 6)
-    .padding(.vertical, 4)
+    // Matches the branch bar beside it, so the dividers line up.
+    .frame(height: 30)
     .background(.bar)
   }
 }
@@ -218,16 +500,16 @@ private struct TerminalTabButton: View {
       .buttonStyle(.plain)
       Button(action: close) {
         Image(systemName: "xmark")
-          .font(.caption2.weight(.semibold))
+          .font(.app(.caption2).weight(.semibold))
           .frame(width: 16, height: 16)
           .contentShape(Rectangle())
       }
       .buttonStyle(.plain)
       .opacity(isHovered || isSelected ? 1 : 0)
-      .help(AppCommand.closeTerminalTab.hint("Close tab"))
+      .help("Close tab")
       .padding(.trailing, 4)
     }
-    .font(.callout)
+    .font(.app(.callout))
     .foregroundStyle(isSelected ? .primary : .secondary)
     .background(
       RoundedRectangle(cornerRadius: 5).fill(isSelected ? Color.primary.opacity(0.08) : .clear))
@@ -235,35 +517,55 @@ private struct TerminalTabButton: View {
   }
 }
 
-/// Hosts one terminal view. Switching tabs re-parents the chosen shell's view
-/// into this container, so shells keep running while hidden.
+/// Hosts one terminal view. Switching tabs or rearranging panes re-parents
+/// the shell's view into a new container, so shells keep running while
+/// hidden.
 private struct TerminalHost: NSViewRepresentable {
   let terminal: GlintTerminalView
+  let isFocused: Bool
 
-  func makeNSView(context: Context) -> NSView {
-    let container = NSView()
-    show(in: container, focus: true)
+  func makeNSView(context: Context) -> PaneContainer {
+    let container = PaneContainer()
+    container.terminal = terminal
+    // Focus when the panel opens or a split makes this pane.
+    container.focusOnAttach = isFocused
     return container
   }
 
-  func updateNSView(_ container: NSView, context: Context) {
-    show(in: container, focus: false)
+  func updateNSView(_ container: PaneContainer, context: Context) {
+    guard container.terminal !== terminal else { return }
+    container.terminal = terminal
+    container.focusOnAttach = isFocused
+    container.attach()
   }
 
-  private func show(in container: NSView, focus: Bool) {
-    guard terminal.superview !== container else { return }
-    let hadFocus = container.window?.firstResponder is GlintTerminalView
-    container.subviews.forEach { $0.removeFromSuperview() }
-    terminal.translatesAutoresizingMaskIntoConstraints = false
-    container.addSubview(terminal)
-    NSLayoutConstraint.activate([
-      terminal.leadingAnchor.constraint(equalTo: container.leadingAnchor, constant: 6),
-      terminal.trailingAnchor.constraint(equalTo: container.trailingAnchor),
-      terminal.topAnchor.constraint(equalTo: container.topAnchor, constant: 4),
-      terminal.bottomAnchor.constraint(equalTo: container.bottomAnchor),
-    ])
-    // Focus when the panel opens, or when switching tabs from inside the
-    // terminal; never on a repository switch, which would swallow j and k.
-    if focus || hadFocus { DispatchQueue.main.async { terminal.window?.makeFirstResponder(terminal) } }
+  /// Takes its terminal when it joins the window, not when SwiftUI updates
+  /// it: while panes rearrange, the outgoing container is still updated and
+  /// would otherwise pull the shell back out of the incoming one.
+  final class PaneContainer: NSView {
+    var terminal: GlintTerminalView?
+    var focusOnAttach = false
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      attach()
+    }
+
+    func attach() {
+      guard window != nil, let terminal, terminal.superview !== self else { return }
+      subviews.forEach { $0.removeFromSuperview() }
+      terminal.translatesAutoresizingMaskIntoConstraints = false
+      addSubview(terminal)
+      NSLayoutConstraint.activate([
+        terminal.leadingAnchor.constraint(equalTo: leadingAnchor, constant: 6),
+        terminal.trailingAnchor.constraint(equalTo: trailingAnchor),
+        terminal.topAnchor.constraint(equalTo: topAnchor, constant: 4),
+        terminal.bottomAnchor.constraint(equalTo: bottomAnchor),
+      ])
+      if focusOnAttach {
+        focusOnAttach = false
+        DispatchQueue.main.async { terminal.window?.makeFirstResponder(terminal) }
+      }
+    }
   }
 }

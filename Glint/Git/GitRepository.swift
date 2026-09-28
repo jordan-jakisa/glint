@@ -536,33 +536,6 @@ actor GitRepository {
     return (try makeDiff(diff, source: .branch, lineBudget: lineBudget), comparison)
   }
 
-  /// The size of what a commit would contain: the staged changes, or with
-  /// `trackedOnly`, every change to tracked files (what Commit Tracked takes).
-  /// Uses libgit2's diff stats, which skip building a patch per file.
-  func commitSize(trackedOnly: Bool) throws -> ChangeSize {
-    try reloadIndex()
-    var options = Self.diffOptions()
-    var diff: OpaquePointer?
-    if trackedOnly {
-      try GitError.check(git_diff_index_to_workdir(&diff, handle, nil, &options), "Couldn't measure changes.")
-    } else {
-      var headTree: OpaquePointer?
-      defer { if let headTree { git_tree_free(headTree) } }
-      if git_repository_head_unborn(handle) != 1 {
-        try GitError.check(git_revparse_single(&headTree, handle, "HEAD^{tree}"), "Couldn't read HEAD.")
-      }
-      try GitError.check(
-        git_diff_tree_to_index(&diff, handle, headTree, nil, &options), "Couldn't measure staged changes.")
-    }
-    defer { git_diff_free(diff) }
-    var stats: OpaquePointer?
-    try GitError.check(git_diff_get_stats(&stats, diff), "Couldn't measure changes.")
-    defer { git_diff_stats_free(stats) }
-    return ChangeSize(
-      files: git_diff_stats_files_changed(stats), additions: git_diff_stats_insertions(stats),
-      deletions: git_diff_stats_deletions(stats))
-  }
-
   private static func diffOptions() -> git_diff_options {
     var options = git_diff_options()
     git_diff_options_init(&options, UInt32(GIT_DIFF_OPTIONS_VERSION))

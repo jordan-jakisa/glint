@@ -40,7 +40,7 @@ private struct StepDots: View {
     HStack(spacing: 8) {
       ForEach([OnboardingView.Step.welcome, .ai, .project], id: \.self) { each in
         Circle()
-          .fill(each == step ? Color.accentColor : Color.secondary.opacity(0.3))
+          .fill(each == step ? Color.themeAccent : Color.secondary.opacity(0.3))
           .frame(width: 6, height: 6)
       }
     }
@@ -68,9 +68,9 @@ private struct WelcomeStep: View {
         .accessibilityHidden(true)
       VStack(spacing: 8) {
         Text("Glint")
-          .font(.largeTitle.weight(.semibold))
+          .font(.app(.largeTitle))
         Text("Every change, at a glance.")
-          .font(.title3)
+          .font(.app(.title3))
           .foregroundStyle(.secondary)
       }
       VStack(alignment: .leading, spacing: 12) {
@@ -94,7 +94,7 @@ private struct Point: View {
       Text(text)
     } icon: {
       Image(systemName: symbol)
-        .foregroundStyle(Color.accentColor)
+        .foregroundStyle(Color.themeAccent)
         .frame(width: 22)
     }
   }
@@ -116,7 +116,7 @@ private struct AIStep: View {
     VStack(alignment: .leading, spacing: 20) {
       VStack(alignment: .leading, spacing: 8) {
         Text("Commit messages, written for you")
-          .font(.title2.weight(.semibold))
+          .font(.app(.title2))
         Text("Glint writes commit messages with free models. Pick a provider and paste your API key. It's free to get one.")
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
@@ -139,13 +139,13 @@ private struct AIStep: View {
             .onSubmit(check)
             .onChange(of: key) { if state != .checking { state = .idle } }
           Link("Get a Free Key", destination: settings.provider.keyURL)
-            .font(.callout)
+            .font(.app(.callout))
         }
         status
-          .font(.callout)
+          .font(.app(.callout))
           .frame(minHeight: 18, alignment: .leading)
         Text("Your key is kept in your Mac's Keychain. Your diff goes to \(settings.provider.name) only when you press the sparkle button.")
-          .font(.caption)
+          .font(.app(.caption))
           .foregroundStyle(.secondary)
           .fixedSize(horizontal: false, vertical: true)
       }
@@ -234,11 +234,11 @@ private struct ProviderRow: View {
     Button(action: select) {
       HStack(spacing: 12) {
         Image(systemName: isSelected ? "largecircle.fill.circle" : "circle")
-          .foregroundStyle(isSelected ? Color.accentColor : .secondary)
+          .foregroundStyle(isSelected ? Color.themeAccent : .secondary)
         VStack(alignment: .leading, spacing: 2) {
-          Text(provider.name).font(.body.weight(.medium))
+          Text(provider.name).font(.app(.headline))
           Text(provider.privacyNote)
-            .font(.caption)
+            .font(.app(.caption))
             .foregroundStyle(.secondary)
             .lineLimit(2)
         }
@@ -248,7 +248,7 @@ private struct ProviderRow: View {
       .contentShape(Rectangle())
       .background(
         RoundedRectangle(cornerRadius: 10)
-          .strokeBorder(isSelected ? Color.accentColor : Color.secondary.opacity(0.25), lineWidth: isSelected ? 2 : 1))
+          .strokeBorder(isSelected ? Color.themeAccent : Color.secondary.opacity(0.25), lineWidth: isSelected ? 2 : 1))
     }
     .buttonStyle(.plain)
     .accessibilityAddTraits(isSelected ? .isSelected : [])
@@ -262,11 +262,11 @@ private struct ProjectStep: View {
     VStack(spacing: 20) {
       Image(systemName: "folder.badge.plus")
         .font(.system(size: 48))
-        .foregroundStyle(Color.accentColor)
+        .foregroundStyle(Color.themeAccent)
         .accessibilityHidden(true)
       VStack(spacing: 8) {
         Text("Open your first project")
-          .font(.title2.weight(.semibold))
+          .font(.app(.title2))
         Text("Pick a folder with a git repository, or a folder that holds several. Glint remembers it and reopens it next time.")
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
@@ -276,7 +276,7 @@ private struct ProjectStep: View {
         .keyboardShortcut(.defaultAction)
         .controlSize(.large)
       Text("Tip: \(AppCommand.switchProject.keys) switches between recent projects.")
-        .font(.callout)
+        .font(.app(.callout))
         .foregroundStyle(.secondary)
     }
   }

@@ -6,7 +6,7 @@ enum AboutPanel {
   @MainActor static func show() {
     let body = NSMutableAttributedString(
       string: "Every change, at a glance.\n\n",
-      attributes: [.font: NSFont.systemFont(ofSize: 12, weight: .medium), .foregroundColor: NSColor.labelColor])
+      attributes: [.font: AppFont.ns(size: AppFont.body, weight: .semibold), .foregroundColor: NSColor.labelColor])
     let credits = """
       Built on libgit2 (GPLv2 with the linking exception) and SwiftTerm (MIT). Their licences are under Help > Acknowledgements. Glint is MIT licensed.
       A glint is a quick flash of light: the one look you need to see what changed.
@@ -14,7 +14,7 @@ enum AboutPanel {
     body.append(
       NSAttributedString(
         string: credits,
-        attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]))
+        attributes: [.font: AppFont.ns(size: AppFont.small), .foregroundColor: NSColor.secondaryLabelColor]))
     NSApp.orderFrontStandardAboutPanel(options: [.credits: body])
     NSApp.activate()
   }

@@ -57,9 +57,13 @@ struct DiffRow: Identifiable, Sendable {
 
   static func build(_ diff: Diff, layout: DiffLayout, collapsed: Set<Int>) -> [DiffRow] {
     var rows: [DiffRow] = []
+    let isSingleFile = diff.source.isSingleFile
     for file in diff.files {
-      let isCollapsed = collapsed.contains(file.id)
-      rows.append(DiffRow(id: .file(file.id), content: .fileHeader(file, collapsed: isCollapsed)))
+      // One file's page header already names it and counts its lines.
+      let isCollapsed = !isSingleFile && collapsed.contains(file.id)
+      if !isSingleFile {
+        rows.append(DiffRow(id: .file(file.id), content: .fileHeader(file, collapsed: isCollapsed)))
+      }
       if isCollapsed { continue }
 
       if file.isBinary {

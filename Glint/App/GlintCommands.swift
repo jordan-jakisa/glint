@@ -30,6 +30,17 @@ struct GlintCommands: Commands {
     }
 
     CommandGroup(before: .toolbar) {
+      Button(AppCommand.biggerText.title) { TextSize.shared.step(1) }
+        .shortcut(.biggerText)
+        .disabled(TextSize.shared.body >= TextSize.range.upperBound)
+      Button(AppCommand.smallerText.title) { TextSize.shared.step(-1) }
+        .shortcut(.smallerText)
+        .disabled(TextSize.shared.body <= TextSize.range.lowerBound)
+      Button(AppCommand.actualTextSize.title) { TextSize.shared.reset() }
+        .shortcut(.actualTextSize)
+        .disabled(TextSize.shared.body == TextSize.standard)
+      Divider()
+
       Button(session?.layout == .split ? "Show Unified Diff" : "Show Split Diff") {
         session?.toggleLayout()
       }
@@ -62,12 +73,30 @@ struct GlintCommands: Commands {
       }
       .shortcut(.showTerminal)
       .disabled(!isReady)
+      Button(session?.isTerminalMaximized == true ? "Restore Terminal" : "Maximize Terminal") {
+        session?.toggleTerminalMaximized()
+      }
+      .shortcut(.maximizeTerminal)
+      .disabled(!isReady)
       Button(AppCommand.newTerminalTab.title) { session?.newTerminalTab() }
         .shortcut(.newTerminalTab)
         .disabled(!isReady)
-      Button(AppCommand.closeTerminalTab.title) { session?.closeTerminalTab() }
+      Button(AppCommand.closeTerminalTab.title) { session?.closeTerminalPane() }
         .shortcut(.closeTerminalTab)
         .disabled(!isReady || session?.isTerminalShown != true)
+      Button(AppCommand.splitTerminalRight.title) { session?.splitTerminal(.horizontal) }
+        .shortcut(.splitTerminalRight)
+        .disabled(!isReady)
+      Button(AppCommand.splitTerminalDown.title) { session?.splitTerminal(.vertical) }
+        .shortcut(.splitTerminalDown)
+        .disabled(!isReady)
+      Menu("Move to Pane") {
+        Button("Left") { session?.focusTerminalPane(.left) }.shortcut(.focusPaneLeft)
+        Button("Right") { session?.focusTerminalPane(.right) }.shortcut(.focusPaneRight)
+        Button("Above") { session?.focusTerminalPane(.up) }.shortcut(.focusPaneUp)
+        Button("Below") { session?.focusTerminalPane(.down) }.shortcut(.focusPaneDown)
+      }
+      .disabled(!isReady || session?.isTerminalShown != true)
 
       Button("Open in \(TerminalApp.preferred.name)") { session?.openInTerminal() }
         .shortcut(.openExternalTerminal)
