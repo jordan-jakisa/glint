@@ -23,6 +23,7 @@ struct RootView: View {
           .tint(.themeAccent)
           .themedTextLevels()
       }
+      .stashSheets(session)
       .confirmationDialog(
         discardTitle,
         isPresented: Binding(
