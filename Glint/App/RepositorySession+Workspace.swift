@@ -44,6 +44,8 @@ extension RepositorySession {
     } else {
       isTerminalShown = true
       isTerminalMaximized = true
+      // Typing now goes to the shell, not the diff you can't see.
+      if let folder = repositoryURL { terminals.requestFocus(in: folder) }
     }
   }
 

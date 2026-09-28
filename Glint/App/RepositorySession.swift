@@ -39,6 +39,14 @@ final class RepositorySession {
     didSet {
       UserDefaults.standard.set(isTerminalShown, forKey: "terminalShown")
       if !isTerminalShown { isTerminalMaximized = false }
+      // Opening the terminal puts you in it; launch restoring it doesn't.
+      if isTerminalShown, !oldValue, let folder = repositoryURL {
+        if terminals.current(for: folder) == nil {
+          terminals.newTab(for: folder)
+        } else {
+          terminals.requestFocus(in: folder)
+        }
+      }
     }
   }
   /// The terminal fills the diff's space. Hiding the terminal restores it.

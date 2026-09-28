@@ -84,6 +84,15 @@ indirect enum PaneLayout {
     }
   }
 
+  /// The pane to move to when `target` closes: the nearest one on the other
+  /// side of its split, like tmux.
+  func neighbour(of target: GlintTerminalView) -> GlintTerminalView? {
+    guard case .split(_, _, let first, let second) = self else { return nil }
+    if case .pane(let view) = first, view === target { return second.panes.first }
+    if case .pane(let view) = second, view === target { return first.panes.last }
+    return first.neighbour(of: target) ?? second.neighbour(of: target)
+  }
+
   /// Where each pane sits, for moving focus by direction.
   func frames(in rect: CGRect, fractions: [UUID: CGFloat]) -> [(GlintTerminalView, CGRect)] {
     switch self {
@@ -111,6 +120,10 @@ final class TerminalTab: Identifiable {
   /// Each split's share for its first side, by split id. 0.5 when unset.
   var fractions: [UUID: CGFloat] = [:]
   var titles: [ObjectIdentifier: String] = [:]
+  /// Set when you asked for the terminal (opened it, split, switched tab,
+  /// closed a pane), so the pane you're in takes focus once it's on screen.
+  /// Never set by a repository switch, which would swallow J and K.
+  @ObservationIgnored var wantsFocus = false
   private let folderName: String
 
   init(view: GlintTerminalView, folderName: String) {
@@ -120,6 +133,13 @@ final class TerminalTab: Identifiable {
   }
 
   var title: String { titles[ObjectIdentifier(focused)] ?? folderName }
+
+  /// True once, for the pane you're in, when focus was asked for.
+  func claimFocus(_ view: GlintTerminalView) -> Bool {
+    guard wantsFocus, focused === view else { return false }
+    wantsFocus = false
+    return true
+  }
   var panes: [GlintTerminalView] { layout.panes }
 }
 
@@ -165,12 +185,16 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
     return list.first
   }
 
+  /// A new shell in its own tab. `focus` is false for the first shell a
+  /// repository gets on its own (at launch, or switching to it), so the
+  /// diff keeps your keys.
   @discardableResult
-  func newTab(for folder: URL) -> TerminalTab {
+  func newTab(for folder: URL, focus: Bool = true) -> TerminalTab {
     let key = folder.standardizedFileURL
     let tab = TerminalTab(view: makeShell(in: key), folderName: key.lastPathComponent)
     tabs[key, default: []].append(tab)
     selected[key] = tab.id
+    if focus { focusSoon(tab) }
     return tab
   }
 
@@ -182,6 +206,7 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
     tab.layout = tab.layout.replacing(
       tab.focused, with: .split(id: UUID(), axis: axis, first: .pane(tab.focused), second: .pane(shell)))
     tab.focused = shell
+    focusSoon(tab)
   }
 
   /// Closes the pane you're in, or its tab when it's the last pane. Returns
@@ -209,11 +234,31 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
     let distance = { (frame: CGRect) in hypot(frame.midX - from.midX, frame.midY - from.midY) }
     guard let target = candidates.min(by: { distance($0.1) < distance($1.1) })?.0 else { return }
     tab.focused = target
-    target.window?.makeFirstResponder(target)
+    // A docked stack may bring this pane on screen first.
+    focusSoon(tab)
+  }
+
+  /// Puts you in the terminal: the pane you're in takes focus once it's on
+  /// screen. For showing the panel and maximizing it.
+  func requestFocus(in folder: URL) {
+    guard let tab = current(for: folder) else { return }
+    focusSoon(tab)
+  }
+
+  private func focusSoon(_ tab: TerminalTab) {
+    tab.wantsFocus = true
+    // If the pane is already on screen and isn't re-hosted, no container
+    // attaches to claim it; take focus after this layout pass instead.
+    DispatchQueue.main.async { [weak tab] in
+      guard let tab, tab.wantsFocus, let window = tab.focused.window else { return }
+      tab.wantsFocus = false
+      window.makeFirstResponder(tab.focused)
+    }
   }
 
   func select(_ tab: TerminalTab, in folder: URL) {
     selected[folder.standardizedFileURL] = tab.id
+    focusSoon(tab)
   }
 
   /// Moves to the next or previous tab, wrapping around.
@@ -240,14 +285,14 @@ final class TerminalStore: NSObject, LocalProcessTerminalViewDelegate {
 
   private func closePane(_ view: GlintTerminalView, of tab: TerminalTab, in folder: URL) -> Bool {
     guard let rest = tab.layout.removing(view) else { return close(tab, in: folder) }
-    let wasFocused = tab.focused === view
+    let neighbour = tab.layout.neighbour(of: view)
     tab.layout = rest
     tab.titles[ObjectIdentifier(view)] = nil
     view.terminate()
     view.removeFromSuperview()
-    if wasFocused, let next = rest.panes.first {
+    if tab.focused === view, let next = neighbour ?? rest.panes.first {
       tab.focused = next
-      next.window?.makeFirstResponder(next)
+      focusSoon(tab)
     }
     return true
   }
@@ -344,7 +389,7 @@ struct TerminalPanel: View {
       }
     } else {
       // First time for this repository: start its first shell.
-      Color.clear.onAppear { store.newTab(for: folder) }
+      Color.clear.onAppear { store.newTab(for: folder, focus: false) }
     }
   }
 }
@@ -363,7 +408,7 @@ private struct PaneLayoutView: View {
     switch layout {
     case .pane(let view):
       let isFocused = tab.focused === view
-      TerminalHost(terminal: view, isFocused: isFocused)
+      TerminalHost(terminal: view, claimFocus: { tab.claimFocus(view) })
         .id(ObjectIdentifier(view))
         .overlay {
           if !isFocused {
@@ -522,20 +567,20 @@ private struct TerminalTabButton: View {
 /// hidden.
 private struct TerminalHost: NSViewRepresentable {
   let terminal: GlintTerminalView
-  let isFocused: Bool
+  /// True when you asked for the terminal and this is the pane you're in.
+  let claimFocus: () -> Bool
 
   func makeNSView(context: Context) -> PaneContainer {
     let container = PaneContainer()
     container.terminal = terminal
-    // Focus when the panel opens or a split makes this pane.
-    container.focusOnAttach = isFocused
+    container.claimFocus = claimFocus
     return container
   }
 
   func updateNSView(_ container: PaneContainer, context: Context) {
+    container.claimFocus = claimFocus
     guard container.terminal !== terminal else { return }
     container.terminal = terminal
-    container.focusOnAttach = isFocused
     container.attach()
   }
 
@@ -544,7 +589,7 @@ private struct TerminalHost: NSViewRepresentable {
   /// would otherwise pull the shell back out of the incoming one.
   final class PaneContainer: NSView {
     var terminal: GlintTerminalView?
-    var focusOnAttach = false
+    var claimFocus: () -> Bool = { false }
 
     override func viewDidMoveToWindow() {
       super.viewDidMoveToWindow()
@@ -562,8 +607,7 @@ private struct TerminalHost: NSViewRepresentable {
         terminal.topAnchor.constraint(equalTo: topAnchor, constant: 4),
         terminal.bottomAnchor.constraint(equalTo: bottomAnchor),
       ])
-      if focusOnAttach {
-        focusOnAttach = false
+      if claimFocus() {
         DispatchQueue.main.async { terminal.window?.makeFirstResponder(terminal) }
       }
     }
