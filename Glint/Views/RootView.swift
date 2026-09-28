@@ -243,12 +243,7 @@ private struct DiffToolbar: ViewModifier {
   }
 
   private var terminalButton: some View {
-    Button {
-      session.isTerminalShown.toggle()
-    } label: {
-      Label("Terminal", systemImage: "apple.terminal")
-    }
-    .help(AppCommand.showTerminal.hint(session.isTerminalShown ? "Hide the terminal" : "Show the terminal"))
+    TerminalToggle(session: session)
   }
 
   private var sidebarButton: some View {

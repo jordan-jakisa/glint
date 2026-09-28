@@ -15,7 +15,7 @@ struct ProjectTitle: View {
           .font(.app(.headline))
           .lineLimit(1)
         Image(systemName: "chevron.down")
-          .font(.app(.caption2).weight(.semibold))
+          .font(.app(.caption2))
           .foregroundStyle(.secondary)
       }
       .padding(.horizontal, 6)
@@ -80,7 +80,7 @@ struct ProjectSwitcher: View {
         session.chooseRepository()
       } label: {
         HStack {
-          Text("Open Repository…")
+          Text(AppCommand.openRepository.title)
           Spacer()
           Text(AppCommand.openRepository.keys).foregroundStyle(.tertiary)
         }
@@ -143,7 +143,7 @@ struct ProjectSwitcher: View {
       }
       Spacer(minLength: 0)
     }
-    .padding(.vertical, 5)
+    .padding(.vertical, 6)
     .padding(.horizontal, 8)
     .background(
       RoundedRectangle(cornerRadius: 5).fill(highlighted ? Color.themeAccent.opacity(0.2) : .clear))

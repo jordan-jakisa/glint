@@ -83,7 +83,7 @@ final class DiffRowCell: NSView {
     let chevron = NSImage(
       systemSymbolName: collapsed ? "chevron.right" : "chevron.down", accessibilityDescription: nil)?
       .withSymbolConfiguration(
-        .init(pointSize: 10, weight: .semibold).applying(.init(paletteColors: [.secondaryLabelColor])))
+        .init(pointSize: AppFont.small - 2, weight: .semibold).applying(.init(paletteColors: [.secondaryLabelColor])))
     if let chevron {
       let size = chevron.size
       chevron.draw(in: NSRect(x: x + (12 - size.width) / 2, y: midY - size.height / 2, width: size.width, height: size.height))
@@ -131,7 +131,7 @@ final class DiffRowCell: NSView {
     if let hunkAction {
       let label = NSAttributedString(
         string: hunkAction,
-        attributes: [.font: AppFont.ns(size: AppFont.small, weight: .semibold), .foregroundColor: Theme.shared.accentColor])
+        attributes: [.font: AppFont.ns(size: AppFont.small), .foregroundColor: Theme.shared.accentColor])
       let size = label.size()
       label.draw(at: NSPoint(x: bounds.width - 12 - size.width, y: (bounds.height - size.height) / 2))
       width -= Self.hunkActionWidth
@@ -167,11 +167,12 @@ final class DiffRowCell: NSView {
   }
 
   private func drawSplit(_ pair: SplitRow) {
-    let half = (bounds.width - 1) / 2
+    let pixel = 1 / (window?.backingScaleFactor ?? 2)
+    let half = (bounds.width - pixel) / 2
     drawSide(pair.left, number: pair.left?.oldNumber, x: 0, width: half)
     Hairline.nsColor.setFill()
-    NSRect(x: half, y: 0, width: 1 / (window?.backingScaleFactor ?? 2), height: bounds.height).fill()
-    drawSide(pair.right, number: pair.right?.newNumber, x: half + 1, width: half)
+    NSRect(x: half, y: 0, width: pixel, height: bounds.height).fill()
+    drawSide(pair.right, number: pair.right?.newNumber, x: half + pixel, width: half)
   }
 
   private func drawSide(_ line: DiffLine?, number: Int?, x: CGFloat, width: CGFloat) {

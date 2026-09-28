@@ -68,7 +68,7 @@ struct ChangesView: View {
           } header: {
             HStack {
               Text("\(group.repository.relativePath) \(group.files.count)")
-                .font(.app(.caption).weight(.semibold))
+                .font(.app(.caption))
               Spacer()
               Button("Switch") { session.switchRepository(to: group.repository) }
                 .buttonStyle(.link)
@@ -122,7 +122,7 @@ private struct GroupHeader: View {
           .font(.app(.caption))
       }
     }
-    .font(.app(.caption).weight(.semibold))
+    .font(.app(.caption))
     .contentShape(Rectangle())
     .onTapGesture(perform: viewAll)
   }

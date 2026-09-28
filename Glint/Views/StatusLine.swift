@@ -13,7 +13,7 @@ struct StatusLine: View {
       Button {
         columns = columns == .detailOnly ? .all : .detailOnly
       } label: {
-        Label("Sidebar", systemImage: "sidebar.left")
+        Label("Sidebar", systemImage: "sidebar.left").hitTarget()
       }
       .help(columns == .detailOnly ? "Show the sidebar" : "Hide the sidebar")
       // Hosts the switcher popover, so ⌥⌘O works here too.
@@ -24,13 +24,8 @@ struct StatusLine: View {
         tab(.history, "History")
       }
       BranchBar(session: session, isInStatusLine: true)
-      LayoutToggle(session: session)
-      Button {
-        session.isTerminalShown.toggle()
-      } label: {
-        Label("Terminal", systemImage: "apple.terminal")
-      }
-      .help(AppCommand.showTerminal.hint(session.isTerminalShown ? "Hide the terminal" : "Show the terminal"))
+      LayoutToggle(session: session).hitTarget()
+      TerminalToggle(session: session).hitTarget()
     }
     .buttonStyle(.borderless)
     .labelStyle(.iconOnly)
@@ -40,10 +35,24 @@ struct StatusLine: View {
   }
 
   private func tab(_ tab: RepositorySession.Tab, _ title: String) -> some View {
+    // Colour, not weight, marks the tab you're on, so nothing shifts.
     Button(title) { session.tab = tab }
-      .fontWeight(session.tab == tab ? .semibold : .regular)
-      .foregroundStyle(session.tab == tab ? .primary : .secondary)
+      .foregroundStyle(session.tab == tab ? .primary : .tertiary)
       .accessibilityAddTraits(session.tab == tab ? .isSelected : [])
+  }
+}
+
+/// Shows or hides the terminal; in the toolbar and Minimal's status line.
+struct TerminalToggle: View {
+  @Bindable var session: RepositorySession
+
+  var body: some View {
+    Button {
+      session.isTerminalShown.toggle()
+    } label: {
+      Label("Terminal", systemImage: "apple.terminal")
+    }
+    .help(AppCommand.showTerminal.hint(session.isTerminalShown ? "Hide the terminal" : "Show the terminal"))
   }
 }
 

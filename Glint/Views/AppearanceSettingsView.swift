@@ -21,7 +21,7 @@ struct AppearanceSettingsView: View {
         }
         .pickerStyle(.segmented)
         LabeledContent("Accent") {
-          HStack(spacing: 8) {
+          HStack(spacing: 4) {
             ForEach(Theme.Accent.allCases) { accent in
               Swatch(color: accent.color, isSelected: theme.accent == accent) { theme.set(accent) }
                 .help(accent.title)
@@ -46,8 +46,9 @@ struct AppearanceSettingsView: View {
           HStack(spacing: 6) {
             if textSize.body != TextSize.standard {
               Button(action: textSize.reset) {
-                Image(systemName: "arrow.uturn.backward")
+                Image(systemName: "arrow.uturn.backward").hitTarget()
               }
+              .accessibilityLabel("Default text size")
               .buttonStyle(.borderless)
               .help("Back to \(Int(TextSize.standard)) pt")
             }
@@ -84,8 +85,11 @@ private struct Swatch: View {
         .overlay {
           Circle().strokeBorder(Color.primary.opacity(isSelected ? 0.8 : 0), lineWidth: 2).padding(-3)
         }
+        // A 22 pt target around the 16 pt dot, with room for the ring.
+        .frame(width: 26, height: 26)
         .contentShape(Circle())
     }
     .buttonStyle(.plain)
+    .accessibilityAddTraits(isSelected ? .isSelected : [])
   }
 }

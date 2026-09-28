@@ -261,7 +261,8 @@ private struct ProjectStep: View {
   var body: some View {
     VStack(spacing: 20) {
       Image(systemName: "folder.badge.plus")
-        .font(.system(size: 48))
+        .font(.app(.largeTitle))
+        .imageScale(.large)
         .foregroundStyle(Color.themeAccent)
         .accessibilityHidden(true)
       VStack(spacing: 8) {

@@ -157,6 +157,8 @@ struct BranchBar: View {
               .font(.app(.caption2))
               .foregroundStyle(.secondary)
           }
+          .frame(minHeight: 22)
+          .contentShape(Rectangle())
         }
         .buttonStyle(.borderless)
         .foregroundStyle(.secondary)
@@ -180,6 +182,8 @@ struct BranchBar: View {
             .font(.app(.caption2))
             .foregroundStyle(.secondary)
         }
+        .frame(minHeight: 22)
+        .contentShape(Rectangle())
       }
       .buttonStyle(.borderless)
       .help(AppCommand.switchBranch.hint("Switch branch"))

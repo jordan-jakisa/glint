@@ -57,6 +57,8 @@ struct BranchPicker: View {
         }
       }
       .listStyle(.plain)
+      // Lists set their own font; the app's goes on the rows.
+      .font(.app(.body))
       if session.isSwitchingBranch {
         Hairline()
         ProgressView().controlSize(.small).padding(6)

@@ -13,7 +13,6 @@ struct GlintApp: App {
     WindowGroup {
       RootView()
         .font(.app(.body))
-      .themedTextLevels()
         .tint(.themeAccent)
         .themedTextLevels()
     }
@@ -38,6 +37,8 @@ struct GlintApp: App {
           .tabItem { Label("Shortcuts", systemImage: "keyboard") }
       }
       .font(.app(.body))
+      .tint(.themeAccent)
+      .themedTextLevels()
     }
   }
 }

@@ -79,9 +79,12 @@ private struct BranchRow: View {
 
   var body: some View {
     // One line; the comparison's detail is in the tooltip.
-    Label("\(branch ?? "This branch") vs \(base)", systemImage: "arrow.triangle.branch")
-      .font(.app(.body))
-      .lineLimit(1)
+    // Not a Label: sidebar lists restyle a Label's title in the system font.
+    HStack(spacing: 6) {
+      Image(systemName: "arrow.triangle.branch").foregroundStyle(.secondary)
+      Text("\(branch ?? "This branch") vs \(base)").lineLimit(1)
+    }
+    .font(.app(.body))
       .padding(.vertical, 2)
       .help("Everything on \(branch ?? "this branch") since it left \(base), uncommitted work included")
   }

@@ -54,11 +54,11 @@ struct StatusMark {
     }
   }
 
-  static let size: CGFloat = 16
+  /// Scales with your text size: 16 pt at the default.
+  static var size: CGFloat { AppFont.small + 4 }
   static let radius: CGFloat = 3
   static let tint: CGFloat = 0.15
-  /// Fixed, like the tile it sits in: it's an icon, not text to read.
-  static var font: NSFont { AppFont.ns(size: 10, weight: .semibold) }
+  static var font: NSFont { AppFont.ns(size: AppFont.small - 2, weight: .semibold) }
 }
 
 /// A file's status as a small tinted tile, the same one the diff draws.

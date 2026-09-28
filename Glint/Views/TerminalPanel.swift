@@ -506,6 +506,7 @@ private struct TerminalTabStrip: View {
         Image(systemName: "plus").hitTarget()
       }
       .buttonStyle(.borderless)
+      .accessibilityLabel("New terminal tab")
       .help(AppCommand.newTerminalTab.hint("New tab"))
       Button(action: toggleMaximized) {
         Image(
@@ -545,12 +546,12 @@ private struct TerminalTabButton: View {
       .buttonStyle(.plain)
       Button(action: close) {
         Image(systemName: "xmark")
-          .font(.app(.caption2).weight(.semibold))
-          .frame(width: 16, height: 16)
-          .contentShape(Rectangle())
+          .font(.app(.caption2))
+          .hitTarget()
       }
       .buttonStyle(.plain)
       .opacity(isHovered || isSelected ? 1 : 0)
+      .accessibilityLabel("Close tab")
       .help("Close tab")
       .padding(.trailing, 4)
     }
