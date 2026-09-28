@@ -104,7 +104,7 @@ struct Shortcut: Codable, Hashable, Sendable {
 /// Every command that can have a key.
 enum AppCommand: String, CaseIterable, Identifiable, Sendable {
   case openRepository, reload, toggleLayout, showTerminal, maximizeTerminal, newTerminalTab, closeTerminalTab, openExternalTerminal
-  case biggerText, smallerText, actualTextSize
+  case biggerText, smallerText, actualTextSize, toggleMinimal
   case splitTerminalRight, splitTerminalDown, focusPaneLeft, focusPaneRight, focusPaneUp, focusPaneDown
   case switchProject, switchRepository, switchBranch, writeMessage, commit
   case fetch, pull, push
@@ -124,6 +124,7 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .maximizeTerminal: "Maximize or Restore Terminal"
     case .newTerminalTab: "New Terminal Tab"
     case .closeTerminalTab: "Close Terminal Pane"
+    case .toggleMinimal: "Minimal Interface"
     case .biggerText: "Bigger Text"
     case .smallerText: "Smaller Text"
     case .actualTextSize: "Default Text Size"
@@ -177,6 +178,7 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .maximizeTerminal: Shortcut("return", command: true, shift: true)
     case .newTerminalTab: Shortcut("t", command: true, shift: true)
     case .closeTerminalTab: Shortcut("w", command: true, option: true)
+    case .toggleMinimal: Shortcut("m", command: true, control: true)
     case .biggerText: Shortcut("=", command: true)
     case .smallerText: Shortcut("-", command: true)
     case .actualTextSize: Shortcut("0", command: true)

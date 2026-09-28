@@ -30,6 +30,10 @@ struct GlintCommands: Commands {
     }
 
     CommandGroup(before: .toolbar) {
+      Toggle(AppCommand.toggleMinimal.title, isOn: Binding(
+        get: { Theme.shared.isMinimal },
+        set: { Theme.shared.set($0 ? .minimal : .standard) }))
+        .shortcut(.toggleMinimal)
       Button(AppCommand.biggerText.title) { TextSize.shared.step(1) }
         .shortcut(.biggerText)
         .disabled(TextSize.shared.body >= TextSize.range.upperBound)
