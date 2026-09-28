@@ -9,6 +9,13 @@ import SwiftUI
 struct ZedChangesList: View {
   @Bindable var session: RepositorySession
   @AppStorage("gitPanelTree") private var isTree = false
+  @AppStorage("gitPanelSortByName") private var sortByName = false
+  @AppStorage("gitPanelGroupBy") private var groupBy = Grouping.trackedUntracked
+
+  /// Zed's Group By.
+  enum Grouping: String {
+    case none, trackedUntracked, stagedUnstaged
+  }
   @State private var collapsed: Set<String> = []
 
   var body: some View {
@@ -19,8 +26,16 @@ struct ZedChangesList: View {
         ScrollView {
           LazyVStack(spacing: 0) {
             section("Conflicts", entries.filter { $0.kind == .conflicted })
-            section("Tracked", entries.filter { $0.kind != .conflicted && $0.kind != .untracked })
-            section("Untracked", entries.filter { $0.kind == .untracked })
+            switch groupBy {
+            case .none:
+              section("Changes", entries.filter { $0.kind != .conflicted })
+            case .trackedUntracked:
+              section("Tracked", entries.filter { $0.kind != .conflicted && $0.kind != .untracked })
+              section("Untracked", entries.filter { $0.kind == .untracked })
+            case .stagedUnstaged:
+              section("Staged", entries.filter { $0.kind != .conflicted && $0.state == .all })
+              section("Unstaged", entries.filter { $0.kind != .conflicted && $0.state != .all })
+            }
           }
           .padding(.vertical, 2)
         }
@@ -48,29 +63,48 @@ struct ZedChangesList: View {
       .buttonStyle(.plain)
       .help("Every change in one diff")
       Spacer()
+      // Zed's View Options: View, Sort By, Group By.
       Menu {
-        Toggle("Tree View", isOn: $isTree)
-        Toggle(
-          "Sort by Path",
-          isOn: Binding(get: { FileOrder.current == .path }, set: { FileOrder.set($0 ? .path : .smart) }))
+        Picker("View", selection: $isTree) {
+          Text("List").tag(false)
+          Text("Tree").tag(true)
+        }
+        .pickerStyle(.inline)
+        Picker("Sort By", selection: $sortByName) {
+          Text("Path").tag(false)
+          Text("Name").tag(true)
+        }
+        .pickerStyle(.inline)
+        Picker("Group By", selection: $groupBy) {
+          Text("None").tag(Grouping.none)
+          Text("Tracked & Untracked").tag(Grouping.trackedUntracked)
+          Text("Staged & Unstaged").tag(Grouping.stagedUnstaged)
+        }
+        .pickerStyle(.inline)
       } label: {
         Image(systemName: "slider.horizontal.3")
       }
       .menuStyle(.borderlessButton)
-      .tint(.secondary)
       .menuIndicator(.hidden)
       .fixedSize()
+      .tint(.secondary)
       .help("View options")
       Menu {
         Button("Stage All", action: session.stageAll)
         Button("Unstage All", action: session.unstageAll)
         Divider()
-        Button("Restore Tracked Changes\u{2026}") {
+        Button("Restore All Changes\u{2026}") {
           session.requestDiscard(session.status.unstaged.filter { $0.kind != .untracked }.map(\.path))
         }
         Button("Trash Untracked Files\u{2026}") {
           session.requestDiscard(session.status.unstaged.filter { $0.kind == .untracked }.map(\.path))
         }
+        Divider()
+        Button("Stash All") { session.requestStash(.all) }
+        Button("Stash Tracked") { session.requestStash(.tracked) }
+        Button("Stash Staged") { session.requestStash(.staged) }
+        Button("Stash Pop") { session.popLatestStash() }
+        Button("View Stash") { session.isStashPickerShown = true }
       } label: {
         Text(allStaged ? "Unstage All" : "Stage All")
       } primaryAction: {
@@ -161,9 +195,10 @@ struct ZedChangesList: View {
     .contextMenu { menu(for: entry) }
   }
 
+  /// Zed's entry menu, in Zed's order.
   @ViewBuilder private func menu(for entry: Entry) -> some View {
-    Button("Open File") { session.openFile(entry.path) }
     Button("Open Diff") { session.selectedChange = entry.selection }
+    Button("View File") { session.openFile(entry.path) }
     Button("View File History") { session.showHistory(for: entry.path) }
     Divider()
     Button(entry.state == .all ? "Unstage" : "Stage") { session.setStaged(entry.path, entry.state != .all) }
@@ -172,6 +207,14 @@ struct ZedChangesList: View {
     } else if entry.kind != .conflicted, entry.hasUnstaged {
       Button("Restore File\u{2026}") { session.requestDiscard([entry.path]) }
     }
+    Divider()
+    Button("Copy Path") { session.copyAbsolutePath(entry.path) }
+    Button("Copy Relative Path") { session.copyPath(entry.path) }
+    if entry.kind == .untracked {
+      Divider()
+      Button("Add to .gitignore") { session.ignore(entry.path, privately: false) }
+      Button("Add to .git/info/exclude") { session.ignore(entry.path, privately: true) }
+    }
     if entry.kind != .added, entry.kind != .untracked {
       Divider()
       Button("Copy File Permalink") { session.copyFilePermalink(entry.path) }
@@ -179,7 +222,6 @@ struct ZedChangesList: View {
     }
     Divider()
     Button("Reveal in Finder") { session.revealInFinder(entry.path) }
-    Button("Copy Path") { session.copyPath(entry.path) }
   }
 
   private func stage(_ items: [Entry], _ staged: Bool) {
@@ -218,7 +260,11 @@ struct ZedChangesList: View {
   private var entries: [Entry] {
     let staged = Dictionary(session.status.staged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
     let unstaged = Dictionary(session.status.unstaged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
-    return Set(staged.keys).union(unstaged.keys).sorted().map { path in
+    let paths = Set(staged.keys).union(unstaged.keys).sorted {
+      sortByName
+        ? (($0 as NSString).lastPathComponent, $0) < (($1 as NSString).lastPathComponent, $1) : $0 < $1
+    }
+    return paths.map { path in
       let kind = unstaged[path]?.kind ?? staged[path]!.kind
       let state: StageState =
         unstaged[path] == nil ? .all : (staged[path] == nil ? .none : .partial)

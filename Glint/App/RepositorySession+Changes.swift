@@ -241,6 +241,40 @@ extension RepositorySession {
     NSWorkspace.shared.open(repository.url.appendingPathComponent(path))
   }
 
+  /// Zed's Copy Path: the full path on disk. Copy Relative Path is below.
+  func copyAbsolutePath(_ path: String) {
+    guard let repository else { return }
+    copyPath(repository.url.appendingPathComponent(path).path)
+  }
+
+  /// Zed's Add to .gitignore and Add to .git/info/exclude: appends the path,
+  /// so the file stops showing up as untracked. `exclude` keeps it out of the
+  /// shared .gitignore.
+  func ignore(_ path: String, privately exclude: Bool) {
+    guard let repository else { return }
+    let git = SystemGit(directory: repository.url)
+    Task {
+      do {
+        let file: URL
+        if exclude {
+          let excludePath = try await git.run(["rev-parse", "--git-path", "info/exclude"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+          file = URL(fileURLWithPath: excludePath, relativeTo: repository.url).standardizedFileURL
+          try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        } else {
+          file = repository.url.appendingPathComponent(".gitignore")
+        }
+        var contents = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        if !contents.isEmpty, !contents.hasSuffix("\n") { contents += "\n" }
+        contents += "/" + path + "\n"
+        try contents.write(to: file, atomically: true, encoding: .utf8)
+      } catch {
+        alert = UserAlert("Couldn't ignore \((path as NSString).lastPathComponent)", error: error)
+      }
+      refreshWorkingTree()
+    }
+  }
+
   func copyPath(_ path: String) {
     NSPasteboard.general.clearContents()
     NSPasteboard.general.setString(path, forType: .string)
