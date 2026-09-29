@@ -29,7 +29,8 @@ struct GlintApp: App {
         .tint(.themeAccent)
         .themedTextLevels()
     }
-    .windowToolbarStyle(.unified)
+    // Compact, as in Zed: the toolbar holds a few buttons, not a title.
+    .windowToolbarStyle(.unifiedCompact(showsTitle: false))
     .defaultSize(width: 1100, height: 720)
     .commands {
       // Hide and show the sidebar from the View menu and ⌃⌘S, in every

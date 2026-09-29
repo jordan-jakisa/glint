@@ -34,6 +34,9 @@ struct DiffTableView: NSViewRepresentable {
   /// Style Zed's Open File on each file header; nil where there's no file
   /// on disk to open.
   var openFile: ((String) -> Void)? = nil
+  /// Stages (true) or unstages a whole file from its header; nil where the
+  /// diff can't be staged from.
+  var stageFile: ((String, Bool) -> Void)? = nil
   /// Who last changed a new-side line of the file at an index; nil until
   /// that file's blame is loaded (asking starts the load). Feeds the blame
   /// column and the selected line's inline blame.
@@ -106,6 +109,7 @@ struct DiffTableView: NSViewRepresentable {
     private var selectionChanged: ([DiffRowID]) -> Void = { _ in }
     private var editLines: ((DiffRowID) -> Void)?
     private var openFile: ((String) -> Void)?
+    private var stageFile: ((String, Bool) -> Void)?
     private var hunkAction: (DiffRowID) -> Void = { _ in }
     private var blame: ((Int, DiffLine) -> BlameCommit?)?
     private var showsBlame = false
@@ -142,6 +146,7 @@ struct DiffTableView: NSViewRepresentable {
       hunkAction = view.hunkAction
       editLines = view.editLines
       openFile = view.openFile
+      stageFile = view.stageFile
       blame = view.blame
       permalinks = view.permalinks
       let restoreChanged = (view.restoreHunk != nil) != (restoreHunk != nil)
@@ -259,7 +264,8 @@ struct DiffTableView: NSViewRepresentable {
       let (column, inline) = blame(forRow: row)
       cell.configure(
         rows[row], metrics: metrics, hunkAction: hunkActionTitle(for: rows[row]), blame: column, inlineBlame: inline,
-        restoreAction: restoreHunk != nil && !rows[row].fileIsStaged, openFile: openFile != nil)
+        restoreAction: restoreHunk != nil && !rows[row].fileIsStaged, openFile: openFile != nil,
+        fileStageTitle: fileStageTitle(for: rows[row]))
       return cell
     }
 
@@ -368,6 +374,13 @@ struct DiffTableView: NSViewRepresentable {
     }
     var canRestoreHunks: Bool { restoreHunk != nil }
 
+    /// A file header's action: Unstage File once it's all staged,
+    /// otherwise what this diff does to hunks.
+    func fileStageTitle(for row: DiffRow) -> String? {
+      guard stageFile != nil, let partialAction, case .fileHeader = row.content else { return nil }
+      return row.fileIsStaged ? "Unstage File" : "\(partialAction) File"
+    }
+
     /// The hunk a row belongs to, for the right-click hunk actions.
     func hunk(at index: Int) -> DiffRowID? {
       guard partialAction != nil, rows.indices.contains(index) else { return nil }
@@ -442,9 +455,16 @@ struct DiffTableView: NSViewRepresentable {
       guard rows.indices.contains(row) else { return }
       switch rows[row].content {
       case .fileHeader(let file, _):
-        // Style Zed: Open File at the right edge opens it; the rest of the
-        // header folds the file, as everywhere.
-        if Theme.shared.isZed, let openFile, let path = file.newPath, file.status != .deleted,
+        // Stage File or Unstage File, then (Style Zed) Open File at the
+        // right edge; the rest of the header folds the file, as everywhere.
+        if let stageFile, let title = fileStageTitle(for: rows[row]),
+          let zone = DiffRowCell.fileStageZone(
+            rowWidth: sender.bounds.width, title: title, openFile: Theme.shared.isZed && openFile != nil),
+          let point = NSApp.currentEvent.map({ sender.convert($0.locationInWindow, from: nil) }),
+          zone.hit.contains(point.x)
+        {
+          stageFile(file.newPath ?? file.path, title.hasPrefix("Stage"))
+        } else if Theme.shared.isZed, let openFile, let path = file.newPath, file.status != .deleted,
           let point = NSApp.currentEvent.map({ sender.convert($0.locationInWindow, from: nil) }),
           point.x > sender.bounds.width - DiffRowCell.openFileWidth
         {

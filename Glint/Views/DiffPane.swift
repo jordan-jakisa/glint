@@ -37,6 +37,7 @@ struct DiffPane: View {
             restoreHunk: restoreHunk,
             editLines: editLines,
             openFile: session.canEditDiff ? { [session] in session.openFile($0) } : nil,
+            stageFile: session.partialAction != nil ? { [session] in session.setStaged($0, $1) } : nil,
             blame: { [session] in session.blame(file: $0, line: $1) },
             showsBlame: session.isBlameShown,
             blameVersion: session.blameVersion,

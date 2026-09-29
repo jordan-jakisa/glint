@@ -8,6 +8,9 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   private var hunkAction: String?
   /// Style Zed: whether file headers offer Open File.
   private var openFile = false
+  /// "Stage File" or "Unstage File" on a file header; nil where the diff
+  /// can't be staged from.
+  private var fileStageTitle: String?
   /// The new-side line's blame, for the gutter column; nil until loaded.
   private var blame: BlameCommit?
   /// Set on the one selected line: its blame, drawn after the code.
@@ -98,10 +101,13 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
 
   func configure(
     _ row: DiffRow, metrics: DiffMetrics, hunkAction: String? = nil, blame: BlameCommit? = nil,
-    inlineBlame: BlameCommit? = nil, restoreAction: Bool = false, openFile: Bool = false
+    inlineBlame: BlameCommit? = nil, restoreAction: Bool = false, openFile: Bool = false,
+    fileStageTitle: String? = nil
   ) {
     self.row = row
     self.openFile = openFile
+    let fileActionChanged = self.fileStageTitle != fileStageTitle
+    self.fileStageTitle = fileStageTitle
     isHovered = false
     let blameResized = self.metrics.blameWidth != metrics.blameWidth
     self.metrics = metrics
@@ -112,7 +118,7 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     self.restoreAction = restoreAction
     isRowSelected = (superview as? NSTableRowView)?.isSelected ?? false
     needsDisplay = true
-    if actionChanged || blameResized { window?.invalidateCursorRects(for: self) }
+    if actionChanged || blameResized || fileActionChanged { window?.invalidateCursorRects(for: self) }
   }
 
   /// Blame arrived, or the selection moved: redraw only if it changed.
@@ -131,6 +137,13 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     if metrics.blameWidth > 0 {
       // Taller than any row, so it covers wrapped lines too.
       addToolTip(NSRect(x: 0, y: 0, width: metrics.blameWidth, height: 100_000), owner: self, userData: nil)
+    }
+    if case .fileHeader = row?.content,
+      let zone = Self.fileStageZone(rowWidth: bounds.width, title: fileStageTitle, openFile: openFile && Theme.shared.isZed)
+    {
+      let rect = NSRect(x: zone.hit.lowerBound, y: 0, width: zone.hit.upperBound - zone.hit.lowerBound, height: bounds.height)
+      addCursorRect(rect, cursor: .pointingHand)
+      addToolTip(rect, owner: AppCommand.toggleStaged.hint(zone.title) as NSString, userData: nil)
     }
     guard let hunkAction else { return }
     if case .hunkHeader = row?.content {
@@ -193,6 +206,28 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   /// Style Zed's "Open File" label at the right of a file header.
   static let openFileWidth: CGFloat = 96
 
+  struct FileStageZone {
+    let title: String
+    let labelX: CGFloat
+    let hit: ClosedRange<CGFloat>
+  }
+
+  /// A file header's Stage File or Unstage File: left of Open File, or at
+  /// the right edge without it. The table's clicks use this too.
+  static func fileStageZone(rowWidth: CGFloat, title: String?, openFile: Bool) -> FileStageZone? {
+    guard let title else { return nil }
+    let width = ceil((title as NSString).size(withAttributes: [.font: hunkActionFont]).width)
+    let right = rowWidth - (openFile ? 6 + openFileWidth : 18)
+    let x = right - width
+    return FileStageZone(title: title, labelX: x, hit: (x - 8)...(right + 8))
+  }
+
+  private func drawFileStageLabel(_ zone: FileStageZone, color: NSColor) {
+    let label = NSAttributedString(string: zone.title, attributes: [.font: Self.hunkActionFont, .foregroundColor: color])
+    let size = label.size()
+    label.draw(at: NSPoint(x: zone.labelX, y: bounds.midY - size.height / 2))
+  }
+
   /// Zed's excerpt header: a rounded card with the fold chevron, the file
   /// name in its status colour and its folder dimmed, the line counts, and
   /// Open File at the right.
@@ -235,7 +270,9 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     for (text, color) in [("+\(file.additions)", Theme.shared.createdLabel), (" \u{2212}\(file.deletions)", Theme.shared.deletedLabel)] {
       title.append(NSAttributedString(string: text == "+\(file.additions)" ? "  " + text : text, attributes: [.font: AppFont.nsSans(size: AppFont.small), .foregroundColor: color]))
     }
-    let right = card.maxX - (openFile ? Self.openFileWidth : 10)
+    let stageZone = Self.fileStageZone(rowWidth: bounds.width, title: fileStageTitle, openFile: openFile)
+    let right = stageZone.map { $0.labelX - 12 } ?? card.maxX - (openFile ? Self.openFileWidth : 10)
+    if let stageZone { drawFileStageLabel(stageZone, color: ZedPalette.text) }
     let paragraph = NSMutableParagraphStyle()
     paragraph.lineBreakMode = .byTruncatingMiddle
     title.addAttribute(.paragraphStyle, value: paragraph, range: NSRange(location: 0, length: title.length))
@@ -286,6 +323,10 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     // Stats on the right, path fills what is left, truncated from the front
     // so the file name stays visible.
     var right = bounds.width - 12
+    if let zone = Self.fileStageZone(rowWidth: bounds.width, title: fileStageTitle, openFile: false) {
+      drawFileStageLabel(zone, color: Theme.shared.accentColor)
+      right = zone.labelX - 16
+    }
     for (text, color) in [("-\(file.deletions)", Theme.shared.removed), ("+\(file.additions)", Theme.shared.added)] {
       guard text.dropFirst() != "0" else { continue }
       let stat = NSAttributedString(string: text, attributes: [.font: DiffMetrics.font, .foregroundColor: color])

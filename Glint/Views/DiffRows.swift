@@ -69,7 +69,8 @@ struct DiffRow: Identifiable, Sendable {
       // One file's page header already names it and counts its lines.
       let isCollapsed = !isSingleFile && collapsed.contains(file.id)
       if !isSingleFile {
-        rows.append(DiffRow(id: .file(file.id), content: .fileHeader(file, collapsed: isCollapsed)))
+        rows.append(
+          DiffRow(id: .file(file.id), content: .fileHeader(file, collapsed: isCollapsed), fileIsStaged: file.isStaged))
       }
       if isCollapsed { continue }
 
