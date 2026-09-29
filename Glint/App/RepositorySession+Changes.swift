@@ -256,7 +256,24 @@ extension RepositorySession {
   }
 
   /// Opens the file in the app macOS uses for it, like Zed's Open File.
+  /// Opens the file in Glint's editor: syntax colours, line numbers, and
+  /// kept in step with the file on disk. A file too big or not text goes to
+  /// its default app instead.
   func openFile(_ path: String) {
+    guard let repository else { return }
+    let url = repository.url.appendingPathComponent(path)
+    let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
+    guard size <= 2_000_000, let content = try? String(contentsOf: url, encoding: .utf8) else {
+      return openInDefaultApp(path)
+    }
+    endEdit()
+    let lines = LiveEdit.split(content).lines.count
+    let edit = LiveEdit(url: url, content: content, start: 0, count: lines, wholeFile: true)
+    edit.startWatching()
+    editingHunk = edit
+  }
+
+  func openInDefaultApp(_ path: String) {
     guard let repository else { return }
     NSWorkspace.shared.open(repository.url.appendingPathComponent(path))
   }

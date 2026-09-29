@@ -11,6 +11,8 @@ final class LiveEdit: Identifiable {
   let url: URL
   let fileName: String
   let language: SyntaxLanguage?
+  /// The whole file, opened from the list or Open File, not a hunk.
+  let isWholeFile: Bool
   /// What's in the editor.
   var text: String
   /// The first line shown, 0-based, in the file as it is on disk.
@@ -29,8 +31,9 @@ final class LiveEdit: Identifiable {
 
   /// Opens lines `start..<start + count` (0-based) of `content`, the file
   /// at `url` as just read.
-  init(url: URL, content: String, start: Int, count: Int) {
+  init(url: URL, content: String, start: Int, count: Int, wholeFile: Bool = false) {
     self.url = url
+    isWholeFile = wholeFile
     fileName = url.lastPathComponent
     language = SyntaxLanguage.forPath(url.path)
     let file = Self.split(content)

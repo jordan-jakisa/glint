@@ -12,8 +12,11 @@ struct HunkEditor: View {
     VStack(alignment: .leading, spacing: 0) {
       HStack {
         Text(edit.fileName).font(.app(.headline))
-        Text("lines \(edit.firstLineNumber)\u{2013}\(edit.lastLineNumber)")
-          .foregroundStyle(.secondary)
+        Text(
+          edit.isWholeFile
+            ? "\(edit.lastLineNumber) lines" : "lines \(edit.firstLineNumber)\u{2013}\(edit.lastLineNumber)"
+        )
+        .foregroundStyle(.secondary)
         Spacer()
         if let language = edit.language {
           Text(language.name)
@@ -24,7 +27,9 @@ struct HunkEditor: View {
       .padding(12)
       Hairline()
       CodeEditor(text: $edit.text, language: edit.language, firstLine: edit.firstLineNumber)
-        .frame(minWidth: 720, minHeight: 360)
+        .frame(
+          minWidth: 720, idealWidth: edit.isWholeFile ? 960 : 720,
+          minHeight: 360, idealHeight: edit.isWholeFile ? 640 : 360)
       Hairline()
       HStack {
         Text(edit.note ?? "Stays in step with the file on disk.")

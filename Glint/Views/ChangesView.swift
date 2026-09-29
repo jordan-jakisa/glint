@@ -99,6 +99,7 @@ struct ChangesView: View {
       .tag(ChangeSelection(staged: staged, path: file.path))
       .contextMenu {
         Button("Open File") { session.openFile(file.path) }
+        Button("Open in Default App") { session.openInDefaultApp(file.path) }
         Button("View File History") { session.showHistory(for: file.path) }
         Divider()
         Button(staged ? "Unstage" : "Stage") { session.setStaged(file.path, !staged) }

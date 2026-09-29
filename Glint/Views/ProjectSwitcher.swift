@@ -35,6 +35,8 @@ struct ProjectTitle: View {
 struct ProjectSwitcher: View {
   @Bindable var session: RepositorySession
   @State private var projects: [URL] = []
+  /// The project open in this window, listed first and ticked.
+  @State private var currentPath: String?
   @State private var query = ""
   @State private var highlighted = 0
   @State private var listHeight: CGFloat = 0
@@ -64,7 +66,7 @@ struct ProjectSwitcher: View {
               ForEach(Array(matches.enumerated()), id: \.element) { index, url in
                 row(url, highlighted: index == highlighted)
                   .id(index)
-                  .onTapGesture { session.openProject(url) }
+                  .onTapGesture { open(url) }
               }
             }
             .padding(6)
@@ -92,11 +94,12 @@ struct ProjectSwitcher: View {
     }
     .frame(width: 380)
     .onAppear {
-      // The open project is already the window title, so it isn't offered
-      // here. The first row is the one you had open before, so Return flips
-      // back to it.
-      let open = session.projectURL?.standardizedFileURL.path
-      projects = session.recentProjects().filter { $0.standardizedFileURL.path != open }
+      // The open project comes first, ticked and highlighted, as in Zed:
+      // the list starts from where you are. ↓ then Return switches.
+      let current = session.projectURL?.standardizedFileURL
+      currentPath = current?.path
+      let others = session.recentProjects().filter { $0.standardizedFileURL.path != currentPath }
+      projects = (current.map { [$0] } ?? []) + others
       highlighted = 0
       searchFocused = true
     }
@@ -124,16 +127,29 @@ struct ProjectSwitcher: View {
 
   private func openHighlighted() {
     guard matches.indices.contains(highlighted) else { return }
-    session.openProject(matches[highlighted])
+    open(matches[highlighted])
   }
 
+  /// Switches, or for the project already open, just closes the list.
+  private func open(_ url: URL) {
+    if isCurrent(url) {
+      session.isProjectSwitcherShown = false
+    } else {
+      session.openProject(url)
+    }
+  }
+
+  private func isCurrent(_ url: URL) -> Bool { url.standardizedFileURL.path == currentPath }
+
   private func row(_ url: URL, highlighted: Bool) -> some View {
-    HStack(spacing: 8) {
-      Image(systemName: "folder")
-        .foregroundStyle(.secondary)
+    let current = isCurrent(url)
+    return HStack(spacing: 8) {
+      Image(systemName: current ? "checkmark" : "folder")
+        .foregroundStyle(current ? Color.themeAccent : .secondary)
         .frame(width: 16)
       VStack(alignment: .leading, spacing: 2) {
         Text(url.lastPathComponent)
+          .fontWeight(current ? .semibold : .regular)
           .lineLimit(1)
         Text((url.deletingLastPathComponent().path as NSString).abbreviatingWithTildeInPath)
           .font(.app(.caption))
@@ -148,6 +164,7 @@ struct ProjectSwitcher: View {
     .background(
       RoundedRectangle(cornerRadius: 5).fill(highlighted ? Color.themeAccent.opacity(0.2) : .clear))
     .contentShape(Rectangle())
-    .help(url.path)
+    .help(current ? "\(url.path), open now" : url.path)
+    .accessibilityAddTraits(current ? .isSelected : [])
   }
 }

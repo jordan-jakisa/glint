@@ -198,7 +198,10 @@ struct ZedChangesList: View {
   /// Zed's entry menu, in Zed's order.
   @ViewBuilder private func menu(for entry: Entry) -> some View {
     Button("Open Diff") { session.selectedChange = ChangeSelection(staged: false, path: entry.path) }
-    Button("View File") { session.openFile(entry.path) }
+    Button("Open File") { session.openFile(entry.path) }
+      .disabled(entry.kind == .deleted)
+    Button("Open in Default App") { session.openInDefaultApp(entry.path) }
+      .disabled(entry.kind == .deleted)
     Button("View File History") { session.showHistory(for: entry.path) }
     Divider()
     Button(entry.state == .all ? "Unstage" : "Stage") { session.setStaged(entry.path, entry.state != .all) }
