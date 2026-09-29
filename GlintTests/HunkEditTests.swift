@@ -149,3 +149,40 @@ import Testing
     #expect(found["3"] == .number)
   }
 }
+
+@MainActor @Suite struct AutosaveTests {
+  private func file(_ content: String) throws -> URL {
+    let url = FileManager.default.temporaryDirectory.appendingPathComponent(UUID().uuidString + ".ts")
+    try content.write(to: url, atomically: true, encoding: .utf8)
+    return url
+  }
+
+  @Test func savesAfterYouPauseTyping() async throws {
+    let url = try file("a\nb\n")
+    let edit = LiveEdit(url: url, content: "a\nb\n", start: 0, count: 2, wholeFile: true)
+    edit.autosaveDelay = .milliseconds(50)
+    edit.text = "a\nB"
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(try String(contentsOf: url, encoding: .utf8) == "a\nB\n")
+    #expect(!edit.hasUnsavedChanges)
+  }
+
+  @Test func changesFromDiskDontTriggerASave() async throws {
+    let url = try file("a\n")
+    let edit = LiveEdit(url: url, content: "a\n", start: 0, count: 1, wholeFile: true)
+    edit.autosaveDelay = .milliseconds(50)
+    try "b\n".write(to: url, atomically: true, encoding: .utf8)
+    edit.syncFromDisk()
+    #expect(edit.text == "b")
+    try await Task.sleep(for: .milliseconds(300))
+    #expect(try String(contentsOf: url, encoding: .utf8) == "b\n")
+  }
+
+  @Test func withoutADelayNothingSavesOnItsOwn() async throws {
+    let url = try file("a\n")
+    let edit = LiveEdit(url: url, content: "a\n", start: 0, count: 1)
+    edit.text = "changed"
+    try await Task.sleep(for: .milliseconds(200))
+    #expect(try String(contentsOf: url, encoding: .utf8) == "a\n")
+  }
+}

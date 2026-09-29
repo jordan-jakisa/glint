@@ -273,7 +273,7 @@ struct FileEditorPane: View {
     } else {
       EmptyState(
         "Pick a file", systemImage: "doc.text",
-        description: Text("Open any file in the project from the list. \u{2318}S saves."))
+        description: Text("Open any file in the project from the list. It saves as you type."))
     }
   }
 }

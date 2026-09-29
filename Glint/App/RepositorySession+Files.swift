@@ -79,6 +79,7 @@ extension RepositorySession {
     }
     closeOpenedFile()
     let edit = LiveEdit(url: url, content: content, start: 0, count: LiveEdit.split(content).lines.count, wholeFile: true)
+    edit.autosaveDelay = .seconds(1)
     edit.startWatching()
     openedFile = edit
     openedFilePath = path

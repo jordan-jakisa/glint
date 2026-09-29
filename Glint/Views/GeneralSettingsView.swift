@@ -9,6 +9,7 @@ struct GeneralSettingsView: View {
   @AppStorage("gitPanelTree") private var isTree = false
   @AppStorage("wordDiff") private var wordDiff = true
   @AppStorage("syntaxHighlighting") private var syntaxHighlighting = true
+  @AppStorage("autosave") private var autosave = true
   @AppStorage("showsAllRepositories") private var showsAllRepositories = false
   @AppStorage("terminalShown") private var terminalShown = false
   @State private var recentsCleared = false
@@ -69,6 +70,14 @@ struct GeneralSettingsView: View {
         isModified: showsAllRepositories, reset: { showsAllRepositories = false }
       ) {
         Toggle("Show every repository's changes", isOn: $showsAllRepositories).labelsHidden().toggleStyle(.switch)
+      }
+
+      SettingsSection(title: "Editor")
+      SettingsRow(
+        title: "Autosave", description: "Saves a file a second after you stop typing. Otherwise \u{2318}S.",
+        isModified: !autosave, reset: { autosave = true }
+      ) {
+        Toggle("Autosave", isOn: $autosave).labelsHidden().toggleStyle(.switch)
       }
 
       SettingsSection(title: "Terminal")

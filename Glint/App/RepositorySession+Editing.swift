@@ -14,7 +14,12 @@ final class LiveEdit: Identifiable {
   /// The whole file, opened from the list or Open File, not a hunk.
   let isWholeFile: Bool
   /// What's in the editor.
-  var text: String
+  var text: String {
+    didSet { if !isApplyingDisk, text != oldValue { scheduleAutosave() } }
+  }
+  /// Saves on its own once you pause typing, like Zed's `after_delay`. The
+  /// Files tab's editor does; the hunk editor keeps Save and Cancel.
+  @ObservationIgnored var autosaveDelay: Duration?
   /// The first line shown, 0-based, in the file as it is on disk.
   private(set) var startLine: Int
   /// Said once something changed on disk, until you save.
@@ -28,6 +33,8 @@ final class LiveEdit: Identifiable {
   @ObservationIgnored private var lineEnding = "\n"
   @ObservationIgnored private var endsWithNewline = true
   @ObservationIgnored private var watch: Task<Void, Never>?
+  @ObservationIgnored private var autosave: Task<Void, Never>?
+  @ObservationIgnored private var isApplyingDisk = false
 
   /// Opens lines `start..<start + count` (0-based) of `content`, the file
   /// at `url` as just read.
@@ -70,7 +77,24 @@ final class LiveEdit: Identifiable {
     }
   }
 
+  private func scheduleAutosave() {
+    // Settings, General, Autosave: read each time, so switching it takes
+    // effect on the file already open.
+    guard let autosaveDelay, UserDefaults.standard.object(forKey: "autosave") as? Bool ?? true else { return }
+    autosave?.cancel()
+    autosave = Task { [weak self] in
+      try? await Task.sleep(for: autosaveDelay)
+      guard !Task.isCancelled, let self, self.hasUnsavedChanges else { return }
+      do {
+        try self.save()
+      } catch {
+        self.note = "Couldn't save: \(error.localizedDescription)"
+      }
+    }
+  }
+
   func stopWatching() {
+    autosave?.cancel()
     watch?.cancel()
     watch = nil
   }
@@ -106,7 +130,12 @@ final class LiveEdit: Identifiable {
     } else if region != text {
       note = "Picked up changes made on disk."
     }
-    if region != text { text = region }
+    if region != text {
+      // Their change, not yours: nothing to autosave.
+      isApplyingDisk = true
+      text = region
+      isApplyingDisk = false
+    }
   }
 
   /// Writes the file: what's on disk now, with your lines in place.
