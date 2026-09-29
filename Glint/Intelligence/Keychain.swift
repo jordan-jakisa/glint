@@ -11,9 +11,10 @@ import Security
 /// can't lock you out. Keys an older build left in the login keychain are
 /// moved over the first time they're read.
 enum Keychain {
-  private static let service = "com.kerustudios.glint.ai"
+  /// Tests point these at throwaway items, never the real key.
+  nonisolated(unsafe) static var service = "com.kerustudios.glint.ai"
   /// Where Glint kept keys when it was called Adit.
-  private static let oldService = "com.kerustudios.adit.ai"
+  nonisolated(unsafe) static var oldService = "com.kerustudios.adit.ai"
   /// Set once the data protection keychain says this build lacks the
   /// entitlement. Then keys stay where they are in the login keychain:
   /// moving them would only delete and re-add them on every launch.
