@@ -29,9 +29,9 @@ struct RootView: View {
         session.refresh()
       }
       .sheet(
-        item: Binding(get: { session.editingHunk }, set: { session.editingHunk = $0 })
+        item: Binding(get: { session.editingHunk }, set: { if $0 == nil { session.endEdit() } })
       ) { edit in
-        HunkEditor(edit: edit, save: session.saveEdit) { session.editingHunk = nil }
+        HunkEditor(edit: edit, save: session.saveEdit, cancel: session.endEdit)
           .font(.app(.body))
           .tint(.themeAccent)
           .themedTextLevels()

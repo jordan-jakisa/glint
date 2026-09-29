@@ -498,10 +498,21 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
       color: line.kind == .noNewline ? .secondaryLabelColor : Theme.shared.codeText,
       at: NSPoint(x: x + DiffMetrics.markerWidth, y: DiffMetrics.verticalPadding),
       width: DiffMetrics.textDrawWidth(width), in: context,
-      highlights: emphasis, highlightColor: Self.emphasis(line.kind))
+      highlights: emphasis, highlightColor: Self.emphasis(line.kind), syntax: syntax(line))
     if let inline, line.kind == .context || line.kind == .addition {
       drawInlineBlame(inline, after: line, x: x + DiffMetrics.markerWidth, width: width, in: context)
     }
+  }
+
+  /// A line's syntax colours, lexed as it's drawn: a line costs far less
+  /// than typesetting it, and only lines on screen are drawn.
+  private func syntax(_ line: DiffLine) -> [SyntaxSpan] {
+    guard line.kind != .noNewline, let language = row?.language, SyntaxTheme.isEnabled else { return [] }
+    let spans = Syntax.spans(inLine: line.text, language: language)
+    guard !spans.isEmpty, line.text.utf8.contains(UInt8(ascii: "\t")) else { return spans }
+    // Tabs are drawn as spaces; move the spans with them.
+    let moved = WordDiff.displayRanges(spans.map(\.range), in: line.text, tabWidth: DiffMetrics.tabWidth)
+    return zip(spans, moved).map { SyntaxSpan(range: $1, kind: $0.kind) }
   }
 
   // MARK: - Colors

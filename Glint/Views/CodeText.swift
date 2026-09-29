@@ -13,13 +13,14 @@ enum CodeText {
   ///
   /// `highlights` (UTF-16 ranges of `text`, sorted) get `highlightColor`
   /// behind them, on every wrapped line they reach: the changed words of a
-  /// word diff.
+  /// word diff. `syntax` colours the text itself.
   static func draw(
     _ text: String, color: NSColor, at origin: NSPoint, width: CGFloat, in context: CGContext,
-    highlights: [Range<Int>] = [], highlightColor: NSColor? = nil
+    highlights: [Range<Int>] = [], highlightColor: NSColor? = nil, syntax: [SyntaxSpan] = []
   ) {
     guard !text.isEmpty else { return }
-    let typesetter = CTTypesetterCreateWithAttributedString(attributed(text, color: color))
+    let string = attributed(text, color: color)
+    let typesetter = CTTypesetterCreateWithAttributedString(syntax.isEmpty ? string : coloured(string, syntax))
     let length = (text as NSString).length
     let highlightFill = highlights.isEmpty ? nil : highlightColor?.cgColor
     var start = 0
@@ -67,6 +68,17 @@ enum CodeText {
       kCTForegroundColorAttributeName: color.cgColor,
     ]
     return CFAttributedStringCreate(nil, text as CFString, attributes as CFDictionary)
+  }
+
+  private static func coloured(_ string: CFAttributedString, _ spans: [SyntaxSpan]) -> CFAttributedString {
+    let length = CFAttributedStringGetLength(string)
+    guard let mutable = CFAttributedStringCreateMutableCopy(nil, length, string) else { return string }
+    for span in spans where span.range.upperBound <= length {
+      CFAttributedStringSetAttribute(
+        mutable, CFRange(location: span.range.lowerBound, length: span.range.count), kCTForegroundColorAttributeName,
+        SyntaxTheme.color(span.kind).cgColor)
+    }
+    return mutable
   }
 
   /// The parts of `ranges` on this wrapped line, filled behind its text.

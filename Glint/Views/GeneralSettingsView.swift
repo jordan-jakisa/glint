@@ -8,6 +8,7 @@ struct GeneralSettingsView: View {
   @AppStorage("diffLayout") private var layout = DiffLayout.split
   @AppStorage("gitPanelTree") private var isTree = false
   @AppStorage("wordDiff") private var wordDiff = true
+  @AppStorage("syntaxHighlighting") private var syntaxHighlighting = true
   @AppStorage("showsAllRepositories") private var showsAllRepositories = false
   @AppStorage("terminalShown") private var terminalShown = false
   @State private var recentsCleared = false
@@ -57,6 +58,12 @@ struct GeneralSettingsView: View {
         Toggle("Highlight changed words", isOn: $wordDiff).labelsHidden().toggleStyle(.switch)
       }
       SettingsRow(
+        title: "Syntax colours", description: "Colours code in diffs and the editor, like Zed's One theme.",
+        isModified: !syntaxHighlighting, reset: { syntaxHighlighting = true }
+      ) {
+        Toggle("Syntax colours", isOn: $syntaxHighlighting).labelsHidden().toggleStyle(.switch)
+      }
+      SettingsRow(
         title: "Show every repository's changes",
         description: "In a folder of repositories, lists the others' changes too.",
         isModified: showsAllRepositories, reset: { showsAllRepositories = false }
@@ -100,6 +107,7 @@ struct GeneralSettingsView: View {
     .onChange(of: showsAllRepositories) { preferencesChanged() }
     .onChange(of: terminalShown) { preferencesChanged() }
     .onChange(of: wordDiff) { preferencesChanged() }
+    .onChange(of: syntaxHighlighting) { preferencesChanged() }
   }
 
   private func preferencesChanged() {

@@ -54,7 +54,39 @@ enum ZedPalette {
     appearance.bestMatch(from: [.darkAqua, .aqua]) == .darkAqua
   }
 
-  private static func pair(_ dark: UInt32, _ light: UInt32) -> NSColor {
+  static func pair(_ dark: UInt32, _ light: UInt32) -> NSColor {
     NSColor(name: nil) { appearance in rgb(isDark(appearance) ? dark : light) }
   }
+}
+
+/// Syntax colours: Zed's One Dark and One Light `syntax` keys.
+enum SyntaxTheme {
+  private static let keyword = ZedPalette.pair(0xb477cf, 0xa449ab)
+  private static let string = ZedPalette.pair(0xa1c181, 0x649f57)
+  private static let comment = ZedPalette.pair(0x5d636f, 0xa2a3a7)
+  private static let docComment = ZedPalette.pair(0x878e98, 0x7c7e86)
+  private static let number = ZedPalette.pair(0xbf956a, 0xad6e25)
+  private static let type = ZedPalette.pair(0x6eb4bf, 0x3882b7)
+  private static let function = ZedPalette.pair(0x73ade9, 0x5b79e3)
+  private static let constant = ZedPalette.pair(0xdfc184, 0xc18401)
+  private static let property = ZedPalette.pair(0xd07277, 0xd3604f)
+  private static let attribute = ZedPalette.pair(0x74ade8, 0x5c78e2)
+
+  static func color(_ kind: SyntaxKind) -> NSColor {
+    switch kind {
+    case .keyword, .preproc: keyword
+    case .string: string
+    case .comment: comment
+    case .docComment: docComment
+    case .number, .boolean, .variable: number
+    case .type: type
+    case .function: function
+    case .constant: constant
+    case .property, .title: property
+    case .attribute, .tag: attribute
+    }
+  }
+
+  /// Whether code is coloured: Settings, General.
+  static var isEnabled: Bool { UserDefaults.standard.object(forKey: "syntaxHighlighting") as? Bool ?? true }
 }

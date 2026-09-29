@@ -230,7 +230,7 @@ final class RepositorySession {
   /// Changed lines selected in a working-tree diff, for line staging.
   internal(set) var selectedLineRows: [DiffRowID] = []
   /// The hunk open in the editor sheet, if any.
-  var editingHunk: HunkEdit?
+  var editingHunk: LiveEdit?
   /// The conflicted file on screen, as last read from disk, for resolving
   /// its conflicts. See `+Conflicts`.
   internal(set) var conflictDocument: ConflictDocument?

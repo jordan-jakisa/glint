@@ -49,6 +49,8 @@ struct DiffRow: Identifiable, Sendable {
   var inMixedHunk = false
   /// The row's file is fully staged (Style Zed's Uncommitted Changes).
   var fileIsStaged = false
+  /// The file's language, for syntax colours.
+  var language: SyntaxLanguage?
 
   /// Why a file with no hunks is in the diff at all.
   static func emptyNote(_ status: FileChange.Status) -> String {
@@ -77,6 +79,7 @@ struct DiffRow: Identifiable, Sendable {
         rows.append(DiffRow(id: .note(file.id), content: .note(Self.emptyNote(file.status))))
       }
 
+      let language = SyntaxLanguage.forPath(file.newPath ?? file.path)
       for hunk in file.hunks {
         rows.append(DiffRow(id: .hunk(file.id, hunk.id), content: .hunkHeader(hunk), fileIsStaged: file.isStaged))
         let mixed =
@@ -84,11 +87,11 @@ struct DiffRow: Identifiable, Sendable {
         switch layout {
         case .unified:
           for (index, line) in hunk.lines.enumerated() {
-            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .line(line), inMixedHunk: mixed, fileIsStaged: file.isStaged))
+            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .line(line), inMixedHunk: mixed, fileIsStaged: file.isStaged, language: language))
           }
         case .split:
           for (index, row) in hunk.splitRows.enumerated() {
-            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .split(row), inMixedHunk: mixed, fileIsStaged: file.isStaged))
+            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .split(row), inMixedHunk: mixed, fileIsStaged: file.isStaged, language: language))
           }
         }
       }

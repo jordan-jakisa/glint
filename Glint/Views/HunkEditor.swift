@@ -1,34 +1,36 @@
 import SwiftUI
 
-/// Edits a hunk of your working copy in place: the lines as they are now, in
-/// the code font. ⌘S or ⌘↩ saves to the file; Escape cancels.
+/// Edits lines of your working copy in place, with syntax colours and line
+/// numbers, kept in step with the file on disk while it's open. ⌘S or ⌘↩
+/// saves; Escape cancels.
 struct HunkEditor: View {
-  @State var edit: HunkEdit
-  let save: (HunkEdit) -> Void
+  @Bindable var edit: LiveEdit
+  let save: (LiveEdit) -> Void
   let cancel: () -> Void
-  @FocusState private var focused: Bool
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       HStack {
         Text(edit.fileName).font(.app(.headline))
-        Text("lines \(edit.startLine)\u{2013}\(edit.endLine)")
+        Text("lines \(edit.firstLineNumber)\u{2013}\(edit.lastLineNumber)")
           .foregroundStyle(.secondary)
         Spacer()
+        if let language = edit.language {
+          Text(language.name)
+            .font(.app(.caption))
+            .foregroundStyle(.secondary)
+        }
       }
       .padding(12)
       Hairline()
-      TextEditor(text: $edit.text)
-        .font(.code(.body))
-        .scrollContentBackground(.hidden)
-        .focused($focused)
-        .padding(8)
-        .frame(minWidth: 640, minHeight: 320)
+      CodeEditor(text: $edit.text, language: edit.language, firstLine: edit.firstLineNumber)
+        .frame(minWidth: 720, minHeight: 360)
       Hairline()
       HStack {
-        Text("Saves to the file on disk.")
+        Text(edit.note ?? "Stays in step with the file on disk.")
           .font(.app(.caption))
           .foregroundStyle(.secondary)
+          .lineLimit(1)
         Spacer()
         Button("Cancel", action: cancel)
           .keyboardShortcut(.cancelAction)
@@ -41,6 +43,5 @@ struct HunkEditor: View {
       }
       .padding(12)
     }
-    .onAppear { focused = true }
   }
 }
