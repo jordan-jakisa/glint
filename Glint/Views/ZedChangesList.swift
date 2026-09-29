@@ -9,7 +9,9 @@ import SwiftUI
 struct ZedChangesList: View {
   @Bindable var session: RepositorySession
   @AppStorage("gitPanelTree") private var isTree = false
-  @AppStorage("gitPanelSortByName") private var sortByName = false
+  /// Zed's Sort By, as Glint's File order: one order for the list and the
+  /// diff, so they always match.
+  @AppStorage("fileOrder") private var fileOrder = FileOrder.smart
   @AppStorage("gitPanelGroupBy") private var groupBy = Grouping.trackedUntracked
 
   /// Zed's Group By.
@@ -72,9 +74,9 @@ struct ZedChangesList: View {
           Text("Tree").tag(true)
         }
         .pickerStyle(.inline)
-        Picker("Sort By", selection: $sortByName) {
-          Text("Path").tag(false)
-          Text("Name").tag(true)
+        Picker("Sort By", selection: $fileOrder) {
+          Text("Source First").tag(FileOrder.smart)
+          Text("Path").tag(FileOrder.path)
         }
         .pickerStyle(.inline)
         Picker("Group By", selection: $groupBy) {
@@ -88,6 +90,9 @@ struct ZedChangesList: View {
       }
       .menuStyle(.borderlessButton)
       .menuIndicator(.hidden)
+      .onChange(of: fileOrder) {
+        NotificationCenter.default.post(name: RepositorySession.preferencesChanged, object: nil)
+      }
       .fixedSize()
       .tint(.secondary)
       .help("View options")
@@ -249,9 +254,7 @@ struct ZedChangesList: View {
 
   /// Each path once, staged and unstaged together.
   private var entries: [Entry] {
-    let entries = session.status.entries
-    guard sortByName else { return entries }
-    return entries.sorted { ($0.fileName, $0.path) < ($1.fileName, $1.path) }
+    session.status.entries
   }
 
   private var totals: LineStat {

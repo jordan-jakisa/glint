@@ -106,6 +106,13 @@ import Testing
     #expect(states == ["added.ts": .all, "both.ts": .partial, "new.ts": StageState.none, "edited.ts": StageState.none])
   }
 
+  @Test func listOrderIsTheDiffsFileOrder() {
+    let paths = ["notifications/tests/test_marketing.py", "common/brands/uniwunder.json", "notifications/services/emails.py"]
+    let status = WorkingTreeStatus(staged: [], unstaged: paths.map { ChangedFile(path: $0, kind: .modified) })
+    #expect(status.entries.map(\.path) == FileOrder.current.sorted(paths, path: { $0 }))
+    #expect(FileOrder.smart.sorted(paths, path: { $0 }).first == "notifications/services/emails.py")
+  }
+
   @Test func aStagedNewFileIsTrackedAndAdded() {
     let status = WorkingTreeStatus(staged: [ChangedFile(path: "a.ts", kind: .added)], unstaged: [])
     #expect(status.entries.first?.kind == .added)

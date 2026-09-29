@@ -320,6 +320,7 @@ final class RepositorySession {
   /// Word highlights as the cached diffs were built, to rebuild them when
   /// the setting changes.
   @ObservationIgnored var builtWithWordDiff = WordDiff.isEnabled
+  @ObservationIgnored var builtWithFileOrder = FileOrder.current
   @ObservationIgnored var diffRequestedAt: ContinuousClock.Instant?
   /// The reader's position in the diff: the top-most visible row, or the last
   /// place a keyboard jump landed. Not observed: it changes on every scroll.
@@ -361,6 +362,13 @@ final class RepositorySession {
     }
     let all = defaults.bool(forKey: "showsAllRepositories")
     if all != showsAllRepositories { showsAllRepositories = all }
+    // The list and the diff share one order; changing it re-sorts both.
+    if FileOrder.current != builtWithFileOrder {
+      builtWithFileOrder = FileOrder.current
+      cache = DiffCache(capacity: 32)
+      refreshWorkingTree()
+      showSelectedDiff(inPlace: true)
+    }
     if WordDiff.isEnabled != builtWithWordDiff {
       builtWithWordDiff = WordDiff.isEnabled
       cache = DiffCache(capacity: 32)

@@ -111,7 +111,10 @@ struct GeneralSettingsView: View {
       }
     }
     .onChange(of: terminal) { TerminalApp.preferred = terminal }
-    .onChange(of: fileOrder) { FileOrder.set(fileOrder) }
+    .onChange(of: fileOrder) {
+      FileOrder.set(fileOrder)
+      preferencesChanged()
+    }
     .onChange(of: layout) { preferencesChanged() }
     .onChange(of: showsAllRepositories) { preferencesChanged() }
     .onChange(of: terminalShown) { preferencesChanged() }

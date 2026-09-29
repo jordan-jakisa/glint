@@ -87,12 +87,13 @@ struct StagingEntry: Identifiable, Hashable, Sendable {
 }
 
 extension WorkingTreeStatus {
-  /// Each path once, sorted by path. A file only in the staged group is
+  /// Each path once, in the File order setting's order, the same as the
+  /// diff's. A file only in the staged group is
   /// fully staged; in both, partly; only unstaged, not at all.
   var entries: [StagingEntry] {
     let staged = Dictionary(self.staged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
     let unstaged = Dictionary(self.unstaged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
-    return Set(staged.keys).union(unstaged.keys).sorted().map { path in
+    return FileOrder.current.sorted(Array(Set(staged.keys).union(unstaged.keys)), path: { $0 }).map { path in
       let state: StageState = unstaged[path] == nil ? .all : (staged[path] == nil ? .none : .partial)
       // A new file with later edits is still new: say so, not "modified".
       let kind =
