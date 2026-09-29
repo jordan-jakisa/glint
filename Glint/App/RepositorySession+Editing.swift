@@ -49,6 +49,12 @@ final class LiveEdit: Identifiable {
     text = file.lines[first..<(first + length)].joined(separator: "\n")
   }
 
+  /// Whether the editor differs from the file on disk.
+  var hasUnsavedChanges: Bool {
+    _ = text
+    return edited != disk
+  }
+
   var firstLineNumber: Int { startLine + 1 }
   var lastLineNumber: Int { startLine + max(editedLines.count, 1) }
 

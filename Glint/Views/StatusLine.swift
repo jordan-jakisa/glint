@@ -22,6 +22,7 @@ struct StatusLine: View {
       HStack(spacing: 10) {
         tab(.changes, "Changes")
         tab(.history, "History")
+        tab(.files, "Files")
       }
       BranchBar(session: session, isInStatusLine: true)
       LayoutToggle(session: session).hitTarget()

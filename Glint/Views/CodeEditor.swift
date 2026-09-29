@@ -59,6 +59,8 @@ struct CodeEditor: NSViewRepresentable {
     scrollView.verticalRulerView = ruler
     scrollView.hasVerticalRuler = true
     scrollView.rulersVisible = true
+    // Lays the text out beside the gutter, not under it.
+    scrollView.tile()
     context.coordinator.highlight(textView)
     DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
     return scrollView
@@ -170,7 +172,9 @@ final class LineNumberRuler: NSRulerView {
     let lines = (textView?.string.utf16.reduce(0) { $1 == 10 ? $0 + 1 : $0 } ?? 0) + 1
     let digits = max(String(firstLine + lines).count, 3)
     let thickness = ceil(CGFloat(digits) * DiffMetrics.advance + 24)
-    if ruleThickness != thickness { ruleThickness = thickness }
+    guard ruleThickness != thickness else { return }
+    ruleThickness = thickness
+    scrollView?.tile()
   }
 
   override var isOpaque: Bool { true }

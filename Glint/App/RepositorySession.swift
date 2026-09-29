@@ -18,7 +18,7 @@ final class RepositorySession {
   }
 
   enum Tab: String {
-    case changes, history
+    case changes, history, files
   }
 
   private(set) var phase: Phase = .closed(message: nil)
@@ -92,6 +92,19 @@ final class RepositorySession {
   var tab: Tab = .changes {
     didSet { if tab != oldValue { showSelectedDiff() } }
   }
+
+  // MARK: Files tab
+
+  /// Every file in the project that git doesn't ignore, sorted by path.
+  internal(set) var projectFiles: [String] = []
+  /// Files and folders (ending in `/`) that `.gitignore` hides, shown
+  /// dimmed. Folders load what's inside only when opened.
+  internal(set) var ignoredFiles: Set<String> = []
+  internal(set) var ignoredFolders: Set<String> = []
+  /// The file open in the Files tab's editor.
+  internal(set) var openedFile: LiveEdit?
+  /// Its path from the repository root.
+  internal(set) var openedFilePath: String?
 
   // MARK: Changes tab
 
@@ -563,6 +576,10 @@ final class RepositorySession {
   }
 
   func install(_ opened: Opened, selecting preferred: ChangeSelection? = nil) {
+    closeOpenedFile()
+    projectFiles = []
+    ignoredFiles = []
+    ignoredFolders = []
     diffTask?.cancel()
     prefetchTask?.cancel()
     statusTask?.cancel()
@@ -646,6 +663,8 @@ final class RepositorySession {
       selectedChange.map { Theme.shared.isZed ? .workingTree(staged: $0.staged, path: nil) : $0.source }
     case .history:
       selectedCommitID == Self.branchSelectionID ? .branch : selectedCommitID.map(DiffSource.commit)
+    case .files:
+      nil
     }
   }
 
@@ -787,6 +806,7 @@ final class RepositorySession {
     switch tab {
     case .changes: moveChangeSelection(by: 1)
     case .history: moveCommitSelection(by: 1)
+    case .files: break
     }
   }
 
@@ -794,6 +814,7 @@ final class RepositorySession {
     switch tab {
     case .changes: moveChangeSelection(by: -1)
     case .history: moveCommitSelection(by: -1)
+    case .files: break
     }
   }
 }

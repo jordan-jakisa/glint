@@ -28,6 +28,10 @@ struct RootView: View {
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         session.refresh()
       }
+      // The Files tab's edits aren't lost when you quit.
+      .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+        session.closeOpenedFile()
+      }
       .sheet(
         item: Binding(get: { session.editingHunk }, set: { if $0 == nil { session.endEdit() } })
       ) { edit in
@@ -111,6 +115,7 @@ struct RootView: View {
       NavigationSplitView(columnVisibility: $columns) {
         SidebarView(session: session)
           .modifier(FlatSidebarToggle())
+          .modifier(SidebarTitleToolbar(session: session, columns: $columns))
           .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 480)
       } detail: {
         DiffAndTerminal(session: session)
@@ -255,14 +260,18 @@ private struct DiffToolbar: ViewModifier {
       let glass: Visibility = Theme.shared.usesLiquidGlass ? .automatic : .hidden
       content.toolbar {
         if !minimal {
-          // The system's sidebar button is glass and can't be flattened, so
-          // with glass off it's removed and this one stands in.
-          if !Theme.shared.usesLiquidGlass {
-            ToolbarItem(placement: .navigation) { sidebarButton }
-              .sharedBackgroundVisibility(.hidden)
+          // With the sidebar open these sit over it, by the window buttons
+          // (SidebarTitleToolbar); only with it hidden do they move here.
+          if columns == .detailOnly {
+            // The system's sidebar button is glass and can't be flattened, so
+            // with glass off it's removed and this one stands in.
+            if !Theme.shared.usesLiquidGlass {
+              ToolbarItem(placement: .navigation) { sidebarButton }
+                .sharedBackgroundVisibility(.hidden)
+            }
+            ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
+              .sharedBackgroundVisibility(glass)
           }
-          ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
-            .sharedBackgroundVisibility(glass)
           ToolbarSpacer(.flexible)
           ToolbarItem { terminalButton }
             .sharedBackgroundVisibility(glass)
@@ -339,6 +348,41 @@ private struct MinimalChrome: ViewModifier {
             Theme.shared.statusBarBackground.map { AnyShapeStyle(Color(nsColor: $0)) } ?? AnyShapeStyle(.bar))
         }
       }
+  }
+}
+
+/// The sidebar button and the project's name, over the sidebar right after
+/// the window buttons, as in Zed's title bar. With the sidebar hidden,
+/// `DiffToolbar` shows them instead.
+private struct SidebarTitleToolbar: ViewModifier {
+  @Bindable var session: RepositorySession
+  @Binding var columns: NavigationSplitViewVisibility
+
+  func body(content: Content) -> some View {
+    if #available(macOS 26, *), !Theme.shared.isMinimal {
+      content.toolbar {
+        ToolbarItem {
+          HStack(spacing: 2) {
+            if !Theme.shared.usesLiquidGlass {
+              Button {
+                withAnimation(Motion.reveal) { columns = .detailOnly }
+              } label: {
+                Label("Sidebar", systemImage: "sidebar.left")
+              }
+              .buttonStyle(.borderless)
+              .labelStyle(.iconOnly)
+              .help("Hide the sidebar")
+            }
+            ProjectTitle(session: session)
+          }
+        }
+        .sharedBackgroundVisibility(Theme.shared.usesLiquidGlass ? .automatic : .hidden)
+        // Pushes them left, against the window buttons.
+        ToolbarSpacer(.flexible)
+      }
+    } else {
+      content
+    }
   }
 }
 

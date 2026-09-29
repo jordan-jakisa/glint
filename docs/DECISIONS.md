@@ -225,3 +225,13 @@ Keys live in the Keychain.
 
 A local model is still open, for people who can't send code anywhere. ACP
 agents (opencode, Claude Code, Gemini CLI) are the other candidate for later.
+
+## Files tab: browse and edit any file (2026-09-29)
+
+Asked for directly: a Files tab beside Changes and History lists the whole
+project (every repository in a folder of repositories, each as a folder), with
+files `.gitignore` hides shown dimmed and ignored folders read only when opened.
+A file opens in the same editor as hunk edits: syntax colours, line numbers,
+kept in step with the file on disk, ⌘S to save, saved when you switch files or
+quit. This goes past "a git panel"; it earns its place because fixing what a
+diff shows, or a file an agent just wrote, shouldn't mean opening another app.

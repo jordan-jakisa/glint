@@ -15,6 +15,7 @@ struct SidebarView: View {
       switch session.tab {
       case .changes: ChangesView(session: session)
       case .history: CommitListView(session: session)
+      case .files: FilesView(session: session)
       }
     }
     // Style Zed: the panel's own colour instead of the sidebar material.
@@ -51,6 +52,7 @@ private struct TabPickerToolbar: ViewModifier {
     Picker("View", selection: $session.tab) {
       Text("Changes").tag(RepositorySession.Tab.changes)
       Text("History").tag(RepositorySession.Tab.history)
+      Text("Files").tag(RepositorySession.Tab.files)
     }
     .pickerStyle(.segmented)
     .labelsHidden()
@@ -68,6 +70,8 @@ private struct ZedTabBar: View {
       tab(.changes, "Changes", count: changeCount)
       Hairline(axis: .vertical)
       tab(.history, "History", count: nil)
+      Hairline(axis: .vertical)
+      tab(.files, "Files", count: nil)
     }
     .frame(height: 32)
   }

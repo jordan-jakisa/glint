@@ -5,8 +5,10 @@ struct DiffPane: View {
   @Bindable var session: RepositorySession
 
   var body: some View {
-    // A conflicted file shows its conflicts to resolve, not a diff.
-    if let path = session.selectedConflictPath {
+    if session.tab == .files {
+      FileEditorPane(session: session)
+    } else if let path = session.selectedConflictPath {
+      // A conflicted file shows its conflicts to resolve, not a diff.
       ConflictView(session: session, path: path)
     } else if let error = session.diffError {
       // Minimal shows no title, so the description says what failed.

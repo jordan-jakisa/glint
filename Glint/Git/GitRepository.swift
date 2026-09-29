@@ -121,6 +121,45 @@ actor GitRepository {
     return result
   }
 
+  /// Every file in the index, like `git ls-files`, submodules left out.
+  func trackedPaths() throws -> [String] {
+    try reloadIndex()
+    var index: OpaquePointer?
+    try GitError.check(git_repository_index(&index, handle), "Couldn't read the index.")
+    defer { git_index_free(index) }
+    let count = git_index_entrycount(index)
+    var paths: [String] = []
+    paths.reserveCapacity(count)
+    for position in 0..<count {
+      guard let entry = git_index_get_byindex(index, position)?.pointee, entry.mode != 0o160000,
+        let path = entry.path
+      else { continue }
+      paths.append(String(cString: path))
+    }
+    return paths
+  }
+
+  /// What `.gitignore` hides: files, and whole folders as one entry each
+  /// ending in `/` (never walked into, so `node_modules` costs nothing).
+  func ignoredPaths() throws -> [String] {
+    var options = git_status_options()
+    git_status_options_init(&options, UInt32(GIT_STATUS_OPTIONS_VERSION))
+    options.show = GIT_STATUS_SHOW_WORKDIR_ONLY
+    options.flags = GIT_STATUS_OPT_INCLUDE_IGNORED.rawValue | GIT_STATUS_OPT_EXCLUDE_SUBMODULES.rawValue
+    var list: OpaquePointer?
+    try GitError.check(git_status_list_new(&list, handle, &options), "Couldn't read ignored files.")
+    defer { git_status_list_free(list) }
+    var paths: [String] = []
+    for index in 0..<git_status_list_entrycount(list) {
+      guard let entry = git_status_byindex(list, index)?.pointee,
+        entry.status.rawValue & GIT_STATUS_IGNORED.rawValue != 0,
+        let delta = entry.index_to_workdir, let path = delta.pointee.old_file.path ?? delta.pointee.new_file.path
+      else { continue }
+      paths.append(String(cString: path))
+    }
+    return paths
+  }
+
   // MARK: - Staging
 
   /// Stages whole files, like `git add`. A path that no longer exists on disk
