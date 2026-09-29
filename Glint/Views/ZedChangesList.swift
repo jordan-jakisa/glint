@@ -40,7 +40,9 @@ struct ZedChangesList: View {
           .padding(.vertical, 2)
         }
         .onChange(of: session.selectedChange) { _, selection in
-          if let path = selection?.path { proxy.scrollTo(path) }
+          // The list's own row identity: a second `.id` on the row made the
+          // lazy stack keep stale copies (old ticks, two selections).
+          if let path = selection?.path { proxy.scrollTo("file:" + path) }
         }
       }
     }
@@ -190,7 +192,6 @@ struct ZedChangesList: View {
     }
     .contentShape(Rectangle())
     .onTapGesture { session.selectedChange = ChangeSelection(staged: false, path: entry.path) }
-    .id(entry.path)
     .help(entry.path)
     .contextMenu { menu(for: entry) }
   }

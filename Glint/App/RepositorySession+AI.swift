@@ -27,10 +27,16 @@ extension RepositorySession {
       return
     case .refused:
       // The key is saved; macOS said no this time. A new key won't help.
-      alert = UserAlert(
-        "Paste your key once more",
-        message: "macOS won't let this build read the \(settings.provider.name) key an older one saved. Paste it in Settings one last time: Glint now keeps it where every build can read it, without asking.",
-        opensSettings: true)
+      if AISettings.wasReplacedWhileOpen {
+        alert = UserAlert(
+          "Reopen Glint to use your key",
+          message: "Glint was updated while it was open, so macOS won't hand this copy your \(settings.provider.name) key. Quit and reopen Glint; your key is still saved.")
+      } else {
+        alert = UserAlert(
+          "Couldn't open your key",
+          message: "Your \(settings.provider.name) key is saved, but macOS refused to hand it over. Paste it again in Settings to replace it.",
+          opensSettings: true)
+      }
       return
     }
     guard let repository else { return }

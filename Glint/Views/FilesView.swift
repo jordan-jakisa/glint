@@ -36,7 +36,7 @@ struct FilesView: View {
         ScrollView {
           LazyVStack(spacing: 0) {
             ForEach(rows, id: \.id) { row in
-              rowView(row).id(row.id)
+              rowView(row)
             }
           }
           .padding(.vertical, 2)

@@ -53,6 +53,31 @@ final class AISettings {
     followsRepositoryRules = defaults.object(forKey: "aiRepositoryRules") as? Bool ?? true
     keyState = defaults.dictionary(forKey: "aiKeyState") as? [String: Bool] ?? [:]
     refreshKeyState()
+    _ = Self.launchedBinaryDate
+    // Read the key now, while this copy of Glint is the one on disk, and
+    // keep it for the launch. Rebuilding Glint while it's open replaces the
+    // app file, and macOS then refuses the running copy's keychain reads.
+    if isEnabled, hasKey, !Self.isTesting {
+      Task { @MainActor in _ = self.readKey() }
+    }
+  }
+
+  private static var isTesting: Bool { NSClassFromString("XCTestCase") != nil }
+
+  /// When this copy of the app was built, to tell whether it's been replaced
+  /// on disk since it opened.
+  private static let launchedBinaryDate = binaryDate()
+
+  private static func binaryDate() -> Date? {
+    Bundle.main.executableURL.flatMap {
+      try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date
+    }
+  }
+
+  /// Whether Glint was rebuilt or updated while this copy was open.
+  static var wasReplacedWhileOpen: Bool {
+    guard let launched = launchedBinaryDate, let now = binaryDate() else { return false }
+    return now != launched
   }
 
   /// Looks again at which providers have a key saved, without reading any.
