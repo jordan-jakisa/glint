@@ -57,11 +57,19 @@ enum AIProvider: String, CaseIterable, Identifiable, Sendable {
   }
 
   /// Picks the free chat models out of a provider's `/models` response.
+  /// A router that picks a free model for each request, where the provider
+  /// has one: OpenRouter's Free Models Router. It's the default, first in the
+  /// list, so a busy or retired model never gets in the way.
+  var autoModelID: String? { self == .openRouter ? "openrouter/free" : nil }
+
   func freeModels(from data: Data) throws -> [AIModel] {
     let listing = try JSONDecoder().decode(ModelListing.self, from: data)
     let models = listing.data.filter { isFreeChatModel($0) }
-    return models.map { AIModel(id: $0.id, name: $0.name ?? $0.id) }
+    var sorted = models.map { AIModel(id: $0.id, name: $0.name ?? $0.id) }
+      .filter { $0.id != autoModelID }
       .sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    if let autoModelID { sorted.insert(AIModel(id: autoModelID, name: "Auto (picks a free model)"), at: 0) }
+    return sorted
   }
 
   private func isFreeChatModel(_ model: ModelListing.Entry) -> Bool {

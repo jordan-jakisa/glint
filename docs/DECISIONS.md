@@ -72,6 +72,42 @@ with them means becoming slow.
 The test for any proposed feature: does it make the look, stage, commit loop
 faster? If not, it does not belong.
 
+## Scope: everything Zed's git does (2026-09-28, replaces the scope above)
+
+Asked for directly: Glint covers all of Zed's git features, not only its
+panel. On top of the look, stage, commit loop that means stash (create, list,
+apply, pop, drop), blame (inline and per file), conflict resolution (use
+current, incoming, or both), file history, word-level diff highlighting,
+restoring hunks, a tree view, deleting branches, choosing a remote, force
+push, pull with rebase, and permalinks. The "not a full git client" line above
+no longer holds for these; rebase, merge and history rewriting beyond amend
+are still out, as Zed leaves them to the terminal too.
+
+With Liquid Glass off, Glint also looks like Zed: One Dark and One Light
+colours, a flat panel, and Zed's default sizes (16 pt interface, 15 pt code),
+which are now Glint's defaults everywhere.
+
+Speed stays the product: each feature has to stay off the hot path (opening,
+j/k, staging), and the budgets in the v0.1 plan still apply.
+
+## Worktrees are first-class (2026-09-28)
+
+Linked worktrees are how you run two branches at once: an agent on one, you
+reviewing another, a hotfix beside a feature. Opening them used to mean the
+terminal and ⌘O. Glint now treats them as places a branch lives:
+
+- The branch picker marks a branch that's checked out in another worktree;
+  picking it opens that worktree instead of failing to switch.
+- ⌥↩ (or Option-click) on any branch, or on "Create branch", makes a new
+  worktree for it in `../worktrees/<repo>-<branch>` (Zed's default folder)
+  and opens it.
+- A worktree can be removed from the picker; git refuses one with
+  uncommitted work, and Glint says so in plain words.
+
+It passes the scope test: it removes the slowest part of reviewing a second
+branch (stash, switch, lose your place). Still out: moving, locking, pruning
+and repairing worktrees. The terminal does those.
+
 ## Build order: viewer before AI (2026-09-26)
 
 The diff viewer ships first, with no AI at all. Three reasons:
@@ -115,6 +151,20 @@ is out of scope. Pinned to 1.11.x on purpose: 1.12 and later add Metal shaders,
 which need Xcode's separate Metal Toolchain download to build, and 1.19 adds a
 build plugin Xcode asks you to trust. Revisit when the GPU renderer is worth
 that setup.
+
+## Terminal splits: tmux-lite, nothing more (2026-09-28)
+
+A terminal tab can split into panes: right (⌘D) or down (⌘⇧D), move between
+them with ⌥⌘ and an arrow, close the one you're in with ⌥⌘W, drag a divider
+to resize. Stacking needs height, so Split Down first expands the terminal
+over the diff, and while it's docked each stack shows only the pane you're
+in (the rest keep running). Running a dev server beside a shell while reading the diff is part
+of the look, stage, commit loop, and leaving for another app to get a second
+shell breaks it.
+
+Deliberately left out: saved layouts, auto-tiling, swapping panes, resizing by
+keys, and zooming a pane. Ghostty, iTerm, and tmux (which runs fine inside
+Glint's terminal) do those; `Open in Terminal App` is one key away.
 
 ## Xcode project with a synchronized root group (2026-09-26)
 
@@ -175,3 +225,13 @@ Keys live in the Keychain.
 
 A local model is still open, for people who can't send code anywhere. ACP
 agents (opencode, Claude Code, Gemini CLI) are the other candidate for later.
+
+## Files tab: browse and edit any file (2026-09-29)
+
+Asked for directly: a Files tab beside Changes and History lists the whole
+project (every repository in a folder of repositories, each as a folder), with
+files `.gitignore` hides shown dimmed and ignored folders read only when opened.
+A file opens in the same editor as hunk edits: syntax colours, line numbers,
+kept in step with the file on disk, ⌘S to save, saved when you switch files or
+quit. This goes past "a git panel"; it earns its place because fixing what a
+diff shows, or a file an agent just wrote, shouldn't mean opening another app.

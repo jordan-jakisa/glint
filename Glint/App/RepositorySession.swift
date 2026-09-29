@@ -18,7 +18,7 @@ final class RepositorySession {
   }
 
   enum Tab: String {
-    case changes, history
+    case changes, history, files
   }
 
   private(set) var phase: Phase = .closed(message: nil)
@@ -36,7 +36,22 @@ final class RepositorySession {
 
   /// The terminal panel under the diff. Remembered between launches.
   var isTerminalShown = UserDefaults.standard.bool(forKey: "terminalShown") {
-    didSet { UserDefaults.standard.set(isTerminalShown, forKey: "terminalShown") }
+    didSet {
+      UserDefaults.standard.set(isTerminalShown, forKey: "terminalShown")
+      if !isTerminalShown { isTerminalMaximized = false }
+      // Opening the terminal puts you in it; launch restoring it doesn't.
+      if isTerminalShown, !oldValue, let folder = repositoryURL {
+        if terminals.current(for: folder) == nil {
+          terminals.newTab(for: folder)
+        } else {
+          terminals.requestFocus(in: folder)
+        }
+      }
+    }
+  }
+  /// The terminal fills the diff's space. Hiding the terminal restores it.
+  var isTerminalMaximized = UserDefaults.standard.bool(forKey: "terminalMaximized") {
+    didSet { UserDefaults.standard.set(isTerminalMaximized, forKey: "terminalMaximized") }
   }
   /// Lists the other repositories' changes under the active one's.
   var showsAllRepositories = UserDefaults.standard.bool(forKey: "showsAllRepositories") {
@@ -48,6 +63,8 @@ final class RepositorySession {
   @ObservationIgnored var retryAlertAction: (() -> Void)?
   /// Files waiting for the user to confirm a discard.
   var pendingDiscard: [ChangedFile]?
+  /// A hunk waiting for the user to confirm restoring it. See `+Partial`.
+  var pendingRestore: HunkRestore?
 
   // MARK: Commit box
 
@@ -58,8 +75,6 @@ final class RepositorySession {
     didSet { if isAmending, !oldValue { prefillAmendMessage() } }
   }
   internal(set) var isCommitting = false
-  /// Size of what Commit would take right now, shown in the commit box.
-  internal(set) var commitSize: ChangeSize?
   /// The last message AI wrote, to measure how much you edit it before
   /// committing. Logged locally, never sent.
   @ObservationIgnored var generatedMessage: String?
@@ -78,16 +93,54 @@ final class RepositorySession {
     didSet { if tab != oldValue { showSelectedDiff() } }
   }
 
+  // MARK: Files tab
+
+  /// Every file in the project that git doesn't ignore, sorted by path.
+  internal(set) var projectFiles: [String] = []
+  /// Files and folders (ending in `/`) that `.gitignore` hides, shown
+  /// dimmed. Folders load what's inside only when opened.
+  internal(set) var ignoredFiles: Set<String> = []
+  internal(set) var ignoredFolders: Set<String> = []
+  /// The file open in the Files tab's editor.
+  internal(set) var openedFile: LiveEdit?
+  /// Its path from the repository root.
+  internal(set) var openedFilePath: String?
+
   // MARK: Changes tab
 
   internal(set) var status = WorkingTreeStatus.clean
   var selectedChange: ChangeSelection? {
-    didSet { if tab == .changes, selectedChange != oldValue { showSelectedDiff() } }
+    didSet {
+      guard tab == .changes, selectedChange != oldValue else { return }
+      // Style Zed: one diff of every file, like Zed's Uncommitted Changes;
+      // picking another file on the same side scrolls to it.
+      if Theme.shared.isZed, diff?.source == selectedSource {
+        scrollToSelectedFile()
+        return
+      }
+      showSelectedDiff()
+    }
   }
 
   // MARK: History tab
 
   internal(set) var commits: [Commit] = []
+  /// Each changed file's added and deleted lines, in Style Zed.
+  internal(set) var lineStats: [String: LineStat] = [:]
+  /// This repository's remotes, and the one picked for fetch, pull and push
+  /// when there are several.
+  internal(set) var remotes: [String] = []
+  var selectedRemote: String?
+  /// Adds a Signed-off-by line to commits (`git commit -s`), like Zed's
+  /// Sign Off. Remembered between launches.
+  var signsOff = UserDefaults.standard.bool(forKey: "commitSignOff") {
+    didSet { UserDefaults.standard.set(signsOff, forKey: "commitSignOff") }
+  }
+  /// Zed's Skip Hooks: commits with `--no-verify`, for the next commit only.
+  var skipsHooks = false
+  /// View File History: the file History is narrowed to, and its commits.
+  internal(set) var historyPath: String?
+  internal(set) var fileCommits: [Commit] = []
   /// The branch this one is compared with in the pinned branch-diff row, or
   /// nil when there's none (no main or master, or on main itself).
   internal(set) var branchBaseName: String?
@@ -145,10 +198,21 @@ final class RepositorySession {
   // MARK: Branches
 
   internal(set) var branches: [Branch] = []
+  /// This repository's worktrees, main first, for the branch picker.
+  internal(set) var worktrees: [Worktree] = []
   var isBranchPickerShown = false {
     didSet { if isBranchPickerShown, !oldValue { loadBranches() } }
   }
   internal(set) var isSwitchingBranch = false
+
+  // MARK: Stashes (see +Stash)
+
+  /// This repository's stashes, newest first, for the stash picker.
+  internal(set) var stashes: [Stash] = []
+  /// The stash sheet on screen: naming a new stash, or the stash list.
+  var stashSheet: StashSheet?
+  /// A stash command is running; others wait for it.
+  internal(set) var isStashing = false
 
   // MARK: Remotes
 
@@ -178,8 +242,25 @@ final class RepositorySession {
 
   /// Changed lines selected in a working-tree diff, for line staging.
   internal(set) var selectedLineRows: [DiffRowID] = []
+  /// The hunk open in the editor sheet, if any.
+  var editingHunk: LiveEdit?
+  /// The conflicted file on screen, as last read from disk, for resolving
+  /// its conflicts. See `+Conflicts`.
+  internal(set) var conflictDocument: ConflictDocument?
   /// Hands keyboard jumps straight to the table, skipping a SwiftUI update.
   @ObservationIgnored let diffScroller = DiffScroller()
+
+  // MARK: Blame (+Blame)
+
+  /// The blame column in the diff's gutter. Remembered between launches.
+  var isBlameShown = UserDefaults.standard.bool(forKey: "blameShown") {
+    didSet { UserDefaults.standard.set(isBlameShown, forKey: "blameShown") }
+  }
+  /// Bumped when a file's blame arrives, so the diff redraws just its gutter.
+  internal(set) var blameVersion = 0
+  /// Blames loaded so far and the ones on their way. Not observed: lookups
+  /// from drawing start loads, and only `blameVersion` should redraw.
+  @ObservationIgnored var blames = BlameStore()
 
   // MARK: Internal state for the extensions
 
@@ -225,10 +306,20 @@ final class RepositorySession {
   @ObservationIgnored var suppressRowsRebuild = false
   @ObservationIgnored var prefetchTask: Task<Void, Never>?
   @ObservationIgnored var statusTask: Task<Void, Never>?
+  /// Index writes run one after another, in the order you asked for them;
+  /// this is the latest.
+  @ObservationIgnored var indexWrites: Task<Void, Never>?
+  /// Index writes waiting or running. A status read while any are, or begun
+  /// before the latest started, is out of date and dropped.
+  @ObservationIgnored var pendingIndexWrites = 0
+  @ObservationIgnored var indexGeneration = 0
   @ObservationIgnored var statusRefreshQueued = false
   /// Files waiting for a partial status; nil when a full one is queued.
   @ObservationIgnored var pendingStatusPaths: Set<String>?
   @ObservationIgnored var cache = DiffCache(capacity: 32)
+  /// Word highlights as the cached diffs were built, to rebuild them when
+  /// the setting changes.
+  @ObservationIgnored var builtWithWordDiff = WordDiff.isEnabled
   @ObservationIgnored var diffRequestedAt: ContinuousClock.Instant?
   /// The reader's position in the diff: the top-most visible row, or the last
   /// place a keyboard jump landed. Not observed: it changes on every scroll.
@@ -238,9 +329,45 @@ final class RepositorySession {
   static let pageSize = 200
   private static let layoutKey = "diffLayout"
 
+  /// Posted by Settings after it changes a preference a window holds, so
+  /// every open window picks it up.
+  static let preferencesChanged = Notification.Name("GlintPreferencesChanged")
+
   init() {
     layout = UserDefaults.standard.string(forKey: Self.layoutKey)
-      .flatMap(DiffLayout.init(rawValue:)) ?? .unified
+      .flatMap(DiffLayout.init(rawValue:)) ?? .split
+    NotificationCenter.default.addObserver(forName: Self.preferencesChanged, object: nil, queue: .main) {
+      [weak self] _ in
+      MainActor.assumeIsolated { self?.reloadPreferences() }
+    }
+    terminals.paneCommand = { [weak self] command, folder in
+      guard let self, folder == self.repositoryURL?.standardizedFileURL else { return }
+      switch command {
+      case .splitRight: self.splitTerminal(.horizontal)
+      case .splitDown: self.splitTerminal(.vertical)
+      case .close: self.closeTerminalPane()
+      }
+    }
+    terminals.lastTabClosed = { [weak self] folder in
+      guard let self, folder == self.repositoryURL?.standardizedFileURL else { return }
+      self.isTerminalShown = false
+    }
+  }
+
+  private func reloadPreferences() {
+    let defaults = UserDefaults.standard
+    if let saved = defaults.string(forKey: Self.layoutKey).flatMap(DiffLayout.init(rawValue:)), saved != layout {
+      layout = saved
+    }
+    let all = defaults.bool(forKey: "showsAllRepositories")
+    if all != showsAllRepositories { showsAllRepositories = all }
+    if WordDiff.isEnabled != builtWithWordDiff {
+      builtWithWordDiff = WordDiff.isEnabled
+      cache = DiffCache(capacity: 32)
+      showSelectedDiff(inPlace: true)
+    }
+    let terminal = defaults.bool(forKey: "terminalShown")
+    if terminal != isTerminalShown { isTerminalShown = terminal }
   }
 
   private func rebuildRows(_ change: RowsChange) {
@@ -356,7 +483,15 @@ final class RepositorySession {
     let firstChange = ChangeSelection.first(in: status)
     var firstDiff: Diff?
     if let firstChange {
-      firstDiff = try? await repository.workingTreeDiff(staged: firstChange.staged, path: firstChange.path)
+      // Style Zed opens on every file's diff, like Zed's Uncommitted Changes.
+      if await MainActor.run(body: { Theme.shared.isZed }) {
+        firstDiff =
+          firstChange.staged
+          ? try? await repository.workingTreeDiff(staged: true, path: nil)
+          : try? await uncommittedDiff(repository)
+      } else {
+        firstDiff = try? await repository.workingTreeDiff(staged: firstChange.staged, path: firstChange.path)
+      }
     }
     stage("open: first diff")
     return Opened(
@@ -441,6 +576,10 @@ final class RepositorySession {
   }
 
   func install(_ opened: Opened, selecting preferred: ChangeSelection? = nil) {
+    closeOpenedFile()
+    projectFiles = []
+    ignoredFiles = []
+    ignoredFolders = []
     diffTask?.cancel()
     prefetchTask?.cancel()
     statusTask?.cancel()
@@ -458,7 +597,7 @@ final class RepositorySession {
     commitMessage = messageDrafts[opened.repository.url] ?? Self.savedDraft(for: opened.repository.url)
     info = opened.info
     status = opened.status
-    refreshCommitSize()
+    loadLineStats()
     commits = opened.commits
     sync = opened.sync
     branchBaseName = opened.branchBase
@@ -520,9 +659,12 @@ final class RepositorySession {
   /// The diff the selected tab wants on screen.
   var selectedSource: DiffSource? {
     switch tab {
-    case .changes: selectedChange?.source
+    case .changes:
+      selectedChange.map { Theme.shared.isZed ? .workingTree(staged: $0.staged, path: nil) : $0.source }
     case .history:
       selectedCommitID == Self.branchSelectionID ? .branch : selectedCommitID.map(DiffSource.commit)
+    case .files:
+      nil
     }
   }
 
@@ -572,6 +714,8 @@ final class RepositorySession {
         switch source {
         case .commit(let id):
           loaded = try await repository.diff(commitID: id, lineBudget: firstScreen)
+        case .workingTree(false, nil) where Theme.shared.isZed:
+          loaded = try await Self.uncommittedDiff(repository)
         case .workingTree(let staged, let path):
           loaded = try await repository.workingTreeDiff(staged: staged, path: path)
         case .branch:
@@ -581,6 +725,7 @@ final class RepositorySession {
         }
         guard !Task.isCancelled, selectedSource == source else { return }
         diff = loaded
+        if !inPlace { scrollToSelectedFile() }
         if !loaded.isComplete {
           switch source {
           case .commit(let id): loaded = try await repository.diff(commitID: id)
@@ -597,10 +742,27 @@ final class RepositorySession {
       } catch {
         guard selectedSource == source else { return }
         diff = nil
-        diffError = "\(error)"
+        // Plain advice, like alerts; git's own text isn't for reading here.
+        diffError = UserAlert("Couldn't load this diff", error: error).message
         isLoadingDiff = false
       }
     }
+  }
+
+  /// Style Zed's Uncommitted Changes: every unstaged file, then the files
+  /// that are fully staged, like Zed's project diff. The staged ones are
+  /// marked, so their hunks unstage.
+  nonisolated static func uncommittedDiff(_ repository: GitRepository) async throws -> Diff {
+    let unstaged = try await repository.workingTreeDiff(staged: false, path: nil)
+    let staged = try await repository.workingTreeDiff(staged: true, path: nil)
+    let shown = Set(unstaged.files.map(\.path))
+    var files = unstaged.files
+    for file in staged.files where !shown.contains(file.path) {
+      var extra = file.renumbered(files.count)
+      extra.isStaged = true
+      files.append(extra)
+    }
+    return Diff(source: unstaged.source, files: files, isComplete: unstaged.isComplete)
   }
 
   /// Called by the diff view once the selected diff is on screen.
@@ -644,6 +806,7 @@ final class RepositorySession {
     switch tab {
     case .changes: moveChangeSelection(by: 1)
     case .history: moveCommitSelection(by: 1)
+    case .files: break
     }
   }
 
@@ -651,6 +814,7 @@ final class RepositorySession {
     switch tab {
     case .changes: moveChangeSelection(by: -1)
     case .history: moveCommitSelection(by: -1)
+    case .files: break
     }
   }
 }

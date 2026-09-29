@@ -1,5 +1,12 @@
 import Foundation
 
+/// An unstaged hunk you asked to restore, waiting for you to confirm.
+struct HunkRestore: Equatable {
+  let fileName: String
+  /// The hunk reversed, built from the diff you were looking at.
+  let patch: String
+}
+
 /// Staging and unstaging part of a file: one hunk, or chosen lines.
 extension RepositorySession {
   /// Hunk and line actions exist only for a working-tree diff. Their verb
@@ -10,6 +17,42 @@ extension RepositorySession {
   }
 
   var isPartialStagingAvailable: Bool { partialAction != nil }
+
+  // MARK: - Restoring a hunk
+
+  /// Hunks can be restored only in your unstaged working copy: that's where
+  /// their changes live.
+  var canRestoreHunks: Bool { partialAction == "Stage" }
+
+  /// Asks before restoring: like a discard, it can lose work. A new or
+  /// deleted file's hunk is the whole file, so that goes through the file
+  /// discard, which knows to use the Trash or the index.
+  func requestRestoreHunk(_ row: DiffRowID) {
+    guard canRestoreHunks, let pick = pick(file: row.file, hunk: row.hunk, lines: nil), !pick.file.isStaged
+    else { return }
+    let file = pick.file
+    if file.status == .added || file.status == .deleted || file.status == .renamed {
+      requestDiscard([file.path])
+      return
+    }
+    guard let patch = Patch.restore(path: file.path, hunk: pick.hunk) else { return }
+    pendingRestore = HunkRestore(fileName: (file.path as NSString).lastPathComponent, patch: patch)
+  }
+
+  func confirmRestoreHunk() {
+    guard let restore = pendingRestore, let repository else { return }
+    pendingRestore = nil
+    Timing.writes.notice("restore hunk")
+    selectedLineRows = []
+    Task {
+      do {
+        try await repository.applyToWorkdir(restore.patch)
+      } catch {
+        alert = UserAlert("Couldn't restore that hunk", error: error)
+      }
+      refreshWorkingTree()
+    }
+  }
 
   func lineSelectionChanged(_ rows: [DiffRowID]) {
     selectedLineRows = rows
@@ -87,21 +130,25 @@ extension RepositorySession {
     // the whole file, and only the whole-file path keeps the file's mode and
     // records a deletion as a deletion rather than as an empty file.
     var partial: [Pick] = []
-    var wholeFiles: [String] = []
+    // A fully staged file in Style Zed's Uncommitted Changes unstages.
+    let isStaged = { (file: FileChange) in staged || file.isStaged }
+    var wholeFiles: [FileChange] = []
     for filePicks in Dictionary(grouping: picks, by: { $0.file.id }).values {
       let file = filePicks[0].file
       if file.status == .added || file.status == .deleted, Self.coversEveryChange(file, filePicks) {
-        wholeFiles.append(file.path)
+        wholeFiles.append(file)
       } else {
         partial.append(contentsOf: filePicks)
       }
     }
-    for path in wholeFiles { setStaged(path, !staged) }
+    for file in wholeFiles { setStaged(file.path, !isStaged(file)) }
     guard !partial.isEmpty else {
       selectedLineRows = []
       return
     }
-    applyPatches(partial, staged: staged, repository: repository)
+    for (fileStaged, group) in Dictionary(grouping: partial, by: { isStaged($0.file) }) {
+      applyPatches(group, staged: fileStaged, repository: repository)
+    }
   }
 
   private static func coversEveryChange(_ file: FileChange, _ picks: [Pick]) -> Bool {
@@ -125,15 +172,8 @@ extension RepositorySession {
     guard !patches.isEmpty else { return }
     Timing.writes.notice("\(staged ? "unstage" : "stage", privacy: .public) \(patches.count) partial patch(es)")
     selectedLineRows = []
-    Task {
-      let start = ContinuousClock.now
-      do {
-        for patch in patches { try await repository.applyToIndex(patch) }
-        Timing.report("partial staging", since: start, budget: 100)
-      } catch {
-        alert = UserAlert("Couldn't stage those lines", error: error)
-      }
-      refreshWorkingTree()
+    writeIndex("Couldn't stage those lines") { repository in
+      for patch in patches { try await repository.applyToIndex(patch) }
     }
   }
 }

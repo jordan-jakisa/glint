@@ -103,8 +103,11 @@ struct Shortcut: Codable, Hashable, Sendable {
 
 /// Every command that can have a key.
 enum AppCommand: String, CaseIterable, Identifiable, Sendable {
-  case openRepository, reload, toggleLayout, showTerminal, newTerminalTab, closeTerminalTab, openExternalTerminal
-  case switchProject, switchRepository, switchBranch, writeMessage, commit
+  case openRepository, reload, toggleLayout, showTerminal, maximizeTerminal, newTerminalTab, closeTerminalTab, openExternalTerminal
+  case biggerText, smallerText, actualTextSize, toggleMinimal
+  case stashAll, popStash, viewStashes, toggleBlame
+  case splitTerminalRight, splitTerminalDown, focusPaneLeft, focusPaneRight, focusPaneUp, focusPaneDown
+  case switchProject, switchRepository, switchBranch, writeMessage, commit, amendCommit
   case fetch, pull, push
   case nextFile, previousFile, stageAll, unstageAll
   case nextItem, previousItem, nextHunk, previousHunk, toggleCollapsed, toggleStaged, stagePartial,
@@ -119,14 +122,30 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .reload: "Reload"
     case .toggleLayout: "Show Split or Unified Diff"
     case .showTerminal: "Show or Hide Terminal"
+    case .maximizeTerminal: "Maximize or Restore Terminal"
     case .newTerminalTab: "New Terminal Tab"
-    case .closeTerminalTab: "Close Terminal Tab"
+    case .closeTerminalTab: "Close Terminal Pane"
+    case .toggleMinimal: "Minimal Interface"
+    case .stashAll: "Stash All\u{2026}"
+    case .popStash: "Pop Latest Stash"
+    case .viewStashes: "View Stashes\u{2026}"
+    case .toggleBlame: "Git Blame"
+    case .biggerText: "Bigger Text"
+    case .smallerText: "Smaller Text"
+    case .actualTextSize: "Default Text Size"
+    case .splitTerminalRight: "Split Terminal Right"
+    case .splitTerminalDown: "Split Terminal Down"
+    case .focusPaneLeft: "Move to Pane on the Left"
+    case .focusPaneRight: "Move to Pane on the Right"
+    case .focusPaneUp: "Move to Pane Above"
+    case .focusPaneDown: "Move to Pane Below"
     case .openExternalTerminal: "Open in Terminal App"
     case .switchProject: "Switch Project…"
     case .switchRepository: "Switch Repository…"
     case .switchBranch: "Switch Branch…"
     case .writeMessage: "Write Commit Message with AI"
     case .commit: "Commit"
+    case .amendCommit: "Amend Last Commit"
     case .fetch: "Fetch"
     case .pull: "Pull"
     case .push: "Push"
@@ -162,14 +181,31 @@ enum AppCommand: String, CaseIterable, Identifiable, Sendable {
     case .reload: Shortcut("r", command: true)
     case .toggleLayout: Shortcut("\\", command: true)
     case .showTerminal: Shortcut("t", command: true)
+    // ⌘⇧↩ is Zed's Amend, so maximize takes ⌥⌘↩.
+    case .maximizeTerminal: Shortcut("return", command: true, option: true)
     case .newTerminalTab: Shortcut("t", command: true, shift: true)
     case .closeTerminalTab: Shortcut("w", command: true, option: true)
+    case .toggleMinimal: Shortcut("m", command: true, control: true)
+    case .stashAll: Shortcut("s", option: true, control: true)
+    case .popStash: Shortcut("s", option: true, control: true, shift: true)
+    case .viewStashes: Shortcut("l", option: true, control: true, shift: true)
+    case .toggleBlame: Shortcut("b", command: true, option: true)
+    case .biggerText: Shortcut("=", command: true)
+    case .smallerText: Shortcut("-", command: true)
+    case .actualTextSize: Shortcut("0", command: true)
+    case .splitTerminalRight: Shortcut("d", command: true)
+    case .splitTerminalDown: Shortcut("d", command: true, shift: true)
+    case .focusPaneLeft: Shortcut("left", command: true, option: true)
+    case .focusPaneRight: Shortcut("right", command: true, option: true)
+    case .focusPaneUp: Shortcut("up", command: true, option: true)
+    case .focusPaneDown: Shortcut("down", command: true, option: true)
     case .openExternalTerminal: Shortcut("t", command: true, option: true)
     case .switchProject: Shortcut("o", command: true, option: true)
     case .switchRepository: Shortcut("r", command: true, shift: true)
     case .switchBranch: Shortcut("b", command: true)
     case .writeMessage: Shortcut("g", command: true, option: true)
     case .commit: Shortcut("return", command: true)
+    case .amendCommit: Shortcut("return", command: true, shift: true)
     case .fetch: Shortcut("f", command: true, option: true)
     case .pull: Shortcut("p", command: true, option: true)
     case .push: Shortcut("p", command: true, option: true, shift: true)

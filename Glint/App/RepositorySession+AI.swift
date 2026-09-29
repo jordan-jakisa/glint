@@ -16,11 +16,27 @@ extension RepositorySession {
       alert = UserAlert("Set up AI messages", message: settings.setupHint, opensSettings: true)
       return
     }
-    guard let key = settings.readKey() else {
+    let key: String
+    switch settings.readKey() {
+    case .found(let found):
+      key = found
+    case .missing:
       alert = UserAlert(
-        "Couldn't read your key",
-        message: "Glint couldn't read your \(settings.provider.name) key from the Keychain. Add it again in Settings.",
-        opensSettings: true)
+        "Add your API key",
+        message: "There's no \(settings.provider.name) key saved yet. Add it in Settings.", opensSettings: true)
+      return
+    case .refused:
+      // The key is saved; macOS said no this time. A new key won't help.
+      if AISettings.wasReplacedWhileOpen {
+        alert = UserAlert(
+          "Reopen Glint to use your key",
+          message: "Glint was updated while it was open, so macOS won't hand this copy your \(settings.provider.name) key. Quit and reopen Glint; your key is still saved.")
+      } else {
+        alert = UserAlert(
+          "Couldn't open your key",
+          message: "Your \(settings.provider.name) key is saved, but macOS refused to hand it over. Paste it again in Settings to replace it.",
+          opensSettings: true)
+      }
       return
     }
     guard let repository else { return }
@@ -64,13 +80,35 @@ extension RepositorySession {
           do {
             let start = ContinuousClock.now
             var reportedFirstToken = false
-            for try await piece in client.stream(model: candidate, prompt: prompt) {
+            // A free model that hasn't said a word in 8 seconds is stuck in a
+            // queue; the next one is usually faster than waiting.
+            let slowStart = attempt < candidates.count - 1
+              ? Task {
+                do {
+                  try await Task.sleep(for: .seconds(8))
+                  return true
+                } catch {
+                  return false  // The first word arrived; the timer was stopped.
+                }
+              } : nil
+            for try await piece in client.stream(model: candidate, prompt: prompt, giveUpIfSilent: slowStart) {
               if !reportedFirstToken {
                 reportedFirstToken = true
+                slowStart?.cancel()
                 Timing.report("AI first token", since: start, budget: 2_000)
               }
               reply += piece
               commitMessage = CommitPrompt.clean(reply)
+            }
+            // Stopping ends the stream quietly; put back what was there.
+            if Task.isCancelled {
+              commitMessage = before
+              return
+            }
+            // Some free models answer with nothing at all; the next may not.
+            if CommitPrompt.clean(reply).isEmpty && attempt < candidates.count - 1 {
+              Timing.log.info("AI: \(candidate, privacy: .public) sent nothing, trying the next free model")
+              continue
             }
             break
           } catch let failure as AIClient.Failure where failure.isBusy && attempt < candidates.count - 1 {
@@ -115,7 +153,9 @@ extension RepositorySession {
       let url = root.appendingPathComponent(name)
       guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
       let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !trimmed.isEmpty { return String(trimmed.prefix(6_000)) }
+      // Only the start: commit conventions sit near the top, and a long
+      // file slows the reply for everyone.
+      if !trimmed.isEmpty { return String(trimmed.prefix(2_000)) }
     }
     return nil
   }

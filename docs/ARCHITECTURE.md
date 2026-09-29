@@ -71,8 +71,22 @@ and toolbar.
 
 ## Syntax highlighting
 
-Deferred to after v0.1. When added, it runs off the main actor and never blocks the
-first paint: diff structure appears immediately, colour arrives when ready.
+A small hand-written lexer (`Models/Syntax.swift`, languages in
+`SyntaxLanguages.swift`): comments, strings, numbers, keywords and naming
+conventions for about forty languages, coloured with Zed's One Dark and One Light
+syntax keys. Not tree-sitter: a diff row is lexed as it's drawn, one line at a time,
+which costs less than typesetting the line, so it never delays the first paint and
+adds no dependency. Lines inside a `/* */` block are recognised by their leading `*`.
+The hunk editor lexes its whole text, so comments and strings carry across lines.
+
+## Editing in the diff
+
+The editor (`LiveEdit`) holds some lines of a file and checks the file a few times
+a second (a `stat`, and a read only when it changed). What changed on disk is merged
+into what you have with a three-way line merge (`Models/LineMerge.swift`), so an
+agent writing the file while you type shows up in place without losing your edit;
+where both changed the same lines, yours win and the footer says so. Save merges
+once more, then writes.
 
 ## Commit-message generation
 

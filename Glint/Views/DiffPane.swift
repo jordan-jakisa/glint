@@ -5,41 +5,57 @@ struct DiffPane: View {
   @Bindable var session: RepositorySession
 
   var body: some View {
-    if let error = session.diffError {
-      ContentUnavailableView(
+    if session.tab == .files {
+      FileEditorPane(session: session)
+    } else if let path = session.selectedConflictPath {
+      // A conflicted file shows its conflicts to resolve, not a diff.
+      ConflictView(session: session, path: path)
+    } else if let error = session.diffError {
+      // Minimal shows no title, so the description says what failed.
+      EmptyState(
         "Couldn't load this diff", systemImage: "exclamationmark.triangle",
-        description: Text(error))
+        description: Text(Theme.shared.isMinimal ? "Couldn't load this diff. \(error)" : error))
     } else if let diff = session.diff {
       VStack(spacing: 0) {
         header(for: diff)
-        Divider()
+        Hairline()
         if diff.files.isEmpty {
-          ContentUnavailableView(
+          EmptyState(
             "No changes", systemImage: "doc",
             description: Text(emptyDescription(for: diff.source)))
         } else {
           DiffTableView(
             rows: session.rows, rowsVersion: session.rowsVersion, rowsChange: session.rowsChange,
             source: diff.source,
-            lineNumberDigits: session.lineNumberDigits, scroller: session.diffScroller,
+            lineNumberDigits: session.lineNumberDigits, textSize: TextSize.shared.body,
+            themeVersion: Theme.shared.version,
+            scroller: session.diffScroller,
             toggleCollapsed: session.toggleCollapsed,
             visibleRowsChanged: session.visibleRowsChanged,
             didPaint: session.diffDidAppear,
             partialAction: session.partialAction,
             selectionChanged: session.lineSelectionChanged,
-            hunkAction: session.stageHunk)
+            hunkAction: session.stageHunk,
+            restoreHunk: restoreHunk,
+            editLines: editLines,
+            openFile: session.canEditDiff ? { [session] in session.openFile($0) } : nil,
+            stageFile: session.partialAction != nil ? { [session] in session.setStaged($0, $1) } : nil,
+            blame: { [session] in session.blame(file: $0, line: $1) },
+            showsBlame: session.isBlameShown,
+            blameVersion: session.blameVersion,
+            permalinks: permalinks)
         }
       }
     } else if session.tab == .changes, session.status.isClean {
       CaughtUpView(session: session)
     } else if session.tab == .changes {
-      ContentUnavailableView(
+      EmptyState(
         "Pick a file", systemImage: "doc.text",
         description: Text(
           "Press \(AppCommand.nextItem.keys) to start. \(AppCommand.toggleStaged.keys) stages a file, "
             + "\(AppCommand.stagePartial.keys) stages a hunk."))
     } else if session.selectedCommitID == nil {
-      ContentUnavailableView(
+      EmptyState(
         "Pick a commit", systemImage: "list.bullet",
         description: Text("Choose one on the left, or press \(AppCommand.nextItem.keys)."))
     } else {
@@ -47,6 +63,29 @@ struct DiffPane: View {
       // nothing rather than a spinner that would only flicker.
       Color.clear
     }
+  }
+
+  /// Edits go to your working copy, so only its diff offers them.
+  private var editLines: ((DiffRowID) -> Void)? {
+    guard session.canEditDiff else { return nil }
+    let session = session
+    return { session.beginEdit($0) }
+  }
+
+  private var permalinks: DiffPermalinks {
+    let session = session
+    return DiffPermalinks(
+      canLink: { session.canLinkToLine($0) },
+      copy: { session.copyPermalink(to: $0) },
+      open: { session.openPermalink(to: $0) },
+      note: { session.permalinkNote(for: $0) })
+  }
+
+  /// Restore sits beside Stage Hunk, only on your unstaged working copy.
+  private var restoreHunk: ((DiffRowID) -> Void)? {
+    guard session.canRestoreHunks else { return nil }
+    let session = session
+    return { session.requestRestoreHunk($0) }
   }
 
   @ViewBuilder private func header(for diff: Diff) -> some View {
@@ -57,6 +96,8 @@ struct DiffPane: View {
         diff: diff, isLoading: session.isLoadingDiff)
     case .branch:
       BranchHeader(comparison: session.branchComparison, diff: diff, isLoading: session.isLoadingDiff)
+    case .workingTree(let staged, _) where Theme.shared.isZed:
+      ZedDiffToolbar(session: session, staged: staged, diff: diff)
     case .workingTree(let staged, let path):
       WorkingTreeHeader(
         staged: staged, path: path, diff: diff, isLoading: session.isLoadingDiff,
@@ -76,7 +117,7 @@ struct DiffPane: View {
   private func emptyDescription(for source: DiffSource) -> String {
     switch source {
     case .commit: "This commit doesn't change any files."
-    case .workingTree(true, _): "Nothing staged here."
+    case .workingTree(true, _): "Nothing staged here. Press \(AppCommand.toggleStaged.keys) on a file to stage it."
     case .workingTree(false, _): "Nothing changed here."
     case .branch: "This branch doesn't change anything yet."
     }
@@ -90,7 +131,7 @@ private struct CaughtUpView: View {
   var body: some View {
     let sync = session.sync
     if sync.behind > 0 {
-      ContentUnavailableView {
+      EmptyState {
         Label(commits(sync.behind) + " to pull", systemImage: "arrow.down.circle")
       } description: {
         Text("Everything here is committed. \(sync.upstream ?? "The remote") has new work.")
@@ -98,7 +139,7 @@ private struct CaughtUpView: View {
         Button("Pull", action: session.pull)
       }
     } else if sync.ahead > 0 {
-      ContentUnavailableView {
+      EmptyState {
         Label(commits(sync.ahead) + " to push", systemImage: "arrow.up.circle")
       } description: {
         Text("Everything's committed. Push when you're ready.")
@@ -106,7 +147,7 @@ private struct CaughtUpView: View {
         Button("Push", action: session.push)
       }
     } else if sync.upstream == nil, sync.hasRemotes, session.info?.branch != nil {
-      ContentUnavailableView {
+      EmptyState {
         Label("Not published yet", systemImage: "arrow.up.circle")
       } description: {
         Text("Everything's committed. Publish the branch to share it.")
@@ -114,7 +155,7 @@ private struct CaughtUpView: View {
         Button("Publish Branch", action: session.push)
       }
     } else {
-      ContentUnavailableView(
+      EmptyState(
         "All caught up", systemImage: "checkmark.circle",
         description: Text(sync.upstream == nil ? "Everything's committed." : "Everything's committed and pushed."))
     }
@@ -136,7 +177,7 @@ private struct WorkingTreeHeader: View {
     HStack(alignment: .center, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
         Text(path ?? (staged ? "All staged changes" : "All unstaged changes"))
-          .font(.headline)
+          .font(.app(.headline))
           .lineLimit(1)
           .truncationMode(.head)
           .textSelection(.enabled)
@@ -144,7 +185,7 @@ private struct WorkingTreeHeader: View {
           Text(staged ? "Staged" : "Unstaged")
           ChangeStats(additions: diff.additions, deletions: diff.deletions)
         }
-        .font(.callout)
+        .font(.app(.callout))
         .foregroundStyle(.secondary)
       }
       Spacer(minLength: 12)
@@ -181,7 +222,7 @@ private struct CommitHeader: View {
     VStack(alignment: .leading, spacing: 4) {
       HStack(alignment: .firstTextBaseline) {
         Text(commit?.summary ?? "")
-          .font(.headline)
+          .font(.app(.headline))
           .lineLimit(2, reservesSpace: true)
           .textSelection(.enabled)
         Spacer(minLength: 12)
@@ -189,7 +230,7 @@ private struct CommitHeader: View {
       }
       HStack(spacing: 12) {
         Text(String((diff.source.commitID ?? "").prefix(10)))
-          .monospaced()
+          .font(.code(.callout))
           .textSelection(.enabled)
         if let commit {
           Text(commit.authorName)
@@ -199,7 +240,7 @@ private struct CommitHeader: View {
         Text(fileCount)
         ChangeStats(additions: diff.additions, deletions: diff.deletions)
       }
-      .font(.callout)
+      .font(.app(.callout))
       .foregroundStyle(.secondary)
     }
     .padding(.horizontal, 16)
@@ -221,19 +262,18 @@ private struct BranchHeader: View {
     HStack(alignment: .center, spacing: 12) {
       VStack(alignment: .leading, spacing: 4) {
         Text(title)
-          .font(.headline)
+          .font(.app(.headline))
           .lineLimit(1)
         HStack(spacing: 12) {
           if let comparison {
             Text(comparison.ahead == 1 ? "1 commit" : "\(comparison.ahead) commits")
             Text("since \(comparison.mergeBase)")
-              .monospaced()
           }
           Text("plus uncommitted work")
           Text(diff.files.count == 1 ? "1 file" : "\(diff.files.count) files")
           ChangeStats(additions: diff.additions, deletions: diff.deletions)
         }
-        .font(.callout)
+        .font(.app(.callout))
         .foregroundStyle(.secondary)
       }
       Spacer(minLength: 12)
@@ -246,5 +286,77 @@ private struct BranchHeader: View {
   private var title: String {
     guard let comparison else { return "This branch" }
     return "\(comparison.branch ?? "HEAD") compared with \(comparison.base)"
+  }
+}
+
+/// Zed's Uncommitted Changes toolbar (project_diff.rs): the title, the line
+/// counts, previous and next hunk, then Stage or Unstage for the hunk at the
+/// cursor and Stage All.
+private struct ZedDiffToolbar: View {
+  @Bindable var session: RepositorySession
+  let staged: Bool
+  let diff: Diff
+
+  var body: some View {
+    HStack(spacing: 10) {
+      // Zed's unified and split buttons, the current one highlighted.
+      HStack(spacing: 0) {
+        layoutButton(.unified, icon: "rectangle", label: "Unified")
+        layoutButton(.split, icon: "rectangle.split.2x1", label: "Split")
+      }
+      Text(staged ? "Staged Changes" : "Uncommitted Changes")
+        .font(.app(.body))
+      LineStatLabel(stat: LineStat(added: diff.additions, deleted: diff.deletions))
+        .font(.app(.callout))
+      HStack(spacing: 2) {
+        Button(action: session.previousHunk) {
+          Image(systemName: "arrow.up").hitTarget()
+        }
+        .help(AppCommand.previousHunk.hint("Previous hunk"))
+        .accessibilityLabel("Previous hunk")
+        Button(action: session.nextHunk) {
+          Image(systemName: "arrow.down").hitTarget()
+        }
+        .help(AppCommand.nextHunk.hint("Next hunk"))
+        .accessibilityLabel("Next hunk")
+      }
+      .buttonStyle(.borderless)
+      DelayedSpinner(isActive: session.isLoadingDiff)
+      Spacer(minLength: 8)
+      Button(staged ? "Unstage" : "Stage", action: session.stageAtCursor)
+        .buttonStyle(.borderless)
+        .help(AppCommand.stagePartial.hint(staged ? "Unstage the hunk at the top, or the selected lines" : "Stage the hunk at the top, or the selected lines"))
+      Hairline(axis: .vertical).frame(height: 16)
+      Button(staged ? "Unstage All" : "Stage All") {
+        staged ? session.unstageAll() : session.stageAll()
+      }
+      .buttonStyle(.borderless)
+      .help(staged ? AppCommand.unstageAll.hint("Unstage every file") : AppCommand.stageAll.hint("Stage every file"))
+      Hairline(axis: .vertical).frame(height: 16)
+      Button("Commit") { session.messageFocusRequest = true }
+        .buttonStyle(.borderless)
+        .help(AppCommand.focusCommitMessage.hint("Write the commit message"))
+    }
+    .font(.app(.callout))
+    .padding(.horizontal, 12)
+    .frame(height: 36)
+  }
+
+  private func layoutButton(_ layout: DiffLayout, icon: String, label: String) -> some View {
+    Button {
+      session.layout = layout
+    } label: {
+      Image(systemName: icon)
+        .frame(width: 24, height: 22)
+        .background(
+          RoundedRectangle(cornerRadius: 4)
+            .fill(session.layout == layout ? Color(nsColor: ZedPalette.elementSelected) : .clear))
+        .contentShape(Rectangle())
+    }
+    .buttonStyle(.plain)
+    .foregroundStyle(session.layout == layout ? .primary : .secondary)
+    .accessibilityLabel(label)
+    .accessibilityAddTraits(session.layout == layout ? .isSelected : [])
+    .help(AppCommand.toggleLayout.hint(label))
   }
 }

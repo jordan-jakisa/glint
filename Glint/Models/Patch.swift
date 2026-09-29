@@ -79,4 +79,53 @@ enum Patch {
     lines.append(contentsOf: body)
     return lines.joined(separator: "\n") + "\n"
   }
+
+  /// A patch that, applied to the working tree, takes an unstaged hunk
+  /// (index to working tree) back out of it: the hunk reversed, so its "old"
+  /// side is the file as it is now. Nil when the hunk changes nothing.
+  static func restore(path: String, hunk: Hunk) -> String? {
+    var body: [String] = []
+    var changes = 0
+    // Within each run of changes, what goes (the hunk's additions) comes
+    // before what comes back (its deletions), as in any patch. A "\ No
+    // newline" marker stays with the line it followed.
+    var removing: [String] = []
+    var restoring: [String] = []
+    var previous = DiffLine.Kind.context
+    func flush() {
+      body.append(contentsOf: removing)
+      body.append(contentsOf: restoring)
+      removing.removeAll()
+      restoring.removeAll()
+    }
+    for line in hunk.lines {
+      switch line.kind {
+      case .context:
+        flush()
+        body.append(" " + line.text)
+      case .addition:
+        removing.append("-" + line.text)
+        changes += 1
+      case .deletion:
+        restoring.append("+" + line.text)
+        changes += 1
+      case .noNewline:
+        let marker = "\\ No newline at end of file"
+        switch previous {
+        case .addition: removing.append(marker)
+        case .deletion: restoring.append(marker)
+        default:
+          flush()
+          body.append(marker)
+        }
+      }
+      previous = line.kind
+    }
+    flush()
+    guard changes > 0 else { return nil }
+    var lines = ["diff --git a/\(path) b/\(path)", "--- a/\(path)", "+++ b/\(path)"]
+    lines.append("@@ -\(hunk.newStart),\(hunk.newCount) +\(hunk.oldStart),\(hunk.oldCount) @@")
+    lines.append(contentsOf: body)
+    return lines.joined(separator: "\n") + "\n"
+  }
 }

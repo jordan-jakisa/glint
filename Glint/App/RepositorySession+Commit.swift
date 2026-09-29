@@ -23,26 +23,14 @@ extension RepositorySession {
     return commitsTrackedChanges ? "Commit Tracked" : "Commit"
   }
 
-  /// Remeasures what Commit would take. Runs after every status change;
-  /// cheap, since it counts lines without building patches.
-  func refreshCommitSize() {
-    guard let repository else { return }
-    let trackedOnly = commitsTrackedChanges
-    guard !status.staged.isEmpty || trackedOnly else {
-      commitSize = nil
-      return
-    }
-    Task {
-      commitSize = try? await repository.commitSize(trackedOnly: trackedOnly)
-    }
-  }
-
   /// Commits with system git, so hooks and signing run like in the terminal.
   func commit() {
     guard canCommit, let repository else { return }
     var arguments = ["commit", "--cleanup=strip", "-F", "-"]
     if isAmending { arguments.append("--amend") }
     if !isAmending, commitsTrackedChanges { arguments.append("-a") }
+    if signsOff { arguments.append("--signoff") }
+    if skipsHooks { arguments.append("--no-verify") }
     let message = commitMessage
     let git = SystemGit(directory: repository.url)
     isCommitting = true
@@ -64,6 +52,7 @@ extension RepositorySession {
         acknowledge { $0.justCommitted = true } until: { $0.justCommitted = false }
         aiNote = nil
         isAmending = false
+        skipsHooks = false
       } catch {
         alert = UserAlert("The commit didn't go through", error: error)
       }
@@ -87,6 +76,15 @@ extension RepositorySession {
       }
       refresh()
     }
+  }
+
+  /// Zed's Amend (⌘⇧↩): amends the last commit with the message in the box,
+  /// or its own message if the box is empty.
+  func amendNow() {
+    guard lastCommit != nil else { return }
+    if !isAmending { isAmending = true }
+    guard !commitMessage.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return }
+    commit()
   }
 
   func prefillAmendMessage() {

@@ -34,9 +34,45 @@ extension RepositorySession {
   }
 
   /// History's rows: the pinned branch diff (when there's a base), then
-  /// commits.
+  /// commits; only the file's commits while History is narrowed to a file.
   var historyIDs: [String] {
-    (branchBaseName == nil ? [] : [Self.branchSelectionID]) + commits.map(\.id)
+    guard historyPath == nil else { return fileCommits.map(\.id) }
+    return (branchBaseName == nil ? [] : [Self.branchSelectionID]) + commits.map(\.id)
+  }
+
+  /// The commits History lists right now.
+  var visibleCommits: [Commit] { historyPath == nil ? commits : fileCommits }
+
+  /// Zed's View File History: History narrowed to the commits that touched
+  /// `path`, following renames.
+  func showHistory(for path: String) {
+    guard let repository else { return }
+    tab = .history
+    historyPath = path
+    fileCommits = []
+    let git = SystemGit(directory: repository.url)
+    Task {
+      do {
+        let output = try await git.run([
+          "log", "--follow", "-n", "500", "--format=%H%x1f%s%x1f%an%x1f%at", "--", path,
+        ])
+        guard historyPath == path else { return }
+        fileCommits = output.split(separator: "\n").compactMap { line in
+          let fields = line.split(separator: "\u{1f}", omittingEmptySubsequences: false).map(String.init)
+          guard fields.count == 4, let seconds = TimeInterval(fields[3]) else { return nil }
+          return Commit(id: fields[0], summary: fields[1], authorName: fields[2], date: Date(timeIntervalSince1970: seconds))
+        }
+        selectedCommitID = fileCommits.first?.id
+      } catch {
+        alert = UserAlert("Couldn't read the history of \((path as NSString).lastPathComponent)", error: error)
+      }
+    }
+  }
+
+  func clearHistoryFilter() {
+    historyPath = nil
+    fileCommits = []
+    selectedCommitID = commits.first?.id
   }
 
   var showsBranchDiff: Bool { tab == .history && selectedCommitID == Self.branchSelectionID }

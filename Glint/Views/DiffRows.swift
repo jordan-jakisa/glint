@@ -44,6 +44,13 @@ struct DiffRow: Identifiable, Sendable {
 
   let id: DiffRowID
   let content: Content
+  /// The line's hunk both removes and adds lines. Style Zed marks such a
+  /// hunk's changed lines with the modified colour, as Zed does.
+  var inMixedHunk = false
+  /// The row's file is fully staged (Style Zed's Uncommitted Changes).
+  var fileIsStaged = false
+  /// The file's language, for syntax colours.
+  var language: SyntaxLanguage?
 
   /// Why a file with no hunks is in the diff at all.
   static func emptyNote(_ status: FileChange.Status) -> String {
@@ -57,9 +64,14 @@ struct DiffRow: Identifiable, Sendable {
 
   static func build(_ diff: Diff, layout: DiffLayout, collapsed: Set<Int>) -> [DiffRow] {
     var rows: [DiffRow] = []
+    let isSingleFile = diff.source.isSingleFile
     for file in diff.files {
-      let isCollapsed = collapsed.contains(file.id)
-      rows.append(DiffRow(id: .file(file.id), content: .fileHeader(file, collapsed: isCollapsed)))
+      // One file's page header already names it and counts its lines.
+      let isCollapsed = !isSingleFile && collapsed.contains(file.id)
+      if !isSingleFile {
+        rows.append(
+          DiffRow(id: .file(file.id), content: .fileHeader(file, collapsed: isCollapsed), fileIsStaged: file.isStaged))
+      }
       if isCollapsed { continue }
 
       if file.isBinary {
@@ -68,16 +80,19 @@ struct DiffRow: Identifiable, Sendable {
         rows.append(DiffRow(id: .note(file.id), content: .note(Self.emptyNote(file.status))))
       }
 
+      let language = SyntaxLanguage.forPath(file.newPath ?? file.path)
       for hunk in file.hunks {
-        rows.append(DiffRow(id: .hunk(file.id, hunk.id), content: .hunkHeader(hunk)))
+        rows.append(DiffRow(id: .hunk(file.id, hunk.id), content: .hunkHeader(hunk), fileIsStaged: file.isStaged))
+        let mixed =
+          hunk.lines.contains { $0.kind == .addition } && hunk.lines.contains { $0.kind == .deletion }
         switch layout {
         case .unified:
           for (index, line) in hunk.lines.enumerated() {
-            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .line(line)))
+            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .line(line), inMixedHunk: mixed, fileIsStaged: file.isStaged, language: language))
           }
         case .split:
           for (index, row) in hunk.splitRows.enumerated() {
-            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .split(row)))
+            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .split(row), inMixedHunk: mixed, fileIsStaged: file.isStaged, language: language))
           }
         }
       }

@@ -36,16 +36,47 @@ extension RepositorySession {
   /// The active repository's folder, for the terminal panel.
   var repositoryURL: URL? { info?.url }
 
+  /// Fills the diff's space with the terminal, showing it first if it's
+  /// hidden, or puts it back under the diff.
+  func toggleTerminalMaximized() {
+    if isTerminalMaximized {
+      isTerminalMaximized = false
+    } else {
+      isTerminalShown = true
+      isTerminalMaximized = true
+      // Typing now goes to the shell, not the diff you can't see.
+      if let folder = repositoryURL { terminals.requestFocus(in: folder) }
+    }
+  }
+
   /// Opens another shell in the terminal panel, showing it if hidden.
   func newTerminalTab() {
     guard let folder = repository?.url else { return }
     if isTerminalShown { terminals.newTab(for: folder) } else { isTerminalShown = true }
   }
 
-  /// Closes the terminal tab you're in; closing the last hides the panel.
-  func closeTerminalTab() {
-    guard isTerminalShown, let folder = repository?.url, let tab = terminals.current(for: folder) else { return }
-    if !terminals.close(tab, in: folder) { isTerminalShown = false }
+  /// Closes the terminal pane you're in, and its tab with its last pane;
+  /// closing the last tab hides the panel.
+  func closeTerminalPane() {
+    guard isTerminalShown, let folder = repository?.url else { return }
+    if !terminals.closePane(in: folder) { isTerminalShown = false }
+  }
+
+  /// Splits the terminal pane you're in, showing the panel first if hidden.
+  /// Under the diff the panel is short, so stacking panes there first
+  /// expands the terminal; side by side works at any height.
+  func splitTerminal(_ axis: SplitAxis) {
+    guard let folder = repository?.url else { return }
+    let wasShown = isTerminalShown
+    isTerminalShown = true
+    if axis == .vertical { isTerminalMaximized = true }
+    // A hidden panel with no shell yet starts one on showing; that's the split.
+    if wasShown || terminals.current(for: folder) != nil { terminals.split(axis, in: folder) }
+  }
+
+  func focusTerminalPane(_ direction: PaneDirection) {
+    guard isTerminalShown, let folder = repository?.url else { return }
+    terminals.moveFocus(direction, in: folder)
   }
 
   /// Opens the active repository in your terminal app (⌘T).

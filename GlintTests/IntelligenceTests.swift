@@ -17,7 +17,8 @@ import Testing
       ]}
       """
     let models = try AIProvider.openRouter.freeModels(from: Data(json.utf8))
-    #expect(models.map(\.id) == ["a/free:free"])
+    // The Free Models Router always leads, as the default.
+    #expect(models.map(\.id) == ["openrouter/free", "a/free:free"])
   }
 
   @Test func vercelKeepsFreeLanguageModels() throws {

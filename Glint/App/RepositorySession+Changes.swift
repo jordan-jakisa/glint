@@ -20,10 +20,17 @@ extension RepositorySession {
       return
     }
     let partial = paths.map { Array($0) }
+    let generation = indexGeneration
     statusTask = Task {
       let start = ContinuousClock.now
       let fresh = try? await repository.status(paths: partial)
-      if let fresh {
+      // Stale if the repository changed, or if the index is being written:
+      // applying it would untick what you just ticked. The write's own
+      // refresh follows.
+      let isCurrent =
+        !Task.isCancelled && self.repository === repository && generation == indexGeneration
+        && pendingIndexWrites == 0
+      if let fresh, isCurrent {
         if let paths {
           Timing.report("status, changed files only", since: start, budget: 16)
           apply(status.merging(fresh, for: paths))
@@ -50,7 +57,7 @@ extension RepositorySession {
     let old = status
     status = fresh
     updateActiveSummary()
-    refreshCommitSize()
+    loadLineStats()
     let previousSelection = selectedChange
     reconcileChangeSelection(previous: old)
     // A file on screen may have changed without its status changing, so the
@@ -104,19 +111,32 @@ extension RepositorySession {
     _ optimistic: (inout WorkingTreeStatus) -> Void,
     _ work: @escaping @Sendable (GitRepository) async throws -> Void
   ) {
-    guard let repository else { return }
+    guard repository != nil else { return }
     var next = status
     optimistic(&next)
     apply(next, reloadDiff: false)
-    Task {
+    writeIndex("Couldn't update what's staged", work)
+  }
+
+  /// Queues an index write behind any still running, so quick clicks land
+  /// in order and none reads an index another is halfway through writing.
+  /// The list is refreshed from git once the last one is done.
+  func writeIndex(_ failure: String, _ work: @escaping @Sendable (GitRepository) async throws -> Void) {
+    guard let repository else { return }
+    indexGeneration += 1
+    pendingIndexWrites += 1
+    let previous = indexWrites
+    indexWrites = Task {
+      await previous?.value
       let start = ContinuousClock.now
       do {
         try await work(repository)
         Timing.report("index write", since: start, budget: 100)
       } catch {
-        alert = UserAlert("Couldn't update what's staged", error: error)
+        alert = UserAlert(failure, error: error)
       }
-      refreshWorkingTree()
+      pendingIndexWrites -= 1
+      if pendingIndexWrites == 0, self.repository === repository { refreshWorkingTree() }
     }
   }
 
@@ -202,11 +222,83 @@ extension RepositorySession {
     }
   }
 
+  // MARK: - Line counts
+
+  /// Each changed file's `+N -N` against the last commit, for Style Zed's
+  /// list, like Zed's diff stats. Only loaded there, off the main thread.
+  /// Each changed file's `+N -N` against the last commit, for Style Zed's
+  /// list, like Zed's diff stats: staged plus unstaged lines, counted by
+  /// libgit2 off the main thread. Only loaded in Style Zed. New untracked
+  /// files show none, as in Zed.
+  func loadLineStats() {
+    guard Theme.shared.isZed, let repository else { return }
+    let untracked = Set(status.unstaged.filter { $0.kind == .untracked }.map(\.path))
+    Task {
+      let unstaged = try? await repository.workingTreeDiff(staged: false, path: nil)
+      let staged = try? await repository.workingTreeDiff(staged: true, path: nil)
+      // A repository switch mid-load: these counts belong to the old one.
+      guard self.repository?.url == repository.url else { return }
+      var stats: [String: LineStat] = [:]
+      for file in (unstaged?.files ?? []) + (staged?.files ?? []) {
+        guard let path = file.newPath ?? file.oldPath, !untracked.contains(path) else { continue }
+        let before = stats[path] ?? LineStat(added: 0, deleted: 0)
+        stats[path] = LineStat(added: before.added + file.additions, deleted: before.deleted + file.deletions)
+      }
+      lineStats = stats
+    }
+  }
+
   // MARK: - Files
 
   func revealInFinder(_ path: String) {
     guard let repository else { return }
     NSWorkspace.shared.activateFileViewerSelecting([repository.url.appendingPathComponent(path)])
+  }
+
+  /// Opens the file in the app macOS uses for it, like Zed's Open File.
+  /// Opens the file in the Files tab's editor, as Zed opens a file from its
+  /// git panel.
+  func openFile(_ path: String) {
+    showFile(activeFilesPrefix + path)
+  }
+
+  func openInDefaultApp(_ path: String) {
+    guard let repository else { return }
+    NSWorkspace.shared.open(repository.url.appendingPathComponent(path))
+  }
+
+  /// Zed's Copy Path: the full path on disk. Copy Relative Path is below.
+  func copyAbsolutePath(_ path: String) {
+    guard let repository else { return }
+    copyPath(repository.url.appendingPathComponent(path).path)
+  }
+
+  /// Zed's Add to .gitignore and Add to .git/info/exclude: appends the path,
+  /// so the file stops showing up as untracked. `exclude` keeps it out of the
+  /// shared .gitignore.
+  func ignore(_ path: String, privately exclude: Bool) {
+    guard let repository else { return }
+    let git = SystemGit(directory: repository.url)
+    Task {
+      do {
+        let file: URL
+        if exclude {
+          let excludePath = try await git.run(["rev-parse", "--git-path", "info/exclude"])
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+          file = URL(fileURLWithPath: excludePath, relativeTo: repository.url).standardizedFileURL
+          try FileManager.default.createDirectory(at: file.deletingLastPathComponent(), withIntermediateDirectories: true)
+        } else {
+          file = repository.url.appendingPathComponent(".gitignore")
+        }
+        var contents = (try? String(contentsOf: file, encoding: .utf8)) ?? ""
+        if !contents.isEmpty, !contents.hasSuffix("\n") { contents += "\n" }
+        contents += "/" + path + "\n"
+        try contents.write(to: file, atomically: true, encoding: .utf8)
+      } catch {
+        alert = UserAlert("Couldn't ignore \((path as NSString).lastPathComponent)", error: error)
+      }
+      refreshWorkingTree()
+    }
   }
 
   func copyPath(_ path: String) {

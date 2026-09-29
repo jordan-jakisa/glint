@@ -5,8 +5,8 @@ import Foundation
 /// a network.
 enum CommitPrompt {
   /// Diffs past this size get squeezed before they're sent. Big enough for a
-  /// normal commit, small enough for free models' context and rate limits.
-  static let maxDiffBytes = 20_000
+  /// normal commit; smaller prompts get their first word back sooner.
+  static let maxDiffBytes = 12_000
 
   static let instructions = """
     Write a git commit message for the changes below.

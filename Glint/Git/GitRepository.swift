@@ -121,6 +121,45 @@ actor GitRepository {
     return result
   }
 
+  /// Every file in the index, like `git ls-files`, submodules left out.
+  func trackedPaths() throws -> [String] {
+    try reloadIndex()
+    var index: OpaquePointer?
+    try GitError.check(git_repository_index(&index, handle), "Couldn't read the index.")
+    defer { git_index_free(index) }
+    let count = git_index_entrycount(index)
+    var paths: [String] = []
+    paths.reserveCapacity(count)
+    for position in 0..<count {
+      guard let entry = git_index_get_byindex(index, position)?.pointee, entry.mode != 0o160000,
+        let path = entry.path
+      else { continue }
+      paths.append(String(cString: path))
+    }
+    return paths
+  }
+
+  /// What `.gitignore` hides: files, and whole folders as one entry each
+  /// ending in `/` (never walked into, so `node_modules` costs nothing).
+  func ignoredPaths() throws -> [String] {
+    var options = git_status_options()
+    git_status_options_init(&options, UInt32(GIT_STATUS_OPTIONS_VERSION))
+    options.show = GIT_STATUS_SHOW_WORKDIR_ONLY
+    options.flags = GIT_STATUS_OPT_INCLUDE_IGNORED.rawValue | GIT_STATUS_OPT_EXCLUDE_SUBMODULES.rawValue
+    var list: OpaquePointer?
+    try GitError.check(git_status_list_new(&list, handle, &options), "Couldn't read ignored files.")
+    defer { git_status_list_free(list) }
+    var paths: [String] = []
+    for index in 0..<git_status_list_entrycount(list) {
+      guard let entry = git_status_byindex(list, index)?.pointee,
+        entry.status.rawValue & GIT_STATUS_IGNORED.rawValue != 0,
+        let delta = entry.index_to_workdir, let path = delta.pointee.old_file.path ?? delta.pointee.new_file.path
+      else { continue }
+      paths.append(String(cString: path))
+    }
+    return paths
+  }
+
   // MARK: - Staging
 
   /// Stages whole files, like `git add`. A path that no longer exists on disk
@@ -180,6 +219,20 @@ actor GitRepository {
     try GitError.check(
       git_apply(handle, diff, GIT_APPLY_LOCATION_INDEX, &options),
       "Those lines no longer match what's staged. The diff was out of date; try again.")
+  }
+
+  /// Applies a patch to the working tree only, leaving the index alone, like
+  /// `git apply`. Restoring a hunk applies its reverse: see `Patch.restore`.
+  func applyToWorkdir(_ patch: String) throws {
+    var diff: OpaquePointer?
+    try GitError.check(
+      git_diff_from_buffer(&diff, patch, patch.utf8.count), "Couldn't read the patch for that hunk.")
+    defer { git_diff_free(diff) }
+    var options = git_apply_options()
+    git_apply_options_init(&options, UInt32(GIT_APPLY_OPTIONS_VERSION))
+    try GitError.check(
+      git_apply(handle, diff, GIT_APPLY_LOCATION_WORKDIR, &options),
+      "That hunk no longer matches the file. The diff was out of date; try again.")
   }
 
   /// Throws away unstaged changes to tracked files by restoring them from the
@@ -536,33 +589,6 @@ actor GitRepository {
     return (try makeDiff(diff, source: .branch, lineBudget: lineBudget), comparison)
   }
 
-  /// The size of what a commit would contain: the staged changes, or with
-  /// `trackedOnly`, every change to tracked files (what Commit Tracked takes).
-  /// Uses libgit2's diff stats, which skip building a patch per file.
-  func commitSize(trackedOnly: Bool) throws -> ChangeSize {
-    try reloadIndex()
-    var options = Self.diffOptions()
-    var diff: OpaquePointer?
-    if trackedOnly {
-      try GitError.check(git_diff_index_to_workdir(&diff, handle, nil, &options), "Couldn't measure changes.")
-    } else {
-      var headTree: OpaquePointer?
-      defer { if let headTree { git_tree_free(headTree) } }
-      if git_repository_head_unborn(handle) != 1 {
-        try GitError.check(git_revparse_single(&headTree, handle, "HEAD^{tree}"), "Couldn't read HEAD.")
-      }
-      try GitError.check(
-        git_diff_tree_to_index(&diff, handle, headTree, nil, &options), "Couldn't measure staged changes.")
-    }
-    defer { git_diff_free(diff) }
-    var stats: OpaquePointer?
-    try GitError.check(git_diff_get_stats(&stats, diff), "Couldn't measure changes.")
-    defer { git_diff_stats_free(stats) }
-    return ChangeSize(
-      files: git_diff_stats_files_changed(stats), additions: git_diff_stats_insertions(stats),
-      deletions: git_diff_stats_deletions(stats))
-  }
-
   private static func diffOptions() -> git_diff_options {
     var options = git_diff_options()
     git_diff_options_init(&options, UInt32(GIT_DIFF_OPTIONS_VERSION))
@@ -607,19 +633,21 @@ actor GitRepository {
     var files: [FileChange] = []
     files.reserveCapacity(count)
     var lines = 0
+    // Read once per diff; hunks mark their changed words as they're built.
+    let wordDiff = WordDiff.isEnabled
     for (position, entry) in entries.enumerated() {
       if let lineBudget, lines >= lineBudget {
         return Diff(source: source, files: files, isComplete: false)
       }
       // A file's id is its position, which the diff view relies on.
-      let file = try fileChange(diff: diff, index: entry.index).renumbered(position)
+      let file = try fileChange(diff: diff, index: entry.index, wordDiff: wordDiff).renumbered(position)
       files.append(file)
       lines += file.additions + file.deletions
     }
     return Diff(source: source, files: files)
   }
 
-  private func fileChange(diff: OpaquePointer?, index: Int) throws -> FileChange {
+  private func fileChange(diff: OpaquePointer?, index: Int, wordDiff: Bool) throws -> FileChange {
     var patch: OpaquePointer?
     try GitError.check(git_patch_from_diff(&patch, diff, index), "Couldn't build a file's diff.")
     defer { git_patch_free(patch) }
@@ -645,7 +673,7 @@ actor GitRepository {
       let hunkCount = git_patch_num_hunks(patch)
       hunks.reserveCapacity(hunkCount)
       for hunkIndex in 0..<hunkCount {
-        hunks.append(try hunk(patch: patch, index: hunkIndex))
+        hunks.append(try hunk(patch: patch, index: hunkIndex, wordDiff: wordDiff))
       }
     }
 
@@ -654,7 +682,7 @@ actor GitRepository {
       isBinary: isBinary, hunks: hunks, additions: additions, deletions: deletions)
   }
 
-  private func hunk(patch: OpaquePointer, index: Int) throws -> Hunk {
+  private func hunk(patch: OpaquePointer, index: Int, wordDiff: Bool) throws -> Hunk {
     var hunkPointer: UnsafePointer<git_diff_hunk>?
     var lineCount = 0
     try GitError.check(
@@ -679,7 +707,7 @@ actor GitRepository {
       id: index, header: header,
       oldStart: Int(hunk.old_start), oldCount: Int(hunk.old_lines),
       newStart: Int(hunk.new_start), newCount: Int(hunk.new_lines),
-      lines: lines)
+      lines: lines, wordDiff: wordDiff)
   }
 
   // MARK: - Conversion

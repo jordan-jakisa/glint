@@ -11,6 +11,12 @@ enum DiffSource: Hashable, Sendable {
   /// uncommitted work included.
   case branch
 
+  /// One working-tree file, whose page header already names it.
+  var isSingleFile: Bool {
+    if case .workingTree(_, let path) = self { return path != nil }
+    return false
+  }
+
   var commitID: String? {
     if case .commit(let id) = self { return id }
     return nil
@@ -57,6 +63,9 @@ struct FileChange: Identifiable, Sendable {
   let hunks: [Hunk]
   let additions: Int
   let deletions: Int
+  /// Style Zed's Uncommitted Changes shows fully staged files too; their
+  /// hunks are staged (HEAD to index), so their actions unstage.
+  var isStaged = false
 
   var path: String { newPath ?? oldPath ?? "" }
 
@@ -64,7 +73,7 @@ struct FileChange: Identifiable, Sendable {
   func renumbered(_ newID: Int) -> FileChange {
     FileChange(
       id: newID, status: status, oldPath: oldPath, newPath: newPath, isBinary: isBinary, hunks: hunks,
-      additions: additions, deletions: deletions)
+      additions: additions, deletions: deletions, isStaged: isStaged)
   }
 }
 
@@ -80,9 +89,11 @@ struct Hunk: Identifiable, Sendable {
   /// The same lines paired up for side-by-side display.
   let splitRows: [SplitRow]
 
+  /// With `wordDiff`, paired changed lines get their changed words marked
+  /// (see `WordDiff`). Built where the diff is, off the main thread.
   init(
     id: Int, header: String, oldStart: Int, oldCount: Int, newStart: Int,
-    newCount: Int, lines: [DiffLine]
+    newCount: Int, lines: [DiffLine], wordDiff: Bool = false
   ) {
     self.id = id
     self.header = header
@@ -90,6 +101,7 @@ struct Hunk: Identifiable, Sendable {
     self.oldCount = oldCount
     self.newStart = newStart
     self.newCount = newCount
+    let lines = wordDiff ? WordDiff.emphasize(lines) : lines
     self.lines = lines
     self.splitRows = SplitRow.pair(lines)
   }
@@ -110,6 +122,10 @@ struct DiffLine: Sendable, Equatable {
   /// has non-ASCII text and has to be measured. Counted once, when the diff
   /// is built off the main thread, so row heights are pure arithmetic.
   let columns: Int
+  /// The changed words of a changed line paired with one on the other side,
+  /// as UTF-16 offsets into `text`, drawn as a stronger tint. Empty for most
+  /// lines. See `WordDiff`.
+  var emphasis: [Range<Int>] = []
 
   init(kind: Kind, oldNumber: Int?, newNumber: Int?, text: String) {
     self.kind = kind

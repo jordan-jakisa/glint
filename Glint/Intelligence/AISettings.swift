@@ -52,6 +52,40 @@ final class AISettings {
     instructions = defaults.string(forKey: "aiInstructions") ?? ""
     followsRepositoryRules = defaults.object(forKey: "aiRepositoryRules") as? Bool ?? true
     keyState = defaults.dictionary(forKey: "aiKeyState") as? [String: Bool] ?? [:]
+    refreshKeyState()
+    _ = Self.launchedBinaryDate
+    // Read the key now, while this copy of Glint is the one on disk, and
+    // keep it for the launch. Rebuilding Glint while it's open replaces the
+    // app file, and macOS then refuses the running copy's keychain reads.
+    if isEnabled, hasKey, !Self.isTesting {
+      Task { @MainActor in _ = self.readKey() }
+    }
+  }
+
+  private static var isTesting: Bool { NSClassFromString("XCTestCase") != nil }
+
+  /// When this copy of the app was built, to tell whether it's been replaced
+  /// on disk since it opened.
+  private static let launchedBinaryDate = binaryDate()
+
+  private static func binaryDate() -> Date? {
+    Bundle.main.executableURL.flatMap {
+      try? FileManager.default.attributesOfItem(atPath: $0.path)[.modificationDate] as? Date
+    }
+  }
+
+  /// Whether Glint was rebuilt or updated while this copy was open.
+  static var wasReplacedWhileOpen: Bool {
+    guard let launched = launchedBinaryDate, let now = binaryDate() else { return false }
+    return now != launched
+  }
+
+  /// Looks again at which providers have a key saved, without reading any.
+  /// Fixes a stale "no key" left by an old read that macOS refused.
+  func refreshKeyState() {
+    var fresh = keyState
+    for provider in AIProvider.allCases { fresh[provider.rawValue] = Keychain.hasKey(for: provider) }
+    if fresh != keyState { keyState = fresh }
   }
 
   var modelID: String? {
@@ -67,12 +101,21 @@ final class AISettings {
 
   /// Reads the key from the Keychain. Only call this when about to send a
   /// request: it's the one place that can make macOS ask for permission.
-  func readKey() -> String? {
-    if let cached = keyCache[provider] { return cached }
-    let key = Keychain.key(for: provider).flatMap { $0.isEmpty ? nil : $0 }
-    keyState[provider.rawValue] = key != nil
-    keyCache[provider] = key
-    return key
+  func readKey() -> Keychain.Lookup {
+    if let cached = keyCache[provider] { return .found(cached) }
+    let lookup = Keychain.key(for: provider)
+    switch lookup {
+    case .found(let key):
+      keyState[provider.rawValue] = true
+      keyCache[provider] = key
+    case .missing:
+      keyState[provider.rawValue] = false
+    case .refused:
+      // The key is still there; only this read failed. Keep saying so, and
+      // try again next time rather than asking for a new key.
+      break
+    }
+    return lookup
   }
 
   /// Saves the key to the Keychain. False if the Keychain refused it (a
@@ -121,7 +164,14 @@ final class AISettings {
         models = loaded
         // Keep the pick if it's still offered; free lineups change often.
         if let id = modelID, !loaded.contains(where: { $0.id == id }) { modelID = nil }
-        if modelID == nil { modelID = loaded.first?.id }
+        // Auto is the default. Moved to it once, for picks made before Auto
+        // existed; after that, your choice stays.
+        let movedKey = "aiMovedToAuto." + provider.rawValue
+        if let auto = provider.autoModelID, !defaults.bool(forKey: movedKey) {
+          modelID = auto
+          defaults.set(true, forKey: movedKey)
+        }
+        if modelID == nil { modelID = provider.autoModelID ?? loaded.first?.id }
       } catch {
         guard provider == self.provider else { return }
         models = []

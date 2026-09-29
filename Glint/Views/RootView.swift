@@ -2,6 +2,8 @@ import SwiftUI
 
 struct RootView: View {
   @State private var session = RepositorySession()
+  @State private var columns: NavigationSplitViewVisibility =
+    UserDefaults.standard.bool(forKey: "sidebarHidden") ? .detailOnly : .all
   @Environment(\.openSettings) private var openSettings
 
   var body: some View {
@@ -9,10 +11,36 @@ struct RootView: View {
       .navigationTitle(title)
       .focusedSceneValue(\.session, session)
       .background(KeyMonitor(handle: session.handleKey))
+      .background(
+        GitChordMonitor { chord in
+          switch chord {
+          case .push: session.push()
+          case .forcePush: session.forcePush()
+          case .pull: session.pull()
+          case .pullRebase: session.pullRebase()
+          case .fetch: session.fetch()
+          }
+        })
       .onAppear { session.restoreLastRepository() }
+      .onReceive(NotificationCenter.default.publisher(for: AppDelegate.openFolders)) { note in
+        if let url = (note.object as? [URL])?.first { session.openProject(url) }
+      }
       .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
         session.refresh()
       }
+      // The Files tab's edits aren't lost when you quit.
+      .onReceive(NotificationCenter.default.publisher(for: NSApplication.willTerminateNotification)) { _ in
+        session.closeOpenedFile()
+      }
+      .sheet(
+        item: Binding(get: { session.editingHunk }, set: { if $0 == nil { session.endEdit() } })
+      ) { edit in
+        HunkEditor(edit: edit, save: session.saveEdit, cancel: session.endEdit)
+          .font(.app(.body))
+          .tint(.themeAccent)
+          .themedTextLevels()
+      }
+      .stashSheets(session)
       .confirmationDialog(
         discardTitle,
         isPresented: Binding(
@@ -24,6 +52,18 @@ struct RootView: View {
         Button("Cancel", role: .cancel) {}
       } message: {
         Text(discardMessage)
+      }
+      .confirmationDialog(
+        "Restore this hunk?",
+        isPresented: Binding(
+          get: { session.pendingRestore != nil },
+          set: { if !$0 { session.pendingRestore = nil } }),
+        titleVisibility: .visible
+      ) {
+        Button("Restore", role: .destructive, action: session.confirmRestoreHunk)
+        Button("Cancel", role: .cancel) {}
+      } message: {
+        Text("Its changes to \(session.pendingRestore?.fileName ?? "this file") are gone for good.")
       }
       .alert(
         session.alert?.title ?? "",
@@ -72,14 +112,25 @@ struct RootView: View {
     case .opening:
       OpeningView(name: session.openingName)
     case .ready:
-      NavigationSplitView {
+      NavigationSplitView(columnVisibility: $columns) {
         SidebarView(session: session)
+          .modifier(FlatSidebarToggle())
+          .modifier(SidebarTitleToolbar(session: session, columns: $columns))
           .navigationSplitViewColumnWidth(min: 240, ideal: 320, max: 480)
       } detail: {
         DiffAndTerminal(session: session)
-          .modifier(DiffToolbar(session: session))
+          .background(Color(nsColor: Theme.shared.editorBackground))
+          .modifier(DiffToolbar(session: session, columns: $columns))
+          // SwiftUI keeps toolbar items' glass as first built; flipping the
+          // setting rebuilds the column. Rare, so losing the diff's scroll
+          // position then is fine.
+          .id(Theme.shared.usesLiquidGlass)
       }
       .toolbar(removing: .title)
+      .modifier(ZedChrome())
+      // Remembered between launches, like the terminal.
+      .onChange(of: columns) { UserDefaults.standard.set(columns == .detailOnly, forKey: "sidebarHidden") }
+      .modifier(MinimalChrome(session: session, columns: $columns))
     }
   }
 
@@ -113,7 +164,7 @@ private struct WelcomeView: View {
         .frame(width: 112, height: 112)
         .accessibilityHidden(true)
       Text("Glint")
-        .font(.largeTitle.weight(.semibold))
+        .font(.app(.largeTitle))
       Text("Every change, at a glance.")
         .foregroundStyle(.secondary)
       Button(AppCommand.openRepository.title, action: open)
@@ -121,11 +172,11 @@ private struct WelcomeView: View {
         .controlSize(.large)
         .padding(.top, 8)
       Text("Pick the folder that contains .git. You only have to do this once.")
-        .font(.callout)
+        .font(.app(.callout))
         .foregroundStyle(.secondary)
       if let message {
         Text(message)
-          .font(.callout)
+          .font(.app(.callout))
           .foregroundStyle(.red)
           .multilineTextAlignment(.center)
           .frame(maxWidth: 420)
@@ -138,21 +189,30 @@ private struct WelcomeView: View {
 
 /// The diff, with the terminal under it when it's shown. The diff keeps one
 /// place in the view tree, so showing or hiding the terminal never rebuilds it
-/// and your scroll position stays put.
+/// and your scroll position stays put. Maximized, the terminal takes the
+/// diff's space and the diff collapses to nothing but stays in the tree.
 private struct DiffAndTerminal: View {
   let session: RepositorySession
   @AppStorage("terminalHeight") private var terminalHeight = 240.0
   @State private var dragStart: Double?
 
   var body: some View {
+    let maximized = session.isTerminalShown && session.isTerminalMaximized
     GeometryReader { geometry in
       VStack(spacing: 0) {
         DiffPane(session: session)
-          .frame(maxHeight: .infinity)
+          .frame(maxWidth: .infinity, maxHeight: maximized ? 0 : .infinity)
+          .clipped()
+          .opacity(maximized ? 0 : 1)
+          .allowsHitTesting(!maximized)
+          .accessibilityHidden(maximized)
         if session.isTerminalShown, let folder = session.repositoryURL {
-          divider(in: geometry.size.height)
-          TerminalPanel(folder: folder, store: session.terminals) { session.isTerminalShown = false }
-            .frame(height: clamped(terminalHeight, in: geometry.size.height))
+          if !maximized { divider(in: geometry.size.height) }
+          TerminalPanel(
+            folder: folder, store: session.terminals, isMaximized: maximized,
+            toggleMaximized: session.toggleTerminalMaximized, split: session.splitTerminal
+          ) { session.isTerminalShown = false }
+          .frame(height: maximized ? geometry.size.height : clamped(terminalHeight, in: geometry.size.height))
         }
       }
     }
@@ -160,13 +220,12 @@ private struct DiffAndTerminal: View {
 
   /// Drag to resize. The height is remembered between launches.
   private func divider(in total: Double) -> some View {
-    Divider()
+    Hairline()
       .padding(.vertical, 3)
       .contentShape(Rectangle())
       .padding(.vertical, -3)
-      .onHover { inside in
-        if inside { NSCursor.resizeUpDown.push() } else { NSCursor.pop() }
-      }
+      // Holds through a drag, unlike a pushed cursor.
+      .pointerStyle(.rowResize)
       .gesture(
         DragGesture(minimumDistance: 1, coordinateSpace: .global)
           .onChanged { drag in
@@ -187,41 +246,154 @@ private struct DiffAndTerminal: View {
 /// right. With no title there's no flexible space to push them apart, so the
 /// toolbar needs a spacer, and it must sit on the detail column: on the whole
 /// split view the spacer does nothing. Before macOS 26 there's no spacer and
-/// the controls sit beside the switcher.
+/// the controls sit beside the switcher. With Liquid Glass off in Settings,
+/// the items lose their glass capsules and sit flat on the toolbar.
 private struct DiffToolbar: ViewModifier {
   @Bindable var session: RepositorySession
+  @Binding var columns: NavigationSplitViewVisibility
 
+  // Minimal empties the toolbar rather than dropping the modifier, so
+  // switching Interface doesn't rebuild the window and lose your place.
   func body(content: Content) -> some View {
+    let minimal = Theme.shared.isMinimal
     if #available(macOS 26, *) {
+      let glass: Visibility = Theme.shared.usesLiquidGlass ? .automatic : .hidden
       content.toolbar {
-        ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
-        ToolbarSpacer(.flexible)
-        controls
+        if !minimal {
+          // With the sidebar open these sit over it, by the window buttons
+          // (SidebarTitleToolbar); only with it hidden do they move here.
+          if columns == .detailOnly {
+            // The system's sidebar button is glass and can't be flattened, so
+            // with glass off it's removed and this one stands in.
+            if !Theme.shared.usesLiquidGlass {
+              ToolbarItem(placement: .navigation) { sidebarButton }
+                .sharedBackgroundVisibility(.hidden)
+            }
+            ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
+              .sharedBackgroundVisibility(glass)
+          }
+          ToolbarSpacer(.flexible)
+          ToolbarItem { terminalButton }
+            .sharedBackgroundVisibility(glass)
+          ToolbarItem { layoutPicker }
+            .sharedBackgroundVisibility(glass)
+        }
       }
     } else {
       content.toolbar {
-        ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
-        controls
+        if !minimal {
+          ToolbarItem(placement: .navigation) { ProjectTitle(session: session) }
+          controls
+        }
       }
     }
   }
 
   @ToolbarContentBuilder private var controls: some ToolbarContent {
-    ToolbarItem {
-      Button {
-        session.isTerminalShown.toggle()
-      } label: {
-        Label("Terminal", systemImage: "apple.terminal")
-      }
-      .help(AppCommand.showTerminal.hint(session.isTerminalShown ? "Hide the terminal" : "Show the terminal"))
+    ToolbarItem { terminalButton }
+    ToolbarItem { layoutPicker }
+  }
+
+  private var terminalButton: some View {
+    TerminalToggle(session: session)
+  }
+
+  private var sidebarButton: some View {
+    Button {
+      withAnimation(Motion.reveal) { columns = columns == .detailOnly ? .all : .detailOnly }
+    } label: {
+      Label("Sidebar", systemImage: "sidebar.left")
     }
-    ToolbarItem {
-      Picker("Layout", selection: $session.layout) {
-        Text("Unified").tag(DiffLayout.unified)
-        Text("Split").tag(DiffLayout.split)
+    .buttonStyle(.borderless)
+    .help(columns == .detailOnly ? "Show the sidebar" : "Hide the sidebar")
+  }
+
+  /// One icon that flips unified and split, beside the terminal's.
+  private var layoutPicker: some View {
+    LayoutToggle(session: session)
+  }
+}
+
+/// Style Zed: the title bar in Zed's colour, solid rather than glass.
+private struct ZedChrome: ViewModifier {
+  func body(content: Content) -> some View {
+    if let bar = Theme.shared.titleBarBackground {
+      content
+        .toolbarBackground(Color(nsColor: bar), for: .windowToolbar)
+        .toolbarBackgroundVisibility(.visible, for: .windowToolbar)
+    } else {
+      content
+    }
+  }
+}
+
+/// Minimal empties the toolbar, keeping only the window buttons (hiding it
+/// outright takes those too), and puts one status line along the bottom of
+/// the window, across both columns.
+private struct MinimalChrome: ViewModifier {
+  let session: RepositorySession
+  @Binding var columns: NavigationSplitViewVisibility
+
+  // Always inset, with the status line inside, so switching Interface
+  // doesn't rebuild the window.
+  func body(content: Content) -> some View {
+    content
+      .safeAreaInset(edge: .bottom, spacing: 0) {
+        if Theme.shared.isMinimal {
+          VStack(spacing: 0) {
+            Hairline()
+            StatusLine(session: session, columns: $columns)
+          }
+          .background(
+            Theme.shared.statusBarBackground.map { AnyShapeStyle(Color(nsColor: $0)) } ?? AnyShapeStyle(.bar))
+        }
       }
-      .pickerStyle(.segmented)
-      .help(AppCommand.toggleLayout.hint("Switch between unified and split diffs"))
+  }
+}
+
+/// The sidebar button and the project's name, over the sidebar right after
+/// the window buttons, as in Zed's title bar. With the sidebar hidden,
+/// `DiffToolbar` shows them instead.
+private struct SidebarTitleToolbar: ViewModifier {
+  @Bindable var session: RepositorySession
+  @Binding var columns: NavigationSplitViewVisibility
+
+  func body(content: Content) -> some View {
+    if #available(macOS 26, *), !Theme.shared.isMinimal {
+      content.toolbar {
+        ToolbarItem {
+          HStack(spacing: 2) {
+            if !Theme.shared.usesLiquidGlass {
+              Button {
+                withAnimation(Motion.reveal) { columns = .detailOnly }
+              } label: {
+                Label("Sidebar", systemImage: "sidebar.left")
+              }
+              .buttonStyle(.borderless)
+              .labelStyle(.iconOnly)
+              .help("Hide the sidebar")
+            }
+            ProjectTitle(session: session)
+          }
+        }
+        .sharedBackgroundVisibility(Theme.shared.usesLiquidGlass ? .automatic : .hidden)
+        // Pushes them left, against the window buttons.
+        ToolbarSpacer(.flexible)
+      }
+    } else {
+      content
+    }
+  }
+}
+
+/// With Liquid Glass off, removes the system's glass sidebar button;
+/// `DiffToolbar` adds a flat one.
+private struct FlatSidebarToggle: ViewModifier {
+  func body(content: Content) -> some View {
+    if !Theme.shared.isFlat {
+      content
+    } else {
+      content.toolbar(removing: .sidebarToggle)
     }
   }
 }

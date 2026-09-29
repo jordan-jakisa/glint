@@ -25,6 +25,7 @@ struct DelayedSpinner: View {
 
 /// The letter and colour for a file's status, shared by the file list and the
 /// diff's file headers so the two always agree.
+@MainActor
 struct StatusMark {
   let letter: String
   let color: NSColor
@@ -32,31 +33,32 @@ struct StatusMark {
 
   init(_ kind: ChangedFile.Kind) {
     switch kind {
-    case .added: (letter, color, label) = ("A", .systemGreen, "Added")
-    case .modified: (letter, color, label) = ("M", .systemOrange, "Modified")
-    case .deleted: (letter, color, label) = ("D", .systemRed, "Deleted")
-    case .renamed: (letter, color, label) = ("R", .systemBlue, "Renamed")
-    case .typeChanged: (letter, color, label) = ("T", .systemOrange, "Type changed")
-    case .untracked: (letter, color, label) = ("U", .systemGreen, "Untracked")
-    case .conflicted: (letter, color, label) = ("!", .systemRed, "Conflicted")
+    case .added: (letter, color, label) = ("A", Theme.shared.added, "Added")
+    case .modified: (letter, color, label) = ("M", Theme.shared.modified, "Modified")
+    case .deleted: (letter, color, label) = ("D", Theme.shared.removed, "Deleted")
+    case .renamed: (letter, color, label) = ("R", Theme.shared.renamed, "Renamed")
+    case .typeChanged: (letter, color, label) = ("T", Theme.shared.modified, "Type changed")
+    case .untracked: (letter, color, label) = ("U", Theme.shared.added, "Untracked")
+    case .conflicted: (letter, color, label) = ("!", Theme.shared.conflicted, "Conflicted")
     }
   }
 
   init(_ status: FileChange.Status) {
     switch status {
-    case .added: (letter, color, label) = ("A", .systemGreen, "Added")
-    case .deleted: (letter, color, label) = ("D", .systemRed, "Deleted")
-    case .modified: (letter, color, label) = ("M", .systemOrange, "Modified")
-    case .renamed: (letter, color, label) = ("R", .systemBlue, "Renamed")
-    case .copied: (letter, color, label) = ("C", .systemBlue, "Copied")
-    case .typeChanged: (letter, color, label) = ("T", .systemOrange, "Type changed")
+    case .added: (letter, color, label) = ("A", Theme.shared.added, "Added")
+    case .deleted: (letter, color, label) = ("D", Theme.shared.removed, "Deleted")
+    case .modified: (letter, color, label) = ("M", Theme.shared.modified, "Modified")
+    case .renamed: (letter, color, label) = ("R", Theme.shared.renamed, "Renamed")
+    case .copied: (letter, color, label) = ("C", Theme.shared.renamed, "Copied")
+    case .typeChanged: (letter, color, label) = ("T", Theme.shared.modified, "Type changed")
     }
   }
 
-  static let size: CGFloat = 16
+  /// Scales with your text size: 16 pt at the default.
+  static var size: CGFloat { AppFont.small + 4 }
   static let radius: CGFloat = 3
   static let tint: CGFloat = 0.15
-  static var font: NSFont { .monospacedSystemFont(ofSize: 10, weight: .bold) }
+  static var font: NSFont { AppFont.nsSans(size: AppFont.small - 2, weight: .semibold) }
 }
 
 /// A file's status as a small tinted tile, the same one the diff draws.
@@ -85,8 +87,8 @@ struct ChangeStats: View {
 
   var body: some View {
     HStack(spacing: 4) {
-      Text("+\(additions)").foregroundStyle(.green)
-      Text("-\(deletions)").foregroundStyle(.red)
+      Text("+\(additions)").foregroundStyle(Color.added)
+      Text("-\(deletions)").foregroundStyle(Color.removed)
     }
     .monospacedDigit()
     .accessibilityElement(children: .ignore)
@@ -115,7 +117,10 @@ private struct ArrowKeys: ViewModifier {
           switch event.keyCode {
           case 125: move(1)
           case 126: move(-1)
-          case 36, 76 where choose != nil: choose?()
+          // Return and Enter, only when the picker handles them itself;
+          // otherwise they reach its search field's onSubmit. Each pattern
+          // needs its own `where`: one at the end binds only to the last.
+          case 36 where choose != nil, 76 where choose != nil: choose?()
           default: return event
           }
           return nil
@@ -136,6 +141,6 @@ extension View {
   /// The row Return will pick, in a popover list.
   func highlighted(_ isOn: Bool) -> some View {
     listRowBackground(
-      isOn ? RoundedRectangle(cornerRadius: 5).fill(Color.accentColor.opacity(0.2)).padding(.horizontal, 6) : nil)
+      isOn ? RoundedRectangle(cornerRadius: 5).fill(Color.themeAccent.opacity(0.2)).padding(.horizontal, 6) : nil)
   }
 }

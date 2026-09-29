@@ -12,6 +12,10 @@ struct DiffTableView: NSViewRepresentable {
   var rowsChange: RepositorySession.RowsChange = .all
   let source: DiffSource
   let lineNumberDigits: Int
+  /// Your text size; a change reflows every row.
+  var textSize: CGFloat = AppFont.body
+  /// Bumped when the accent or diff colours change; redraws every row.
+  var themeVersion = 0
   let scroller: DiffScroller
   let toggleCollapsed: (Int) -> Void
   let visibleRowsChanged: ([DiffRowID]) -> Void
@@ -21,11 +25,33 @@ struct DiffTableView: NSViewRepresentable {
   var partialAction: String? = nil
   var selectionChanged: ([DiffRowID]) -> Void = { _ in }
   var hunkAction: (DiffRowID) -> Void = { _ in }
+  /// Asks to throw a hunk's changes away; nil except on your unstaged
+  /// working copy. Adds "Restore" beside the hunk action.
+  var restoreHunk: ((DiffRowID) -> Void)? = nil
+  /// Opens the line's hunk for editing; nil where the diff isn't your
+  /// working copy (commits, staged changes).
+  var editLines: ((DiffRowID) -> Void)? = nil
+  /// Style Zed's Open File on each file header; nil where there's no file
+  /// on disk to open.
+  var openFile: ((String) -> Void)? = nil
+  /// Stages (true) or unstages a whole file from its header; nil where the
+  /// diff can't be staged from.
+  var stageFile: ((String, Bool) -> Void)? = nil
+  /// Who last changed a new-side line of the file at an index; nil until
+  /// that file's blame is loaded (asking starts the load). Feeds the blame
+  /// column and the selected line's inline blame.
+  var blame: ((Int, DiffLine) -> BlameCommit?)? = nil
+  /// The blame column in the gutter.
+  var showsBlame = false
+  /// Bumped when blame arrives; redraws the rows on screen, nothing else.
+  var blameVersion = 0
+  /// "Copy Permalink to Line" and "Open Permalink to Line" in the menu.
+  var permalinks: DiffPermalinks? = nil
 
   func makeCoordinator() -> Coordinator { Coordinator() }
 
   func makeNSView(context: Context) -> NSScrollView {
-    let table = NSTableView()
+    let table = DiffTable()
     table.headerView = nil
     table.style = .plain
     table.intercellSpacing = .zero
@@ -35,7 +61,7 @@ struct DiffTableView: NSViewRepresentable {
     table.allowsEmptySelection = true
     table.usesAutomaticRowHeights = false
     table.floatsGroupRows = true
-    table.backgroundColor = .textBackgroundColor
+    table.backgroundColor = Theme.shared.editorBackground
     table.columnAutoresizingStyle = .firstColumnOnlyAutoresizingStyle
     let column = NSTableColumn(identifier: .init("diff"))
     column.resizingMask = .autoresizingMask
@@ -46,6 +72,8 @@ struct DiffTableView: NSViewRepresentable {
     table.delegate = coordinator
     table.target = coordinator
     table.action = #selector(Coordinator.clicked(_:))
+    table.doubleAction = #selector(Coordinator.doubleClicked(_:))
+    table.coordinator = coordinator
 
     let scrollView = NSScrollView()
     scrollView.documentView = table
@@ -53,7 +81,7 @@ struct DiffTableView: NSViewRepresentable {
     scrollView.hasHorizontalScroller = false
     scrollView.autohidesScrollers = true
     scrollView.drawsBackground = true
-    scrollView.backgroundColor = .textBackgroundColor
+    scrollView.backgroundColor = Theme.shared.editorBackground
     coordinator.attach(table: table, scrollView: scrollView)
     return scrollView
   }
@@ -72,12 +100,25 @@ struct DiffTableView: NSViewRepresentable {
     private var metrics = DiffMetrics(lineNumberDigits: 3)
     private var heights: [CGFloat] = []
     private var heightsWidth: CGFloat = -1
+    private var textSize: CGFloat = AppFont.body
+    private var themeVersion = 0
     private var toggleCollapsed: (Int) -> Void = { _ in }
     private var visibleRowsChanged: ([DiffRowID]) -> Void = { _ in }
     private var didPaint: (DiffSource) -> Void = { _ in }
     private var partialAction: String?
     private var selectionChanged: ([DiffRowID]) -> Void = { _ in }
+    private var editLines: ((DiffRowID) -> Void)?
+    private var openFile: ((String) -> Void)?
+    private var stageFile: ((String, Bool) -> Void)?
     private var hunkAction: (DiffRowID) -> Void = { _ in }
+    private var blame: ((Int, DiffLine) -> BlameCommit?)?
+    private var showsBlame = false
+    private var blameVersion = 0
+    private(set) var permalinks: DiffPermalinks?
+    /// The one selected line, which shows its blame inline; nil when none
+    /// or several are selected.
+    private var inlineRow: Int?
+    private var restoreHunk: ((DiffRowID) -> Void)?
     private var observers: [NSObjectProtocol] = []
 
     func attach(table: NSTableView, scrollView: NSScrollView) {
@@ -103,13 +144,32 @@ struct DiffTableView: NSViewRepresentable {
       didPaint = view.didPaint
       selectionChanged = view.selectionChanged
       hunkAction = view.hunkAction
+      editLines = view.editLines
+      openFile = view.openFile
+      stageFile = view.stageFile
+      blame = view.blame
+      permalinks = view.permalinks
+      let restoreChanged = (view.restoreHunk != nil) != (restoreHunk != nil)
+      restoreHunk = view.restoreHunk
       guard let table else { return }
-      let actionChanged = view.partialAction != partialAction
+      let actionChanged = view.partialAction != partialAction || restoreChanged
       partialAction = view.partialAction
+      // Showing blame narrows the code, so it reflows like a size change.
+      let sizeChanged =
+        view.textSize != textSize || view.themeVersion != themeVersion || view.showsBlame != showsBlame
+      textSize = view.textSize
+      themeVersion = view.themeVersion
+      // Style Zed swaps the editor colour; the table and its scroll view
+      // paint it behind the rows.
+      table.backgroundColor = Theme.shared.editorBackground
+      scrollView?.backgroundColor = Theme.shared.editorBackground
+      showsBlame = view.showsBlame
+      let blameArrived = view.blameVersion != blameVersion
+      blameVersion = view.blameVersion
 
-      if view.rowsVersion != version, !actionChanged, view.source == source,
+      if view.rowsVersion != version, !actionChanged, !sizeChanged, view.source == source,
         case .file(let file) = view.rowsChange,
-        DiffMetrics(lineNumberDigits: view.lineNumberDigits).gutterWidth == metrics.gutterWidth
+        DiffMetrics(lineNumberDigits: view.lineNumberDigits, showsBlame: showsBlame).sameWidths(as: metrics)
       {
         // Collapsing or expanding one file: swap only its rows. A full reload
         // rebuilt every visible row for this and missed the frame budget.
@@ -127,17 +187,32 @@ struct DiffTableView: NSViewRepresentable {
           table.reloadData(forRowIndexes: IndexSet(integer: header), columnIndexes: IndexSet(integer: 0))
         }
         table.endUpdates()
-      } else if view.rowsVersion != version || actionChanged {
+        syncInlineRow()
+      } else if view.rowsVersion != version || actionChanged || sizeChanged {
         let isNewSource = view.source != source
+        // Only the look changed (text size, colours): same rows, new heights.
+        let lookOnly = sizeChanged && view.rowsVersion == version && !actionChanged && !isNewSource
+        let topRow = table.rows(in: table.visibleRect).location
+        let anchor = lookOnly && topRow < rows.count ? rows[topRow].id : nil
+        let selection = table.selectedRowIndexes
         rows = view.rows
         version = view.rowsVersion
         source = view.source
-        metrics = DiffMetrics(lineNumberDigits: view.lineNumberDigits)
+        metrics = DiffMetrics(lineNumberDigits: view.lineNumberDigits, showsBlame: showsBlame)
         heightsWidth = -1
         // Line selections refer to the old rows; after staging, the lines
-        // they pointed at are gone.
-        if !table.selectedRowIndexes.isEmpty { table.deselectAll(nil) }
+        // they pointed at are gone. A look change keeps them.
+        if !lookOnly, !table.selectedRowIndexes.isEmpty { table.deselectAll(nil) }
+        inlineRow = nil
         table.reloadData()
+        if lookOnly {
+          table.selectRowIndexes(selection, byExtendingSelection: false)
+          syncInlineRow()
+          // Keep the line you were reading at the top, not the pixel offset.
+          // After this pass: the table re-tiles to its new height first and
+          // would otherwise clamp the scroll back.
+          if let anchor { DispatchQueue.main.async { [weak self] in self?.scroll(to: anchor) } }
+        }
         if isNewSource {
           scroll(toY: 0)
           // Runs after this pass's display commit, so it marks the frame the
@@ -145,6 +220,9 @@ struct DiffTableView: NSViewRepresentable {
           let source = view.source
           DispatchQueue.main.async { [weak self] in self?.didPaint(source) }
         }
+      } else if blameArrived {
+        // Blame for a file came in: fill in the rows on screen, no reload.
+        refreshBlame(in: visibleRowIndexes())
       }
 
       view.scroller.perform = { [weak self] target, rowsVersion in
@@ -183,8 +261,66 @@ struct DiffTableView: NSViewRepresentable {
       let cell =
         tableView.makeView(withIdentifier: identifier, owner: nil) as? DiffRowCell
         ?? DiffRowCell(identifier: identifier)
-      cell.configure(rows[row], metrics: metrics, hunkAction: partialAction.map { "\($0) Hunk" })
+      let (column, inline) = blame(forRow: row)
+      cell.configure(
+        rows[row], metrics: metrics, hunkAction: hunkActionTitle(for: rows[row]), blame: column, inlineBlame: inline,
+        restoreAction: restoreHunk != nil && !rows[row].fileIsStaged, openFile: openFile != nil,
+        fileStageTitle: fileStageTitle(for: rows[row]))
       return cell
+    }
+
+    // MARK: Blame
+
+    /// The new side of a line row: the line blame describes. Removed lines
+    /// have none.
+    private func newSideLine(_ row: Int) -> DiffLine? {
+      let line: DiffLine?
+      switch rows[row].content {
+      case .line(let unified): line = unified
+      case .split(let pair): line = pair.right
+      default: line = nil
+      }
+      guard let line, line.kind == .context || line.kind == .addition else { return nil }
+      return line
+    }
+
+    /// Blame for the column (when shown) and for the inline note (on the one
+    /// selected line). Only asks for rows that draw it, so only files on
+    /// screen get blamed.
+    private func blame(forRow row: Int) -> (column: BlameCommit?, inline: BlameCommit?) {
+      let isInline = row == inlineRow
+      guard let blame, showsBlame || isInline, rows.indices.contains(row), let line = newSideLine(row) else {
+        return (nil, nil)
+      }
+      let commit = blame(rows[row].id.file, line)
+      return (showsBlame ? commit : nil, isInline ? commit : nil)
+    }
+
+    private func refreshBlame(in indexes: IndexSet) {
+      guard let table else { return }
+      for index in indexes where rows.indices.contains(index) {
+        guard let cell = table.view(atColumn: 0, row: index, makeIfNecessary: false) as? DiffRowCell else { continue }
+        let (column, inline) = blame(forRow: index)
+        cell.setBlame(column, inline: inline)
+      }
+    }
+
+    private func visibleRowIndexes() -> IndexSet {
+      guard let table else { return [] }
+      let range = table.rows(in: table.visibleRect)
+      guard range.location != NSNotFound, range.length > 0 else { return [] }
+      return IndexSet(integersIn: range.location..<(range.location + range.length))
+    }
+
+    /// Moves the inline blame to the one selected line, if there is one.
+    private func syncInlineRow() {
+      guard let table else { return }
+      let selected = table.selectedRowIndexes
+      let row = selected.count == 1 ? selected.first : nil
+      guard row != inlineRow else { return }
+      let old = inlineRow
+      inlineRow = row
+      refreshBlame(in: IndexSet([old, row].compactMap { $0 }))
     }
 
     func tableView(_ tableView: NSTableView, rowViewForRow row: Int) -> NSTableRowView? {
@@ -199,19 +335,119 @@ struct DiffTableView: NSViewRepresentable {
       return rowView
     }
 
+    /// Any line can be selected, to copy it; only changed lines count
+    /// towards staging.
     func tableView(_ tableView: NSTableView, shouldSelectRow row: Int) -> Bool {
-      guard partialAction != nil else { return false }
       switch rows[row].content {
-      case .line(let line): return line.kind == .addition || line.kind == .deletion
-      case .split(let pair):
-        return pair.left?.kind == .deletion || pair.right?.kind == .addition
-      default: return false
+      case .line(let line): line.kind != .noNewline
+      case .split: true
+      default: false
       }
     }
 
     func tableViewSelectionDidChange(_ notification: Notification) {
       guard let table else { return }
-      selectionChanged(table.selectedRowIndexes.compactMap { rows.indices.contains($0) ? rows[$0].id : nil })
+      syncInlineRow()
+      guard partialAction != nil else { return selectionChanged([]) }
+      selectionChanged(
+        table.selectedRowIndexes.compactMap { index in
+          guard rows.indices.contains(index), Self.isChange(rows[index]) else { return nil }
+          return rows[index].id
+        })
+    }
+
+    private static func isChange(_ row: DiffRow) -> Bool {
+      switch row.content {
+      case .line(let line): line.kind == .addition || line.kind == .deletion
+      case .split(let pair): pair.left?.kind == .deletion || pair.right?.kind == .addition
+      default: false
+      }
+    }
+
+    /// "Stage Hunk" or "Unstage Hunk", where hunks can be staged.
+    var hunkActionTitle: String? { partialAction.map { "\($0) Hunk" } }
+
+    /// A fully staged file's hunks unstage, whatever the diff's side.
+    func hunkActionTitle(for row: DiffRow) -> String? {
+      guard partialAction != nil else { return nil }
+      return row.fileIsStaged ? "Unstage Hunk" : hunkActionTitle
+    }
+    var canRestoreHunks: Bool { restoreHunk != nil }
+
+    /// A file header's action: Unstage File once it's all staged,
+    /// otherwise what this diff does to hunks.
+    func fileStageTitle(for row: DiffRow) -> String? {
+      guard stageFile != nil, let partialAction, case .fileHeader = row.content else { return nil }
+      return row.fileIsStaged ? "Unstage File" : "\(partialAction) File"
+    }
+
+    /// The hunk a row belongs to, for the right-click hunk actions.
+    func hunk(at index: Int) -> DiffRowID? {
+      guard partialAction != nil, rows.indices.contains(index) else { return nil }
+      switch rows[index].content {
+      case .hunkHeader, .line, .split: return .hunk(rows[index].id.file, rows[index].id.hunk)
+      default: return nil
+      }
+    }
+
+    func stageHunkAt(row index: Int) {
+      guard let hunk = hunk(at: index) else { return }
+      hunkAction(hunk)
+    }
+
+    func restoreHunkAt(row index: Int) {
+      guard let hunk = hunk(at: index) else { return }
+      restoreHunk?(hunk)
+    }
+
+    // MARK: Copy and edit
+
+    /// The selected lines as plain text: the new side where there is one, so
+    /// what you paste is the code as it stands.
+    func copySelection() {
+      guard let table else { return }
+      let text = table.selectedRowIndexes.compactMap { index -> String? in
+        guard rows.indices.contains(index) else { return nil }
+        switch rows[index].content {
+        case .line(let line): return line.kind == .noNewline ? nil : line.text
+        case .split(let pair): return (pair.right ?? pair.left)?.text
+        default: return nil
+        }
+      }
+      guard !text.isEmpty else { return }
+      NSPasteboard.general.clearContents()
+      NSPasteboard.general.setString(text.joined(separator: "\n"), forType: .string)
+    }
+
+    var canCopy: Bool { !(table?.selectedRowIndexes.isEmpty ?? true) }
+
+    /// The line row to edit: the clicked one, else the first selected.
+    func editableRow(at index: Int) -> DiffRowID? {
+      guard editLines != nil, rows.indices.contains(index) else { return nil }
+      switch rows[index].content {
+      case .line, .split: return rows[index].id
+      default: return nil
+      }
+    }
+
+    /// The line a permalink can point at: the clicked line row, if the
+    /// session can link to it.
+    func linkableRow(at index: Int) -> DiffRowID? {
+      guard let permalinks, rows.indices.contains(index) else { return nil }
+      switch rows[index].content {
+      case .line(let line) where line.kind == .noNewline: return nil
+      case .line, .split: return permalinks.canLink(rows[index].id) ? rows[index].id : nil
+      default: return nil
+      }
+    }
+
+    func edit(row index: Int) {
+      guard let id = editableRow(at: index) else { return }
+      editLines?(id)
+    }
+
+    @objc func doubleClicked(_ sender: NSTableView) {
+      edit(row: sender.clickedRow)
     }
 
     @objc func clicked(_ sender: NSTableView) {
@@ -219,13 +455,48 @@ struct DiffTableView: NSViewRepresentable {
       guard rows.indices.contains(row) else { return }
       switch rows[row].content {
       case .fileHeader(let file, _):
-        toggleCollapsed(file.id)
+        // Stage File or Unstage File, then (Style Zed) Open File at the
+        // right edge; the rest of the header folds the file, as everywhere.
+        if let stageFile, let title = fileStageTitle(for: rows[row]),
+          let zone = DiffRowCell.fileStageZone(
+            rowWidth: sender.bounds.width, title: title, openFile: Theme.shared.isZed && openFile != nil),
+          let point = NSApp.currentEvent.map({ sender.convert($0.locationInWindow, from: nil) }),
+          zone.hit.contains(point.x)
+        {
+          stageFile(file.newPath ?? file.path, title.hasPrefix("Stage"))
+        } else if Theme.shared.isZed, let openFile, let path = file.newPath, file.status != .deleted,
+          let point = NSApp.currentEvent.map({ sender.convert($0.locationInWindow, from: nil) }),
+          point.x > sender.bounds.width - DiffRowCell.openFileWidth
+        {
+          openFile(path)
+        } else {
+          toggleCollapsed(file.id)
+        }
+      // Style Zed: the hovered line's hunk actions.
+      case .line, .split where Theme.shared.isZed && partialAction != nil:
+        guard let event = NSApp.currentEvent else { return }
+        let point = sender.convert(event.locationInWindow, from: nil)
+        let zones = DiffRowCell.hunkActionZones(
+          rowWidth: sender.bounds.width, action: hunkActionTitle(for: rows[row]),
+          restore: canRestoreHunks && !rows[row].fileIsStaged)
+        switch zones.first(where: { $0.hit.contains(point.x) })?.kind {
+        case .primary: hunkAction(rows[row].id)
+        case .restore: restoreHunk?(rows[row].id)
+        case nil: break
+        }
       case .hunkHeader where partialAction != nil:
         // Only the action label at the right edge acts; the rest of the
         // header is just a header.
         guard let event = NSApp.currentEvent else { return }
         let point = sender.convert(event.locationInWindow, from: nil)
-        if point.x > sender.bounds.width - DiffRowCell.hunkActionWidth { hunkAction(rows[row].id) }
+        let zones = DiffRowCell.hunkActionZones(
+          rowWidth: sender.bounds.width, action: hunkActionTitle(for: rows[row]),
+          restore: canRestoreHunks && !rows[row].fileIsStaged)
+        switch zones.first(where: { $0.hit.contains(point.x) })?.kind {
+        case .primary: hunkAction(rows[row].id)
+        case .restore: restoreHunk?(rows[row].id)
+        case nil: break
+        }
       default:
         break
       }
@@ -272,6 +543,96 @@ struct DiffTableView: NSViewRepresentable {
       return nil
     }
   }
+}
+
+/// The diff's table: ⌘C copies the selected lines, and right-click offers
+/// Copy, the clicked hunk's actions, Edit on your working copy, and
+/// permalinks to the line.
+final class DiffTable: NSTableView {
+  weak var coordinator: DiffTableView.Coordinator?
+
+  @objc func copy(_ sender: Any?) {
+    coordinator?.copySelection()
+  }
+
+  override func validateUserInterfaceItem(_ item: any NSValidatedUserInterfaceItem) -> Bool {
+    if item.action == #selector(copy(_:)) { return coordinator?.canCopy ?? false }
+    return super.validateUserInterfaceItem(item)
+  }
+
+  override func menu(for event: NSEvent) -> NSMenu? {
+    let row = self.row(at: convert(event.locationInWindow, from: nil))
+    guard row >= 0, let coordinator else { return nil }
+    // Right-clicking outside the selection selects that line, as lists do.
+    if !selectedRowIndexes.contains(row), coordinator.tableView(self, shouldSelectRow: row) {
+      selectRowIndexes(IndexSet(integer: row), byExtendingSelection: false)
+    }
+    let menu = NSMenu()
+    let copy = menu.addItem(withTitle: "Copy", action: #selector(copy(_:)), keyEquivalent: "c")
+    copy.target = self
+    if coordinator.editableRow(at: row) != nil {
+      let edit = menu.addItem(withTitle: "Edit These Lines\u{2026}", action: #selector(editClicked(_:)), keyEquivalent: "")
+      edit.target = self
+      edit.tag = row
+    }
+    if coordinator.hunk(at: row) != nil, let title = coordinator.hunkActionTitle {
+      menu.addItem(.separator())
+      let stage = menu.addItem(withTitle: title, action: #selector(stageHunkClicked(_:)), keyEquivalent: "")
+      stage.target = self
+      stage.tag = row
+      if coordinator.canRestoreHunks {
+        let restore = menu.addItem(
+          withTitle: "Restore Hunk\u{2026}", action: #selector(restoreHunkClicked(_:)), keyEquivalent: "")
+        restore.target = self
+        restore.tag = row
+      }
+    }
+    if let permalinks = coordinator.permalinks, let line = coordinator.linkableRow(at: row) {
+      menu.addItem(.separator())
+      let note = permalinks.note(line)
+      for (title, action) in [
+        ("Copy Permalink to Line", #selector(copyPermalinkClicked(_:))),
+        ("Open Permalink to Line", #selector(openPermalinkClicked(_:))),
+      ] {
+        let item = menu.addItem(withTitle: title, action: action, keyEquivalent: "")
+        item.target = self
+        item.tag = row
+        item.toolTip = note
+      }
+    }
+    return menu
+  }
+
+  @objc private func stageHunkClicked(_ sender: NSMenuItem) {
+    coordinator?.stageHunkAt(row: sender.tag)
+  }
+
+  @objc private func restoreHunkClicked(_ sender: NSMenuItem) {
+    coordinator?.restoreHunkAt(row: sender.tag)
+  }
+
+  @objc private func editClicked(_ sender: NSMenuItem) {
+    coordinator?.edit(row: sender.tag)
+  }
+
+  @objc private func copyPermalinkClicked(_ sender: NSMenuItem) {
+    guard let coordinator, let line = coordinator.linkableRow(at: sender.tag) else { return }
+    coordinator.permalinks?.copy(line)
+  }
+
+  @objc private func openPermalinkClicked(_ sender: NSMenuItem) {
+    guard let coordinator, let line = coordinator.linkableRow(at: sender.tag) else { return }
+    coordinator.permalinks?.open(line)
+  }
+}
+
+/// Links to a diff line on the remote's site, from the session.
+struct DiffPermalinks {
+  let canLink: (DiffRowID) -> Bool
+  let copy: (DiffRowID) -> Void
+  let open: (DiffRowID) -> Void
+  /// A caveat for the menu item's tooltip, like a line that isn't committed.
+  let note: (DiffRowID) -> String?
 }
 
 /// Carries keyboard jumps from the session to the table directly. A jump that
@@ -328,31 +689,80 @@ private final class PlainRowView: NSTableRowView {
 /// needed.
 @MainActor
 struct DiffMetrics {
-  static let font = NSFont.monospacedSystemFont(ofSize: 12, weight: .regular)
-  static let boldFont = NSFont.monospacedSystemFont(ofSize: 12, weight: .semibold)
-  static let advance: CGFloat = ("0" as NSString).size(withAttributes: [.font: font]).width
-  static let lineHeight: CGFloat = ceil(font.ascender - font.descender + font.leading)
+  /// Measured once per text size; row heights ask for these on every row.
+  private struct Measures {
+    let size: CGFloat
+    let font: NSFont
+    let boldFont: NSFont
+    let advance: CGFloat
+    let lineHeight: CGFloat
+    let smallFont: NSFont
+    let smallAdvance: CGFloat
+
+    init(size: CGFloat) {
+      self.size = size
+      font = AppFont.ns(size: size)
+      smallFont = AppFont.ns(size: max(size - 2, 8))
+      smallAdvance = ("0" as NSString).size(withAttributes: [.font: smallFont]).width
+      boldFont = AppFont.ns(size: size, weight: .semibold)
+      advance = ("0" as NSString).size(withAttributes: [.font: font]).width
+      lineHeight = ceil(font.ascender - font.descender + font.leading)
+    }
+  }
+
+  private static var measured = Measures(size: AppFont.codeBody)
+  private static var measures: Measures {
+    if measured.size != AppFont.codeBody { measured = Measures(size: AppFont.codeBody) }
+    return measured
+  }
+
+  static var font: NSFont { measures.font }
+  static var boldFont: NSFont { measures.boldFont }
+  static var advance: CGFloat { measures.advance }
+  static var lineHeight: CGFloat { measures.lineHeight }
+  /// The blame column's font: the code font, a size down.
+  static var smallFont: NSFont { measures.smallFont }
+  static var smallAdvance: CGFloat { measures.smallAdvance }
   static let tabWidth = 4
 
-  static let fileHeaderHeight: CGFloat = 30
-  static let hunkHeaderHeight: CGFloat = 22
-  static let noteHeight: CGFloat = 32
+  static var fileHeaderHeight: CGFloat { lineHeight + 14 }
+  /// Style Zed shows no @@ line, only the hunk's actions in a thin row.
+  /// Style Zed shows no hunk row, only a small gap; the actions appear on
+  /// the line under the mouse.
+  static var hunkHeaderHeight: CGFloat { Theme.shared.isZed ? 6 : lineHeight + 6 }
+  static var noteHeight: CGFloat { lineHeight + 16 }
   static let verticalPadding: CGFloat = 1
   static let markerWidth: CGFloat = 16
   static let trailingPadding: CGFloat = 8
 
   let gutterWidth: CGFloat
+  /// The blame column at the left of line rows; zero when blame is off.
+  let blameWidth: CGFloat
 
-  init(lineNumberDigits: Int) {
+  /// Blame reads "a1b2c3d Jordan   13 days ago": an id, a short name, a date.
+  static let blameIDColumns = 7
+  static let blameNameColumns = 8
+  static var blameColumns: Int { blameIDColumns + 1 + blameNameColumns + 1 + BlameDate.maxLength }
+  static let blamePadding: CGFloat = 8
+
+  init(lineNumberDigits: Int, showsBlame: Bool = false) {
     gutterWidth = CGFloat(lineNumberDigits) * Self.advance + 12
+    blameWidth = showsBlame ? CGFloat(Self.blameColumns) * Self.smallAdvance + 2 * Self.blamePadding : 0
+  }
+
+  /// Whether rows lay out the same with these metrics as with `other`.
+  func sameWidths(as other: DiffMetrics) -> Bool {
+    gutterWidth == other.gutterWidth && blameWidth == other.blameWidth
   }
 
   /// Width available for code on one side of a row.
   func textWidth(rowWidth: CGFloat, split: Bool) -> CGFloat {
     if split {
-      return (rowWidth - 1) / 2 - gutterWidth - Self.markerWidth - Self.trailingPadding
+      return (rowWidth - blameWidth - 1) / 2 - gutterWidth - Self.markerWidth - Self.trailingPadding
     }
-    return rowWidth - 2 * gutterWidth - Self.markerWidth - Self.trailingPadding
+    // Style Zed has one number column in unified view, the new side's.
+    let gutters: CGFloat = Theme.shared.isZed ? 1 : 2
+    return rowWidth - blameWidth - gutters * gutterWidth - Self.markerWidth - Self.trailingPadding
   }
 
   func columns(forWidth width: CGFloat) -> Int {

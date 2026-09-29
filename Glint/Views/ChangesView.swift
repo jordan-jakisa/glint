@@ -6,46 +6,21 @@ struct ChangesView: View {
 
   var body: some View {
     VStack(spacing: 0) {
-      toolbar
-      Divider()
       if session.status.isClean && session.otherRepositoryChanges.isEmpty {
         // The diff pane says where things stand; this only says why it's empty.
         Text("No changes. Edit a file and it shows up here.")
-          .font(.callout)
+          .font(.app(.callout))
           .foregroundStyle(.secondary)
           .multilineTextAlignment(.center)
           .padding(.horizontal, 16)
           .frame(maxWidth: .infinity, maxHeight: .infinity)
+      } else if Theme.shared.isZed {
+        ZedChangesList(session: session)
       } else {
         list
       }
       CommitPanel(session: session)
     }
-  }
-
-  private var toolbar: some View {
-    HStack(spacing: 8) {
-      Spacer()
-      Menu {
-        Button("Stage All", action: session.stageAll)
-          .disabled(session.status.unstaged.isEmpty)
-        Button("Unstage All", action: session.unstageAll)
-          .disabled(session.status.staged.isEmpty)
-        Divider()
-        Button("Discard All Changes…", action: session.requestDiscardAll)
-          .disabled(session.status.unstaged.isEmpty)
-      } label: {
-        Text(session.status.unstaged.isEmpty && !session.status.staged.isEmpty ? "Unstage All" : "Stage All")
-      } primaryAction: {
-        if session.status.unstaged.isEmpty { session.unstageAll() } else { session.stageAll() }
-      }
-      .menuStyle(.borderedButton)
-      .fixedSize()
-      .disabled(session.status.isClean)
-    }
-    .controlSize(.small)
-    .padding(.horizontal, 10)
-    .padding(.vertical, 6)
   }
 
   private var list: some View {
@@ -60,6 +35,7 @@ struct ChangesView: View {
             GroupHeader(title: groupTitle("Staged"), count: session.status.staged.count) {
               session.selectedChange = ChangeSelection(staged: true, path: nil)
             }
+            .contextMenu { Button("Unstage All", action: session.unstageAll) }
           }
         }
         if !session.status.unstaged.isEmpty {
@@ -68,8 +44,14 @@ struct ChangesView: View {
               row(file, staged: false)
             }
           } header: {
+            // Stage All lives on the View All diff and in the menu bar;
+            // Discard All is here for the mouse.
             GroupHeader(title: groupTitle("Changes"), count: session.status.unstaged.count) {
               session.selectedChange = ChangeSelection(staged: false, path: nil)
+            }
+            .contextMenu {
+              Button("Stage All", action: session.stageAll)
+              Button("Discard All Changes…", action: session.requestDiscardAll)
             }
           }
         }
@@ -88,14 +70,17 @@ struct ChangesView: View {
           } header: {
             HStack {
               Text("\(group.repository.relativePath) \(group.files.count)")
+                .font(.app(.caption))
               Spacer()
               Button("Switch") { session.switchRepository(to: group.repository) }
                 .buttonStyle(.link)
-                .font(.caption)
+                .font(.app(.caption))
             }
           }
         }
       }
+      .scrollContentBackground(Theme.shared.isZed ? .hidden : .automatic)
+      .environment(\.defaultMinListRowHeight, Theme.shared.isMinimal ? 20 : 24)
       .onChange(of: session.selectedChange) { _, selection in
         if let selection, selection.path != nil { proxy.scrollTo(selection) }
       }
@@ -113,6 +98,10 @@ struct ChangesView: View {
     ChangeRow(file: file, staged: staged) { session.setStaged(file.path, $0) }
       .tag(ChangeSelection(staged: staged, path: file.path))
       .contextMenu {
+        Button("Open File") { session.openFile(file.path) }
+        Button("Open in Default App") { session.openInDefaultApp(file.path) }
+        Button("View File History") { session.showHistory(for: file.path) }
+        Divider()
         Button(staged ? "Unstage" : "Stage") { session.setStaged(file.path, !staged) }
         if !staged, file.kind != .conflicted {
           Button("Discard Changes…") { session.requestDiscard([file.path]) }
@@ -120,6 +109,12 @@ struct ChangesView: View {
         Divider()
         Button("Reveal in Finder") { session.revealInFinder(file.path) }
         Button("Copy Path") { session.copyPath(file.path) }
+        // Links point at your last commit, which a new file isn't in yet.
+        if file.kind != .added, file.kind != .untracked {
+          Divider()
+          Button("Copy File Permalink") { session.copyFilePermalink(file.path) }
+          Button("Open File Permalink") { session.openFilePermalink(file.path) }
+        }
       }
   }
 }
@@ -133,10 +128,16 @@ private struct GroupHeader: View {
     HStack {
       Text("\(title) \(count)")
       Spacer()
-      Button("View All", action: viewAll)
-        .buttonStyle(.link)
-        .font(.caption)
+      // Minimal drops the link; the header itself shows every file.
+      if !Theme.shared.isMinimal {
+        Button("View All", action: viewAll)
+          .buttonStyle(.link)
+          .font(.app(.caption))
+      }
     }
+    .font(.app(.caption))
+    .contentShape(Rectangle())
+    .onTapGesture(perform: viewAll)
   }
 }
 
@@ -160,6 +161,8 @@ struct ChangeRow: View {
         .truncationMode(.head)
       Spacer(minLength: 0)
     }
+    // Lists set their own font; set the app's closer in.
+    .font(.app(.body))
     .help(file.path)
   }
 }
@@ -182,6 +185,7 @@ private struct OtherRepositoryRow: View {
       Spacer(minLength: 0)
     }
     .foregroundStyle(.secondary)
+    .font(.app(.body))
     .contentShape(Rectangle())
     .help("Switch to this repository and open \(path)")
   }

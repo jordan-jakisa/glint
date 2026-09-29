@@ -13,19 +13,29 @@ struct AIClient: Sendable {
     var description: String { message }
   }
 
-  /// The model's reply, a piece at a time.
-  func stream(model: String, prompt: String) -> AsyncThrowingStream<String, Error> {
+  /// The model's reply, a piece at a time. With `giveUpIfSilent`, the stream
+  /// fails as busy if that task finishes before the first piece arrives.
+  func stream(
+    model: String, prompt: String, giveUpIfSilent: Task<Bool, Never>? = nil
+  ) -> AsyncThrowingStream<String, Error> {
     var request = URLRequest(url: provider.chatCompletionsURL, timeoutInterval: 60)
     request.httpMethod = "POST"
     request.setValue("Bearer \(apiKey)", forHTTPHeaderField: "Authorization")
     request.setValue("application/json", forHTTPHeaderField: "Content-Type")
     request.setValue("text/event-stream", forHTTPHeaderField: "Accept")
     for (field, value) in provider.extraHeaders { request.setValue(value, forHTTPHeaderField: field) }
-    let body: [String: Any] = [
+    var body: [String: Any] = [
       "model": model,
       "stream": true,
       "messages": [["role": "user", "content": prompt]],
+      // A commit message is short; capping it stops a model rambling, and a
+      // low temperature keeps it plain.
+      "max_tokens": 300,
+      "temperature": 0.2,
     ]
+    // Free "thinking" models otherwise reason silently for many seconds
+    // before writing a word. OpenRouter can turn that off.
+    if provider == .openRouter { body["reasoning"] = ["enabled": false, "exclude": true] }
     request.httpBody = try? JSONSerialization.data(withJSONObject: body)
     let provider = self.provider
     let finished = request
@@ -57,6 +67,13 @@ struct AIClient: Sendable {
           continuation.finish()
         } catch {
           continuation.finish(throwing: error)
+        }
+      }
+      if let giveUpIfSilent {
+        Task {
+          guard await giveUpIfSilent.value else { return }
+          task.cancel()
+          continuation.finish(throwing: Failure(message: "\(model) was slow to start.", isBusy: true))
         }
       }
       continuation.onTermination = { _ in task.cancel() }

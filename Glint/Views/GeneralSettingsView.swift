@@ -1,22 +1,95 @@
 import SwiftUI
 
-/// Settings, General tab.
+/// Settings, General: every preference a window keeps, in one place.
+/// Changes reach open windows straight away.
 struct GeneralSettingsView: View {
   @State private var terminal = TerminalApp.preferred
   @State private var fileOrder = FileOrder.current
+  @AppStorage("diffLayout") private var layout = DiffLayout.split
+  @AppStorage("gitPanelTree") private var isTree = false
+  @AppStorage("wordDiff") private var wordDiff = true
+  @AppStorage("syntaxHighlighting") private var syntaxHighlighting = true
+  @AppStorage("autosave") private var autosave = true
+  @AppStorage("showsAllRepositories") private var showsAllRepositories = false
+  @AppStorage("terminalShown") private var terminalShown = false
+  @State private var recentsCleared = false
 
   var body: some View {
-    Form {
-      Section {
+    SettingsPage(title: "General") {
+      SettingsSection(title: "Changes")
+      SettingsRow(
+        title: "File order", description: "Source first puts code before its tests, config and lockfiles.",
+        isModified: fileOrder != .smart, reset: { fileOrder = .smart }
+      ) {
         Picker("File order", selection: $fileOrder) {
-          Text("Most useful first").tag(FileOrder.smart)
+          Text("Source first").tag(FileOrder.smart)
           Text("By path").tag(FileOrder.path)
         }
-        Text("Most useful first puts source files first, each followed by its tests, then config and docs, with lockfiles and vendored code last. Files further down a review get less attention.")
-          .font(.callout)
-          .foregroundStyle(.secondary)
+        .labelsHidden()
+        .fixedSize()
       }
-      Section {
+      SettingsRow(
+        title: "Diff layout", description: AppCommand.toggleLayout.hint("Side by side or in one column"),
+        isModified: layout != .split, reset: { layout = .split }
+      ) {
+        Picker("Diff layout", selection: $layout) {
+          Text("Unified").tag(DiffLayout.unified)
+          Text("Split").tag(DiffLayout.split)
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .fixedSize()
+      }
+      SettingsRow(
+        title: "Changes list", description: "In Style Zed, list files flat or by folder.",
+        isModified: isTree, reset: { isTree = false }
+      ) {
+        Picker("Changes list", selection: $isTree) {
+          Text("Flat").tag(false)
+          Text("Tree").tag(true)
+        }
+        .labelsHidden()
+        .pickerStyle(.segmented)
+        .fixedSize()
+      }
+      SettingsRow(
+        title: "Highlight changed words", description: "Marks the words that changed inside a line.",
+        isModified: !wordDiff, reset: { wordDiff = true }
+      ) {
+        Toggle("Highlight changed words", isOn: $wordDiff).labelsHidden().toggleStyle(.switch)
+      }
+      SettingsRow(
+        title: "Syntax colours", description: "Colours code in diffs and the editor, like Zed's One theme.",
+        isModified: !syntaxHighlighting, reset: { syntaxHighlighting = true }
+      ) {
+        Toggle("Syntax colours", isOn: $syntaxHighlighting).labelsHidden().toggleStyle(.switch)
+      }
+      SettingsRow(
+        title: "Show every repository's changes",
+        description: "In a folder of repositories, lists the others' changes too.",
+        isModified: showsAllRepositories, reset: { showsAllRepositories = false }
+      ) {
+        Toggle("Show every repository's changes", isOn: $showsAllRepositories).labelsHidden().toggleStyle(.switch)
+      }
+
+      SettingsSection(title: "Editor")
+      SettingsRow(
+        title: "Autosave", description: "Saves a file a second after you stop typing. Otherwise \u{2318}S.",
+        isModified: !autosave, reset: { autosave = true }
+      ) {
+        Toggle("Autosave", isOn: $autosave).labelsHidden().toggleStyle(.switch)
+      }
+
+      SettingsSection(title: "Terminal")
+      SettingsRow(
+        title: "Show the terminal", description: AppCommand.showTerminal.hint("Under the diff"),
+        isModified: terminalShown, reset: { terminalShown = false }
+      ) {
+        Toggle("Show the terminal", isOn: $terminalShown).labelsHidden().toggleStyle(.switch)
+      }
+      SettingsRow(
+        title: "External terminal", description: AppCommand.openExternalTerminal.hint("Opens the repository in this app")
+      ) {
         Picker("External terminal", selection: $terminal) {
           ForEach(TerminalApp.allCases) { app in
             Text(app.isInstalled ? app.name : "\(app.name) (not installed)")
@@ -24,23 +97,29 @@ struct GeneralSettingsView: View {
               .disabled(!app.isInstalled)
           }
         }
-        Text(terminalNote)
-          .font(.callout)
-          .foregroundStyle(.secondary)
+        .labelsHidden()
+        .fixedSize()
+      }
+
+      SettingsSection(title: "Projects")
+      SettingsRow(title: "Recent projects", description: "Forgets every project but the one open now.") {
+        Button(recentsCleared ? "Cleared" : "Clear") {
+          RepositoryAccess().clearOlderRecents()
+          recentsCleared = true
+        }
+        .disabled(recentsCleared)
       }
     }
-    .formStyle(.grouped)
-    .frame(width: 520)
     .onChange(of: terminal) { TerminalApp.preferred = terminal }
     .onChange(of: fileOrder) { FileOrder.set(fileOrder) }
+    .onChange(of: layout) { preferencesChanged() }
+    .onChange(of: showsAllRepositories) { preferencesChanged() }
+    .onChange(of: terminalShown) { preferencesChanged() }
+    .onChange(of: wordDiff) { preferencesChanged() }
+    .onChange(of: syntaxHighlighting) { preferencesChanged() }
   }
 
-  private var terminalNote: String {
-    let builtIn = AppCommand.showTerminal.keys
-    let external = AppCommand.openExternalTerminal.keys
-    return [
-      builtIn.isEmpty ? nil : "\(builtIn) shows Glint's own terminal.",
-      external.isEmpty ? nil : "\(external) opens the active repository in this app instead.",
-    ].compactMap { $0 }.joined(separator: " ")
+  private func preferencesChanged() {
+    NotificationCenter.default.post(name: RepositorySession.preferencesChanged, object: nil)
   }
 }

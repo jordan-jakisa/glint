@@ -73,6 +73,12 @@ final class RepositoryAccess {
     stored = Array(([data] + others).prefix(Self.recentLimit))
   }
 
+  /// Forgets every project but the newest, which is the one open now and
+  /// the one to reopen on launch. From Settings.
+  func clearOlderRecents() {
+    stored = Array(stored.prefix(1))
+  }
+
   /// Drops `url` from the list, after it failed to open.
   func forget(_ url: URL) {
     let urls = recents()

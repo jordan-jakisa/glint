@@ -30,6 +30,18 @@ struct GlintCommands: Commands {
     }
 
     CommandGroup(before: .toolbar) {
+      Toggle(AppCommand.toggleMinimal.title, isOn: Binding(
+        get: { Theme.shared.isMinimal },
+        set: { Theme.shared.set($0 ? .minimal : .standard) }))
+        .shortcut(.toggleMinimal)
+      Button(AppCommand.biggerText.title) { TextSize.shared.step(1) }
+        .shortcut(.biggerText)
+      Button(AppCommand.smallerText.title) { TextSize.shared.step(-1) }
+        .shortcut(.smallerText)
+      Button(AppCommand.actualTextSize.title) { TextSize.shared.reset() }
+        .shortcut(.actualTextSize)
+      Divider()
+
       Button(session?.layout == .split ? "Show Unified Diff" : "Show Split Diff") {
         session?.toggleLayout()
       }
@@ -50,6 +62,14 @@ struct GlintCommands: Commands {
         .shortcut(.push)
         .disabled(!isReady)
 
+      Button("Pull with Rebase") { session?.pullRebase() }
+        .disabled(!isReady)
+      Button("Force Push") { session?.forcePush() }
+        .disabled(!isReady)
+
+      Button(AppCommand.amendCommit.title) { session?.amendNow() }
+        .shortcut(.amendCommit)
+        .disabled(!isReady)
       Button(AppCommand.writeMessage.title) {
         session?.tab = .changes
         session?.generateCommitMessage()
@@ -62,12 +82,30 @@ struct GlintCommands: Commands {
       }
       .shortcut(.showTerminal)
       .disabled(!isReady)
+      Button(session?.isTerminalMaximized == true ? "Restore Terminal" : "Maximize Terminal") {
+        session?.toggleTerminalMaximized()
+      }
+      .shortcut(.maximizeTerminal)
+      .disabled(!isReady)
       Button(AppCommand.newTerminalTab.title) { session?.newTerminalTab() }
         .shortcut(.newTerminalTab)
         .disabled(!isReady)
-      Button(AppCommand.closeTerminalTab.title) { session?.closeTerminalTab() }
+      Button(AppCommand.closeTerminalTab.title) { session?.closeTerminalPane() }
         .shortcut(.closeTerminalTab)
         .disabled(!isReady || session?.isTerminalShown != true)
+      Button(AppCommand.splitTerminalRight.title) { session?.splitTerminal(.horizontal) }
+        .shortcut(.splitTerminalRight)
+        .disabled(!isReady)
+      Button(AppCommand.splitTerminalDown.title) { session?.splitTerminal(.vertical) }
+        .shortcut(.splitTerminalDown)
+        .disabled(!isReady)
+      Menu("Move to Pane") {
+        Button("Left") { session?.focusTerminalPane(.left) }.shortcut(.focusPaneLeft)
+        Button("Right") { session?.focusTerminalPane(.right) }.shortcut(.focusPaneRight)
+        Button("Above") { session?.focusTerminalPane(.up) }.shortcut(.focusPaneUp)
+        Button("Below") { session?.focusTerminalPane(.down) }.shortcut(.focusPaneDown)
+      }
+      .disabled(!isReady || session?.isTerminalShown != true)
 
       Button("Open in \(TerminalApp.preferred.name)") { session?.openInTerminal() }
         .shortcut(.openExternalTerminal)
@@ -95,6 +133,32 @@ struct GlintCommands: Commands {
       .disabled(!isReady)
 
       Divider()
+    }
+
+    // Zed's git actions that aren't about moving around: stash, and later
+    // blame and permalinks.
+    CommandMenu("Git") {
+      Toggle(AppCommand.toggleBlame.title, isOn: Binding(
+        get: { session?.isBlameShown ?? false }, set: { _ in session?.toggleBlame() }))
+        .shortcut(.toggleBlame)
+        .disabled(!isReady)
+      Divider()
+      Button(AppCommand.stashAll.title) { session?.requestStash(.all) }
+        .shortcut(.stashAll)
+        .disabled(!isReady)
+      Button("Stash Tracked\u{2026}") { session?.requestStash(.tracked) }
+        .disabled(!isReady)
+      Button("Stash Staged\u{2026}") { session?.requestStash(.staged) }
+        .disabled(!isReady)
+      Divider()
+      Button("Apply Latest Stash") { session?.applyLatestStash() }
+        .disabled(!isReady)
+      Button(AppCommand.popStash.title) { session?.popLatestStash() }
+        .shortcut(.popStash)
+        .disabled(!isReady)
+      Button(AppCommand.viewStashes.title) { session?.isStashPickerShown = true }
+        .shortcut(.viewStashes)
+        .disabled(!isReady)
     }
 
     CommandMenu("Go") {
