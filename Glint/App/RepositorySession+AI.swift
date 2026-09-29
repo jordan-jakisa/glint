@@ -73,13 +73,35 @@ extension RepositorySession {
           do {
             let start = ContinuousClock.now
             var reportedFirstToken = false
-            for try await piece in client.stream(model: candidate, prompt: prompt) {
+            // A free model that hasn't said a word in 8 seconds is stuck in a
+            // queue; the next one is usually faster than waiting.
+            let slowStart = attempt < candidates.count - 1
+              ? Task {
+                do {
+                  try await Task.sleep(for: .seconds(8))
+                  return true
+                } catch {
+                  return false  // The first word arrived; the timer was stopped.
+                }
+              } : nil
+            for try await piece in client.stream(model: candidate, prompt: prompt, giveUpIfSilent: slowStart) {
               if !reportedFirstToken {
                 reportedFirstToken = true
+                slowStart?.cancel()
                 Timing.report("AI first token", since: start, budget: 2_000)
               }
               reply += piece
               commitMessage = CommitPrompt.clean(reply)
+            }
+            // Stopping ends the stream quietly; put back what was there.
+            if Task.isCancelled {
+              commitMessage = before
+              return
+            }
+            // Some free models answer with nothing at all; the next may not.
+            if CommitPrompt.clean(reply).isEmpty && attempt < candidates.count - 1 {
+              Timing.log.info("AI: \(candidate, privacy: .public) sent nothing, trying the next free model")
+              continue
             }
             break
           } catch let failure as AIClient.Failure where failure.isBusy && attempt < candidates.count - 1 {
@@ -124,7 +146,9 @@ extension RepositorySession {
       let url = root.appendingPathComponent(name)
       guard let text = try? String(contentsOf: url, encoding: .utf8) else { continue }
       let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-      if !trimmed.isEmpty { return String(trimmed.prefix(6_000)) }
+      // Only the start: commit conventions sit near the top, and a long
+      // file slows the reply for everyone.
+      if !trimmed.isEmpty { return String(trimmed.prefix(2_000)) }
     }
     return nil
   }

@@ -12,7 +12,7 @@ struct AISettingsView: View {
       SettingsSection(title: "Commit messages")
       SettingsRow(
         title: "Write commit messages with AI",
-        description: "Sends your diff to the provider only when you press \u{2728}."
+        description: "Sends your diff to the provider only when you press the pencil."
       ) {
         Toggle("Write commit messages with AI", isOn: $settings.isEnabled).labelsHidden().toggleStyle(.switch)
       }

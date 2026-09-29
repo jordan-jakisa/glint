@@ -110,6 +110,7 @@ struct CommitPanel: View {
         .shortcut(.commit)
         .disabled(!session.canCommit)
         .help(commitHelp)
+        .fixedSize()
     }
     .controlSize(.small)
     .padding(.horizontal, 10)
@@ -176,7 +177,9 @@ private struct LastCommitRow: View {
       if justCommitted {
         Label("Committed \(commit.shortID)", systemImage: "checkmark")
           .foregroundStyle(.secondary)
-          .fixedSize()
+          .lineLimit(1)
+          // In a narrow panel the words give way, never the Commit button.
+          .layoutPriority(-1)
       }
       Text(commit.summary)
         .lineLimit(1)
@@ -349,25 +352,46 @@ private struct GenerateButton: View {
   @Environment(\.openSettings) private var openSettings
   private let settings = AISettings.shared
 
+  // As in Zed: a pencil to write the message; while it's being written, a
+  // red Stop and "Writing message…" in its place, no animation.
   var body: some View {
-    Button {
-      if settings.isReady || session.isGeneratingMessage {
-        session.generateCommitMessage()
-      } else {
-        openSettings()
+    if session.isGeneratingMessage {
+      HStack(spacing: 6) {
+        Button(action: session.generateCommitMessage) {
+          Image(systemName: "stop.fill")
+            .font(.app(.caption2))
+            .foregroundStyle(.red)
+            .frame(width: 20, height: 20)
+            .background(RoundedRectangle(cornerRadius: 4).fill(Color.red.opacity(0.15)))
+            .hitTarget()
+        }
+        .buttonStyle(.plain)
+        .accessibilityLabel("Stop writing the message")
+        .help("Stop writing")
+        Text("Writing message\u{2026}")
+          .font(.app(.caption))
+          .foregroundStyle(.secondary)
+          .lineLimit(1)
+          // In a narrow panel the words give way, never the Commit button.
+          .layoutPriority(-1)
       }
-    } label: {
-      // Sparkles pulse while writing; the tooltip says a click stops it.
-      Image(systemName: "sparkles")
-        .symbolEffect(.pulse, isActive: session.isGeneratingMessage)
-        .hitTarget()
+    } else {
+      Button {
+        if settings.isReady {
+          session.generateCommitMessage()
+        } else {
+          openSettings()
+        }
+      } label: {
+        Image(systemName: "pencil.line").hitTarget()
+      }
+      .buttonStyle(.borderless)
+      .accessibilityLabel("Write the commit message")
+      .help(help)
     }
-    .buttonStyle(.borderless)
-    .help(help)
   }
 
   private var help: String {
-    if session.isGeneratingMessage { return "Stop writing" }
     guard settings.isReady, let model = settings.modelID else { return settings.setupHint }
     return AppCommand.writeMessage.hint("Write the message with \(model) on \(settings.provider.name)")
       + ". Sends your diff there."

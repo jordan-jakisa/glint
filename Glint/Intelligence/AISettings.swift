@@ -144,7 +144,14 @@ final class AISettings {
         models = loaded
         // Keep the pick if it's still offered; free lineups change often.
         if let id = modelID, !loaded.contains(where: { $0.id == id }) { modelID = nil }
-        if modelID == nil { modelID = loaded.first?.id }
+        // Auto is the default. Moved to it once, for picks made before Auto
+        // existed; after that, your choice stays.
+        let movedKey = "aiMovedToAuto." + provider.rawValue
+        if let auto = provider.autoModelID, !defaults.bool(forKey: movedKey) {
+          modelID = auto
+          defaults.set(true, forKey: movedKey)
+        }
+        if modelID == nil { modelID = provider.autoModelID ?? loaded.first?.id }
       } catch {
         guard provider == self.provider else { return }
         models = []
