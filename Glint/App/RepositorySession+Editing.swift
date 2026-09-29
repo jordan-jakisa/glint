@@ -24,6 +24,10 @@ final class LiveEdit: Identifiable {
   private(set) var startLine: Int
   /// Said once something changed on disk, until you save.
   private(set) var note: String?
+  /// Set when the file changed on disk in lines you'd also changed. Until
+  /// you pick Keep Mine or Use Theirs nothing is saved on its own, so
+  /// neither version is lost without you deciding.
+  private(set) var hasConflict = false
 
   /// The file as last read, and the region's length in it.
   @ObservationIgnored private var disk: [String]
@@ -84,7 +88,7 @@ final class LiveEdit: Identifiable {
     autosave?.cancel()
     autosave = Task { [weak self] in
       try? await Task.sleep(for: autosaveDelay)
-      guard !Task.isCancelled, let self, self.hasUnsavedChanges else { return }
+      guard !Task.isCancelled, let self, self.hasUnsavedChanges, !self.hasConflict else { return }
       do {
         try self.save()
       } catch {
@@ -126,7 +130,8 @@ final class LiveEdit: Identifiable {
     startLine = start
     regionCount = max(0, theirs.lines.count - suffix - start)
     if merged.conflicted {
-      note = "\(fileName) changed on disk in lines you edited. Yours are kept."
+      hasConflict = true
+      note = "\(fileName) changed on disk in lines you also changed."
     } else if region != text {
       note = "Picked up changes made on disk."
     }
@@ -138,7 +143,25 @@ final class LiveEdit: Identifiable {
     }
   }
 
-  /// Writes the file: what's on disk now, with your lines in place.
+  /// Resolves a conflict with your version: saved as it is, over theirs.
+  func keepMine() throws {
+    hasConflict = false
+    try save()
+  }
+
+  /// Resolves a conflict with the file as it is on disk: your changes to
+  /// those lines are dropped.
+  func useTheirs() {
+    let theirs = disk[startLine..<(startLine + regionCount)].joined(separator: "\n")
+    isApplyingDisk = true
+    text = theirs
+    isApplyingDisk = false
+    hasConflict = false
+    note = nil
+  }
+
+  /// Writes the file: what's on disk now, with your lines in place. Saving
+  /// by hand (⌘S) during a conflict keeps yours.
   func save() throws {
     syncFromDisk()
     let lines = edited
@@ -149,6 +172,7 @@ final class LiveEdit: Identifiable {
     diskText = output
     diskStamp = FileStamp(url)
     note = nil
+    hasConflict = false
   }
 
   /// The editor's lines. A newline typed at the very end ends the last

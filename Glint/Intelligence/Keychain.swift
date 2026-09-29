@@ -14,6 +14,10 @@ enum Keychain {
   private static let service = "com.kerustudios.glint.ai"
   /// Where Glint kept keys when it was called Adit.
   private static let oldService = "com.kerustudios.adit.ai"
+  /// Set once the data protection keychain says this build lacks the
+  /// entitlement. Then keys stay where they are in the login keychain:
+  /// moving them would only delete and re-add them on every launch.
+  nonisolated(unsafe) private static var modernUnavailable = false
 
   /// What reading a key found. `refused` is not the same as `missing`: the
   /// key is there, but macOS wouldn't hand it over. Glint mustn't claim
@@ -34,7 +38,9 @@ enum Keychain {
       switch found {
       case .missing: continue
       case .found(let key):
-        if setKey(key, for: provider) { deleteLegacy(provider) }
+        // Moved only if the data protection keychain takes it; otherwise
+        // the login keychain item is left exactly as it is.
+        if !modernUnavailable, addModern(key, for: provider) { deleteLegacy(provider) }
         return found
       case .refused: return found
       }
@@ -65,7 +71,7 @@ enum Keychain {
       deleteLegacy(provider)
       return true
     }
-    for modern in [true, false] {
+    for modern in modernUnavailable ? [false] : [true, false] {
       var item = base(provider, service: service, modern: modern)
       item[kSecValueData] = Data(trimmed.utf8)
       item[kSecAttrLabel] = "Glint: \(provider.name) API key"
@@ -77,10 +83,24 @@ enum Keychain {
         if modern { deleteLegacy(provider) }
         return true
       }
+      if status == errSecMissingEntitlement {
+        modernUnavailable = true
+        continue
+      }
       Timing.log.error("Keychain save failed: \(status) (modern: \(modern))")
-      if status != errSecMissingEntitlement { return false }
+      return false
     }
     return false
+  }
+
+  private static func addModern(_ key: String, for provider: AIProvider) -> Bool {
+    var item = base(provider, service: service, modern: true)
+    item[kSecValueData] = Data(key.utf8)
+    item[kSecAttrLabel] = "Glint: \(provider.name) API key"
+    item[kSecAttrAccessible] = kSecAttrAccessibleAfterFirstUnlockThisDeviceOnly
+    let status = SecItemAdd(item as CFDictionary, nil)
+    if status == errSecMissingEntitlement { modernUnavailable = true }
+    return status == errSecSuccess
   }
 
   private static func base(_ provider: AIProvider, service: String, modern: Bool) -> [CFString: Any] {
@@ -99,8 +119,13 @@ enum Keychain {
     query[kSecMatchLimit] = kSecMatchLimitOne
     var result: CFTypeRef?
     let status = SecItemCopyMatching(query as CFDictionary, &result)
-    // An unsigned build can't see the data protection keychain at all.
-    if status == errSecItemNotFound || (modern && status == errSecMissingEntitlement) { return .missing }
+    // A build without the entitlement can't see the data protection
+    // keychain at all.
+    if modern && status == errSecMissingEntitlement {
+      modernUnavailable = true
+      return .missing
+    }
+    if status == errSecItemNotFound { return .missing }
     guard status == errSecSuccess, let data = result as? Data, let key = String(data: data, encoding: .utf8)
     else {
       Timing.log.error("Keychain read refused: \(status) (modern: \(modern))")

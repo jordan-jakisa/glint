@@ -545,6 +545,9 @@ final class RepositorySession {
   /// Your recent projects, newest first, for the switcher.
   func recentProjects() -> [URL] { access.recents() }
 
+  /// Drops a project from the switcher's list. Nothing on disk changes.
+  func removeFromRecents(_ url: URL) { access.forget(url) }
+
   private static func sameFolder(_ a: URL, _ b: URL) -> Bool {
     a.standardizedFileURL.resolvingSymlinksInPath().path == b.standardizedFileURL.resolvingSymlinksInPath().path
   }

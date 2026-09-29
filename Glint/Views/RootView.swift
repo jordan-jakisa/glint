@@ -35,7 +35,9 @@ struct RootView: View {
       .sheet(
         item: Binding(get: { session.editingHunk }, set: { if $0 == nil { session.endEdit() } })
       ) { edit in
-        HunkEditor(edit: edit, save: session.saveEdit, cancel: session.endEdit)
+        HunkEditor(edit: edit, save: session.saveEdit, cancel: session.endEdit) { error in
+          session.alert = UserAlert("Couldn't save your edit", error: error)
+        }
           .font(.app(.body))
           .tint(.themeAccent)
           .themedTextLevels()

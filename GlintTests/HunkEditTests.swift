@@ -67,7 +67,35 @@ import Testing
     try "a\ntheirs\nc\n".write(to: url, atomically: true, encoding: .utf8)
     edit.syncFromDisk()
     #expect(edit.text == "a\nmine\nc")
-    #expect(edit.note?.contains("Yours are kept") == true)
+    #expect(edit.hasConflict)
+  }
+
+  @Test func aConflictPausesAutosaveUntilYouPick() async throws {
+    let url = try file("a\nb\nc\n")
+    let edit = LiveEdit(url: url, content: try read(url), start: 0, count: 3, wholeFile: true)
+    edit.autosaveDelay = .milliseconds(30)
+    edit.text = "a\nmine\nc"
+    try "a\ntheirs\nc\n".write(to: url, atomically: true, encoding: .utf8)
+    edit.syncFromDisk()
+    edit.text = "a\nmine!\nc"
+    try await Task.sleep(for: .milliseconds(200))
+    // Theirs is still on disk: nothing was overwritten behind your back.
+    #expect(try read(url) == "a\ntheirs\nc\n")
+    edit.useTheirs()
+    #expect(edit.text == "a\ntheirs\nc")
+    #expect(!edit.hasConflict && !edit.hasUnsavedChanges)
+  }
+
+  @Test func keepMineSavesYours() throws {
+    let url = try file("a\nb\n")
+    let edit = LiveEdit(url: url, content: try read(url), start: 0, count: 2)
+    edit.text = "a\nmine"
+    try "a\ntheirs\n".write(to: url, atomically: true, encoding: .utf8)
+    edit.syncFromDisk()
+    #expect(edit.hasConflict)
+    try edit.keepMine()
+    #expect(try read(url) == "a\nmine\n")
+    #expect(!edit.hasConflict)
   }
 }
 

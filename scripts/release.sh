@@ -21,6 +21,12 @@ echo "Releasing Glint $version, signed by $identity"
 
 work="${TMPDIR:-/tmp}/glint-release"
 rm -rf "$work" && mkdir -p "$work"
+
+# Nothing ships with a failing test.
+echo "Running the tests"
+xcodebuild -project Glint.xcodeproj -scheme Glint -skipPackagePluginValidation -derivedDataPath "$work/test" test \
+  | grep -E "error:|✘|TEST (SUCC|FAIL)" | tee "$work/test.log" || true
+grep -q "TEST SUCCEEDED" "$work/test.log" || { echo "Tests failed; not releasing."; exit 1; }
 archive="$work/Glint.xcarchive"
 
 xcodebuild -project Glint.xcodeproj -scheme Glint -configuration Release -skipPackagePluginValidation \

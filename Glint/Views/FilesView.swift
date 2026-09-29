@@ -60,63 +60,12 @@ struct FilesView: View {
 
   // MARK: Rows
 
-  private struct Row {
-    let id: String
-    let path: String
-    let name: String
-    let depth: Int
-    let isFolder: Bool
-  }
+  private typealias Row = FileTree.Row
 
-  /// Folders first at each level, then files; only what's expanded. With a
-  /// filter, the matching files, flat, by path.
   private var rows: [Row] {
-    let trimmed = query.trimmingCharacters(in: .whitespaces)
-    if !trimmed.isEmpty {
-      return session.projectFiles.lazy
-        .filter { $0.localizedCaseInsensitiveContains(trimmed) }
-        .prefix(500)
-        .map { Row(id: "file:" + $0, path: $0, name: $0, depth: 0, isFolder: false) }
-    }
-    var tree = Node()
-    for path in session.projectFiles { tree.insert(path.split(separator: "/").map(String.init)) }
-    for path in loadedFiles { tree.insert(path.split(separator: "/").map(String.init)) }
-    for folder in session.ignoredFolders.union(loadedFolders) {
-      tree.insertFolder(folder.split(separator: "/").map(String.init))
-    }
-    var rows: [Row] = []
-    func walk(_ node: Node, prefix: String, depth: Int) {
-      for name in node.folders.keys.sorted(by: { $0.localizedStandardCompare($1) == .orderedAscending }) {
-        let path = prefix.isEmpty ? name : prefix + "/" + name
-        rows.append(Row(id: "folder:" + path, path: path, name: name, depth: depth, isFolder: true))
-        if expanded.contains(path) { walk(node.folders[name]!, prefix: path, depth: depth + 1) }
-      }
-      for name in node.files.sorted(by: { $0.localizedStandardCompare($1) == .orderedAscending }) {
-        let path = prefix.isEmpty ? name : prefix + "/" + name
-        rows.append(Row(id: "file:" + path, path: path, name: name, depth: depth, isFolder: false))
-      }
-    }
-    walk(tree, prefix: "", depth: 0)
-    return rows
-  }
-
-  private struct Node {
-    var folders: [String: Node] = [:]
-    var files: [String] = []
-
-    mutating func insertFolder(_ parts: [String]) {
-      guard let first = parts.first else { return }
-      folders[first, default: Node()].insertFolder(Array(parts.dropFirst()))
-    }
-
-    mutating func insert(_ parts: [String]) {
-      guard let first = parts.first else { return }
-      if parts.count == 1 {
-        files.append(first)
-      } else {
-        folders[first, default: Node()].insert(Array(parts.dropFirst()))
-      }
-    }
+    FileTree.rows(
+      files: session.projectFiles + Array(loadedFiles), folders: session.ignoredFolders.union(loadedFolders),
+      expanded: expanded, query: query)
   }
 
   private func rowView(_ row: Row) -> some View {
@@ -267,6 +216,9 @@ struct FileEditorPane: View {
         .padding(.horizontal, 12)
         .frame(height: 32)
         Hairline()
+        EditConflictBar(edit: edit) { error in
+          session.alert = UserAlert("Couldn't save \(edit.fileName)", error: error)
+        }
         CodeEditor(text: Bindable(edit).text, language: edit.language, firstLine: 1)
           .id(edit.id)
       }

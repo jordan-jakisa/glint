@@ -4,6 +4,17 @@ import SwiftUI
 /// dropped on the Dock icon), like `zed <folder>`. The window opens them.
 final class AppDelegate: NSObject, NSApplicationDelegate {
   static let openFolders = Notification.Name("GlintOpenFolders")
+  private var terminationSignal: DispatchSourceSignal?
+
+  /// A plain quit signal (the installer's `pkill`, a logout script) goes
+  /// through the normal quit, so the editor saves first.
+  func applicationDidFinishLaunching(_ notification: Notification) {
+    signal(SIGTERM, SIG_IGN)
+    let source = DispatchSource.makeSignalSource(signal: SIGTERM, queue: .main)
+    source.setEventHandler { NSApp.terminate(nil) }
+    source.resume()
+    terminationSignal = source
+  }
 
   func application(_ application: NSApplication, open urls: [URL]) {
     NotificationCenter.default.post(name: Self.openFolders, object: urls)

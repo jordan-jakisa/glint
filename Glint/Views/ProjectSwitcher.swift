@@ -67,6 +67,16 @@ struct ProjectSwitcher: View {
                 row(url, highlighted: index == highlighted)
                   .id(index)
                   .onTapGesture { open(url) }
+                  .contextMenu {
+                    if !isCurrent(url) {
+                      Button("Remove from Recents") {
+                        session.removeFromRecents(url)
+                        projects.removeAll { $0 == url }
+                        highlighted = min(highlighted, max(0, matches.count - 1))
+                      }
+                    }
+                    Button("Reveal in Finder") { NSWorkspace.shared.activateFileViewerSelecting([url]) }
+                  }
               }
             }
             .padding(6)
