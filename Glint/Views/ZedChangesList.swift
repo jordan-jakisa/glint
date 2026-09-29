@@ -189,7 +189,7 @@ struct ZedChangesList: View {
       if isSelected { Rectangle().strokeBorder(Color.themeAccent, lineWidth: 1) }
     }
     .contentShape(Rectangle())
-    .onTapGesture { session.selectedChange = entry.selection }
+    .onTapGesture { session.selectedChange = ChangeSelection(staged: false, path: entry.path) }
     .id(entry.path)
     .help(entry.path)
     .contextMenu { menu(for: entry) }
@@ -197,7 +197,7 @@ struct ZedChangesList: View {
 
   /// Zed's entry menu, in Zed's order.
   @ViewBuilder private func menu(for entry: Entry) -> some View {
-    Button("Open Diff") { session.selectedChange = entry.selection }
+    Button("Open Diff") { session.selectedChange = ChangeSelection(staged: false, path: entry.path) }
     Button("View File") { session.openFile(entry.path) }
     Button("View File History") { session.showHistory(for: entry.path) }
     Divider()
@@ -230,20 +230,7 @@ struct ZedChangesList: View {
 
   // MARK: Model
 
-  enum StageState { case none, partial, all }
-
-  struct Entry: Identifiable, Hashable {
-    let path: String
-    let kind: ChangedFile.Kind
-    let state: StageState
-    let hasUnstaged: Bool
-    var id: String { path }
-    var fileName: String { (path as NSString).lastPathComponent }
-    var directory: String { (path as NSString).deletingLastPathComponent }
-    /// Every file lives in the one Uncommitted Changes view, as in Zed;
-    /// picking it scrolls there.
-    var selection: ChangeSelection { ChangeSelection(staged: false, path: path) }
-  }
+  typealias Entry = StagingEntry
 
   enum Row: Identifiable {
     case folder(String, depth: Int)
@@ -256,20 +243,11 @@ struct ZedChangesList: View {
     }
   }
 
-  /// Each path once, staged and unstaged together, sorted by path.
+  /// Each path once, staged and unstaged together.
   private var entries: [Entry] {
-    let staged = Dictionary(session.status.staged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
-    let unstaged = Dictionary(session.status.unstaged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
-    let paths = Set(staged.keys).union(unstaged.keys).sorted {
-      sortByName
-        ? (($0 as NSString).lastPathComponent, $0) < (($1 as NSString).lastPathComponent, $1) : $0 < $1
-    }
-    return paths.map { path in
-      let kind = unstaged[path]?.kind ?? staged[path]!.kind
-      let state: StageState =
-        unstaged[path] == nil ? .all : (staged[path] == nil ? .none : .partial)
-      return Entry(path: path, kind: kind, state: state, hasUnstaged: unstaged[path] != nil)
-    }
+    let entries = session.status.entries
+    guard sortByName else { return entries }
+    return entries.sorted { ($0.fileName, $0.path) < ($1.fileName, $1.path) }
   }
 
   private var totals: LineStat {
@@ -367,7 +345,7 @@ struct StatusIcon: View {
 /// Zed's filled checkbox: accent-filled with a check when staged, a dash
 /// when partly staged, an outline when not.
 private struct StageBox: View {
-  let state: ZedChangesList.StageState
+  let state: StageState
   let toggle: () -> Void
 
   var body: some View {

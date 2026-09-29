@@ -20,10 +20,17 @@ extension RepositorySession {
       return
     }
     let partial = paths.map { Array($0) }
+    let generation = indexGeneration
     statusTask = Task {
       let start = ContinuousClock.now
       let fresh = try? await repository.status(paths: partial)
-      if let fresh {
+      // Stale if the repository changed, or if the index is being written:
+      // applying it would untick what you just ticked. The write's own
+      // refresh follows.
+      let isCurrent =
+        !Task.isCancelled && self.repository === repository && generation == indexGeneration
+        && pendingIndexWrites == 0
+      if let fresh, isCurrent {
         if let paths {
           Timing.report("status, changed files only", since: start, budget: 16)
           apply(status.merging(fresh, for: paths))
@@ -104,19 +111,32 @@ extension RepositorySession {
     _ optimistic: (inout WorkingTreeStatus) -> Void,
     _ work: @escaping @Sendable (GitRepository) async throws -> Void
   ) {
-    guard let repository else { return }
+    guard repository != nil else { return }
     var next = status
     optimistic(&next)
     apply(next, reloadDiff: false)
-    Task {
+    writeIndex("Couldn't update what's staged", work)
+  }
+
+  /// Queues an index write behind any still running, so quick clicks land
+  /// in order and none reads an index another is halfway through writing.
+  /// The list is refreshed from git once the last one is done.
+  func writeIndex(_ failure: String, _ work: @escaping @Sendable (GitRepository) async throws -> Void) {
+    guard let repository else { return }
+    indexGeneration += 1
+    pendingIndexWrites += 1
+    let previous = indexWrites
+    indexWrites = Task {
+      await previous?.value
       let start = ContinuousClock.now
       do {
         try await work(repository)
         Timing.report("index write", since: start, budget: 100)
       } catch {
-        alert = UserAlert("Couldn't update what's staged", error: error)
+        alert = UserAlert(failure, error: error)
       }
-      refreshWorkingTree()
+      pendingIndexWrites -= 1
+      if pendingIndexWrites == 0, self.repository === repository { refreshWorkingTree() }
     }
   }
 

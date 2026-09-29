@@ -293,6 +293,13 @@ final class RepositorySession {
   @ObservationIgnored var suppressRowsRebuild = false
   @ObservationIgnored var prefetchTask: Task<Void, Never>?
   @ObservationIgnored var statusTask: Task<Void, Never>?
+  /// Index writes run one after another, in the order you asked for them;
+  /// this is the latest.
+  @ObservationIgnored var indexWrites: Task<Void, Never>?
+  /// Index writes waiting or running. A status read while any are, or begun
+  /// before the latest started, is out of date and dropped.
+  @ObservationIgnored var pendingIndexWrites = 0
+  @ObservationIgnored var indexGeneration = 0
   @ObservationIgnored var statusRefreshQueued = false
   /// Files waiting for a partial status; nil when a full one is queued.
   @ObservationIgnored var pendingStatusPaths: Set<String>?

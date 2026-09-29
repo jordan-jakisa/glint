@@ -172,15 +172,8 @@ extension RepositorySession {
     guard !patches.isEmpty else { return }
     Timing.writes.notice("\(staged ? "unstage" : "stage", privacy: .public) \(patches.count) partial patch(es)")
     selectedLineRows = []
-    Task {
-      let start = ContinuousClock.now
-      do {
-        for patch in patches { try await repository.applyToIndex(patch) }
-        Timing.report("partial staging", since: start, budget: 100)
-      } catch {
-        alert = UserAlert("Couldn't stage those lines", error: error)
-      }
-      refreshWorkingTree()
+    writeIndex("Couldn't stage those lines") { repository in
+      for patch in patches { try await repository.applyToIndex(patch) }
     }
   }
 }

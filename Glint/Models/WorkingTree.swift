@@ -71,3 +71,34 @@ struct LineStat: Equatable, Sendable {
   let added: Int
   let deleted: Int
 }
+
+/// How much of a file is staged: its checkbox in the Changes list.
+enum StageState: Sendable { case none, partial, all }
+
+/// One file in the Changes list: staged and unstaged together.
+struct StagingEntry: Identifiable, Hashable, Sendable {
+  let path: String
+  let kind: ChangedFile.Kind
+  let state: StageState
+  let hasUnstaged: Bool
+  var id: String { path }
+  var fileName: String { (path as NSString).lastPathComponent }
+  var directory: String { (path as NSString).deletingLastPathComponent }
+}
+
+extension WorkingTreeStatus {
+  /// Each path once, sorted by path. A file only in the staged group is
+  /// fully staged; in both, partly; only unstaged, not at all.
+  var entries: [StagingEntry] {
+    let staged = Dictionary(self.staged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
+    let unstaged = Dictionary(self.unstaged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
+    return Set(staged.keys).union(unstaged.keys).sorted().map { path in
+      let state: StageState = unstaged[path] == nil ? .all : (staged[path] == nil ? .none : .partial)
+      // A new file with later edits is still new: say so, not "modified".
+      let kind =
+        staged[path]?.kind == .added && unstaged[path]?.kind != .conflicted
+        ? .added : (unstaged[path]?.kind ?? staged[path]!.kind)
+      return StagingEntry(path: path, kind: kind, state: state, hasUnstaged: unstaged[path] != nil)
+    }
+  }
+}
