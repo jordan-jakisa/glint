@@ -8,68 +8,75 @@ struct AISettingsView: View {
   @State private var keyFailed = false
 
   var body: some View {
-    Form {
-      Section("Commit messages") {
-        Toggle("Write commit messages with AI", isOn: $settings.isEnabled)
-        Text("Sends your diff to the provider only when you press \u{2728}.")
-          .font(.app(.callout))
-          .foregroundStyle(.secondary)
+    SettingsPage(title: "AI") {
+      SettingsSection(title: "Commit messages")
+      SettingsRow(
+        title: "Write commit messages with AI",
+        description: "Sends your diff to the provider only when you press \u{2728}."
+      ) {
+        Toggle("Write commit messages with AI", isOn: $settings.isEnabled).labelsHidden().toggleStyle(.switch)
       }
 
-      Section("Provider") {
+      SettingsSection(title: "Provider")
+      SettingsRow(title: "Provider", description: settings.provider.privacyNote) {
         Picker("Provider", selection: $settings.provider) {
           ForEach(AIProvider.allCases) { Text($0.name).tag($0) }
         }
-        HStack {
-          SecureField("API key", text: $keyDraft)
+        .labelsHidden()
+        .fixedSize()
+      }
+      SettingsRow(title: "API key", description: keyStatus) {
+        HStack(spacing: 6) {
+          SecureField(settings.hasKey ? "Paste to replace" : "Paste your key", text: $keyDraft)
             .onSubmit(saveKey)
+            .frame(width: 150)
           Button(keySaved ? "Saved" : "Save", action: saveKey)
             .disabled(keyDraft.isEmpty)
-        }
-        HStack {
-          Text(keyStatus)
-            .foregroundStyle(keyFailed ? .red : .secondary)
-          Spacer()
+            .fixedSize()
           Link("Get a Key", destination: settings.provider.keyURL)
+            .fixedSize()
         }
-        .font(.app(.callout))
       }
-
-      Section("Free model") {
-        HStack {
+      SettingsRow(title: "Free model", description: settings.modelsError ?? "Free models from \(settings.provider.name).") {
+        HStack(spacing: 4) {
           Picker("Model", selection: Binding(get: { settings.modelID }, set: { settings.modelID = $0 })) {
             if settings.models.isEmpty {
-              Text(settings.isLoadingModels ? "Loading…" : "No free models right now").tag(String?.none)
+              Text(settings.isLoadingModels ? "Loading\u{2026}" : "No free models right now").tag(String?.none)
             }
             ForEach(settings.models) { Text($0.name).tag(Optional($0.id)) }
           }
+          .labelsHidden()
+          .frame(width: 200)
           Button {
             settings.loadModels()
           } label: {
-            Image(systemName: "arrow.clockwise")
+            Image(systemName: "arrow.clockwise").hitTarget()
           }
           .buttonStyle(.borderless)
+          .accessibilityLabel("Reload the free models")
           .help("Reload the free models")
         }
-        if let error = settings.modelsError {
-          Text(error).font(.app(.callout)).foregroundStyle(.red)
-        }
-        Text(settings.provider.privacyNote)
-          .font(.app(.callout))
-          .foregroundStyle(.secondary)
       }
 
-      Section("How to write them") {
-        Toggle("Follow the repository's AGENTS.md or CLAUDE.md", isOn: $settings.followsRepositoryRules)
-        TextField(
-          "Your own instructions, like \u{201C}use conventional commits\u{201D}", text: $settings.instructions,
-          axis: .vertical
-        )
-        .lineLimit(3...6)
+      SettingsSection(title: "How to write them")
+      SettingsRow(
+        title: "Follow the repository's rules", description: "Reads AGENTS.md or CLAUDE.md when there is one.",
+        isModified: !settings.followsRepositoryRules, reset: { settings.followsRepositoryRules = true }
+      ) {
+        Toggle("Follow the repository's rules", isOn: $settings.followsRepositoryRules)
+          .labelsHidden()
+          .toggleStyle(.switch)
+      }
+      SettingsRow(
+        title: "Your instructions", description: "Like \u{201C}use conventional commits\u{201D}.",
+        isModified: !settings.instructions.isEmpty, reset: { settings.instructions = "" }
+      ) {
+        TextField("Instructions", text: $settings.instructions, axis: .vertical)
+          .labelsHidden()
+          .lineLimit(1...4)
+          .frame(width: 260)
       }
     }
-    .formStyle(.grouped)
-    .frame(height: 560)
     .onAppear {
       settings.refreshKeyState()
       if settings.models.isEmpty { settings.loadModels() }
@@ -83,8 +90,7 @@ struct AISettingsView: View {
 
   private var keyStatus: String {
     if keyFailed { return "Couldn't save your key to the Keychain. Unlock your login keychain, then save again." }
-    if settings.hasKey { return "Key saved in your Keychain." }
-    if settings.keyUnchecked { return "Glint checks for a saved key the first time you write a message." }
+    if settings.hasKey { return "Saved in your Keychain; it stays there between launches." }
     return "No key saved. Free models still need one."
   }
 

@@ -10,58 +10,54 @@ struct ShortcutsSettingsView: View {
   @State private var monitor: Any?
 
   var body: some View {
-    Form {
-      Section("Menu shortcuts") {
-        ForEach(AppCommand.allCases.filter { !$0.isSingleKey }) { row($0) }
+    SettingsPage(title: "Keymap") {
+      if let message {
+        Text(message)
+          .foregroundStyle(.red)
+          .padding(.horizontal, 32)
+          .padding(.top, 8)
       }
-      Section {
-        ForEach(AppCommand.allCases.filter(\.isSingleKey)) { row($0) }
-      } header: {
-        Text("Single keys")
-      } footer: {
-        Text("Only while you're not typing. \u{2318}1 to \u{2318}9 switch repository.")
-          .foregroundStyle(.secondary)
-      }
-      Section {
-        HStack {
-          if let message {
-            Text(message).foregroundStyle(.red)
-          }
-          Spacer()
-          Button("Reset to Defaults") {
-            store.resetAll()
-            message = nil
-          }
+      SettingsSection(title: "Menu shortcuts")
+      ForEach(AppCommand.allCases.filter { !$0.isSingleKey }) { row($0) }
+      SettingsSection(title: "Single keys, while you're not typing")
+      ForEach(AppCommand.allCases.filter(\.isSingleKey)) { row($0) }
+      SettingsRow(title: "Reset every shortcut", description: "\u{2318}1 to \u{2318}9 always switch repository.") {
+        Button("Reset All") {
+          store.resetAll()
+          message = nil
         }
       }
     }
-    .formStyle(.grouped)
-    .frame(height: 560)
     .onDisappear(perform: stopRecording)
   }
 
   private func row(_ command: AppCommand) -> some View {
-    HStack {
-      Text(command.title)
-      Spacer()
-      Button {
-        recording == command ? stopRecording() : startRecording(command)
-      } label: {
-        Text(label(for: command))
-          .font(.code(.body))
-          .frame(minWidth: 90)
+    SettingsRow(
+      title: command.title, description: "",
+      isModified: store.shortcut(for: command) != command.defaultShortcut,
+      reset: { _ = store.set(command.defaultShortcut, for: command) }
+    ) {
+      HStack(spacing: 6) {
+        Button {
+          recording == command ? stopRecording() : startRecording(command)
+        } label: {
+          Text(label(for: command))
+            .font(.code(.body))
+            .frame(minWidth: 90)
+        }
+        .buttonStyle(.bordered)
+        .tint(recording == command ? Color.themeAccent : nil)
+        Button {
+          store.set(nil, for: command)
+        } label: {
+          Image(systemName: "xmark.circle.fill").hitTarget()
+        }
+        .buttonStyle(.borderless)
+        .foregroundStyle(.secondary)
+        .accessibilityLabel("Remove the shortcut for \(command.title)")
+        .help("Remove this shortcut")
+        .disabled(store.shortcut(for: command) == nil)
       }
-      .buttonStyle(.bordered)
-      .tint(recording == command ? Color.themeAccent : nil)
-      Button {
-        store.set(nil, for: command)
-      } label: {
-        Image(systemName: "xmark.circle.fill")
-      }
-      .buttonStyle(.borderless)
-      .foregroundStyle(.secondary)
-      .help("Remove this shortcut")
-      .disabled(store.shortcut(for: command) == nil)
     }
   }
 
