@@ -116,7 +116,7 @@ struct SettingsPage<Content: View>: View {
   }
 }
 
-/// A group's name, small and dimmed with a line under it, as in Zed.
+/// A group's name, small and dimmed.
 struct SettingsSection: View {
   let title: String
   @Environment(\.settingsSearch) private var search
@@ -127,7 +127,6 @@ struct SettingsSection: View {
         Text(title)
           .font(.app(.caption))
           .foregroundStyle(.secondary)
-        Hairline()
       }
       .padding(.horizontal, 32)
       .padding(.top, 20)
@@ -177,7 +176,6 @@ struct SettingsRow<Control: View>: View {
           control.layoutPriority(1)
         }
         .padding(.vertical, 10)
-        Hairline()
       }
       .padding(.horizontal, 32)
     }
