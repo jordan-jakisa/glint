@@ -71,6 +71,7 @@ struct AISettingsView: View {
     .formStyle(.grouped)
     .frame(height: 560)
     .onAppear {
+      settings.refreshKeyState()
       if settings.models.isEmpty { settings.loadModels() }
     }
     .onChange(of: settings.provider) {

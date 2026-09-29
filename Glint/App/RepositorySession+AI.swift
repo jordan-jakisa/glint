@@ -16,11 +16,20 @@ extension RepositorySession {
       alert = UserAlert("Set up AI messages", message: settings.setupHint, opensSettings: true)
       return
     }
-    guard let key = settings.readKey() else {
+    let key: String
+    switch settings.readKey() {
+    case .found(let found):
+      key = found
+    case .missing:
       alert = UserAlert(
-        "Couldn't read your key",
-        message: "Glint couldn't read your \(settings.provider.name) key from the Keychain. Add it again in Settings.",
-        opensSettings: true)
+        "Add your API key",
+        message: "There's no \(settings.provider.name) key saved yet. Add it in Settings.", opensSettings: true)
+      return
+    case .refused:
+      // The key is saved; macOS said no this time. A new key won't help.
+      alert = UserAlert(
+        "Couldn't open your key",
+        message: "Your \(settings.provider.name) key is saved, but macOS didn't let Glint read it. Unlock your login keychain, or click Always Allow when macOS asks, then try again.")
       return
     }
     guard let repository else { return }

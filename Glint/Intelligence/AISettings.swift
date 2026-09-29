@@ -52,6 +52,15 @@ final class AISettings {
     instructions = defaults.string(forKey: "aiInstructions") ?? ""
     followsRepositoryRules = defaults.object(forKey: "aiRepositoryRules") as? Bool ?? true
     keyState = defaults.dictionary(forKey: "aiKeyState") as? [String: Bool] ?? [:]
+    refreshKeyState()
+  }
+
+  /// Looks again at which providers have a key saved, without reading any.
+  /// Fixes a stale "no key" left by an old read that macOS refused.
+  func refreshKeyState() {
+    var fresh = keyState
+    for provider in AIProvider.allCases { fresh[provider.rawValue] = Keychain.hasKey(for: provider) }
+    if fresh != keyState { keyState = fresh }
   }
 
   var modelID: String? {
@@ -67,12 +76,26 @@ final class AISettings {
 
   /// Reads the key from the Keychain. Only call this when about to send a
   /// request: it's the one place that can make macOS ask for permission.
-  func readKey() -> String? {
-    if let cached = keyCache[provider] { return cached }
-    let key = Keychain.key(for: provider).flatMap { $0.isEmpty ? nil : $0 }
-    keyState[provider.rawValue] = key != nil
-    keyCache[provider] = key
-    return key
+  func readKey() -> Keychain.Lookup {
+    if let cached = keyCache[provider] { return .found(cached) }
+    let lookup = Keychain.key(for: provider)
+    switch lookup {
+    case .found(let key):
+      keyState[provider.rawValue] = true
+      keyCache[provider] = key
+      // Save it again from this build, once a launch: the Keychain then
+      // trusts this app's signing identity, so later builds read it without
+      // asking. Keys saved by an older, differently signed build stop asking
+      // after this.
+      Keychain.setKey(key, for: provider)
+    case .missing:
+      keyState[provider.rawValue] = false
+    case .refused:
+      // The key is still there; only this read failed. Keep saying so, and
+      // try again next time rather than asking for a new key.
+      break
+    }
+    return lookup
   }
 
   /// Saves the key to the Keychain. False if the Keychain refused it (a
