@@ -83,11 +83,6 @@ final class AISettings {
     case .found(let key):
       keyState[provider.rawValue] = true
       keyCache[provider] = key
-      // Save it again from this build, once a launch: the Keychain then
-      // trusts this app's signing identity, so later builds read it without
-      // asking. Keys saved by an older, differently signed build stop asking
-      // after this.
-      Keychain.setKey(key, for: provider)
     case .missing:
       keyState[provider.rawValue] = false
     case .refused:

@@ -28,8 +28,9 @@ extension RepositorySession {
     case .refused:
       // The key is saved; macOS said no this time. A new key won't help.
       alert = UserAlert(
-        "Couldn't open your key",
-        message: "Your \(settings.provider.name) key is saved, but macOS didn't let Glint read it. Unlock your login keychain, or click Always Allow when macOS asks, then try again.")
+        "Paste your key once more",
+        message: "macOS won't let this build read the \(settings.provider.name) key an older one saved. Paste it in Settings one last time: Glint now keeps it where every build can read it, without asking.",
+        opensSettings: true)
       return
     }
     guard let repository else { return }
