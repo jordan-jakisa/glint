@@ -204,15 +204,20 @@ extension RepositorySession {
 /// Which repository of each workspace was active last, so reopening a
 /// workspace lands where you left it.
 enum WorkspaceMemory {
-  private static let key = "workspaceActiveRepositories"
+  /// One key per folder. A single shared dictionary, read, changed and
+  /// written back, lost entries whenever two writers overlapped (two
+  /// windows, or another copy of Glint).
+  private static let prefix = "workspaceActiveRepository:"
+  /// Where they were kept before, read as a fallback.
+  private static let legacyKey = "workspaceActiveRepositories"
 
   static func activeRepository(in root: URL) -> String? {
-    (UserDefaults.standard.dictionary(forKey: key) as? [String: String])?[root.standardizedFileURL.path]
+    let path = root.standardizedFileURL.path
+    return UserDefaults.standard.string(forKey: prefix + path)
+      ?? (UserDefaults.standard.dictionary(forKey: legacyKey) as? [String: String])?[path]
   }
 
   static func remember(_ relativePath: String, in root: URL) {
-    var all = UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
-    all[root.standardizedFileURL.path] = relativePath
-    UserDefaults.standard.set(all, forKey: key)
+    UserDefaults.standard.set(relativePath, forKey: prefix + root.standardizedFileURL.path)
   }
 }

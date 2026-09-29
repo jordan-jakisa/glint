@@ -11,6 +11,8 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   /// "Stage File" or "Unstage File" on a file header; nil where the diff
   /// can't be staged from.
   private var fileStageTitle: String?
+  /// The file picked in the list: a faint accent tint and edge on its header.
+  private var isSelectedFile = false
   /// The new-side line's blame, for the gutter column; nil until loaded.
   private var blame: BlameCommit?
   /// Set on the one selected line: its blame, drawn after the code.
@@ -102,8 +104,9 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
   func configure(
     _ row: DiffRow, metrics: DiffMetrics, hunkAction: String? = nil, blame: BlameCommit? = nil,
     inlineBlame: BlameCommit? = nil, restoreAction: Bool = false, openFile: Bool = false,
-    fileStageTitle: String? = nil
+    fileStageTitle: String? = nil, isSelectedFile: Bool = false
   ) {
+    self.isSelectedFile = isSelectedFile
     self.row = row
     self.openFile = openFile
     let fileActionChanged = self.fileStageTitle != fileStageTitle
@@ -238,7 +241,11 @@ final class DiffRowCell: NSView, NSViewToolTipOwner {
     let path = NSBezierPath(roundedRect: card, xRadius: 6, yRadius: 6)
     (Theme.shared.panelBackground ?? .windowBackgroundColor).setFill()
     path.fill()
-    ZedPalette.border.setStroke()
+    if isSelectedFile {
+      Theme.shared.accentColor.withAlphaComponent(0.10).setFill()
+      path.fill()
+    }
+    (isSelectedFile ? Theme.shared.accentColor.withAlphaComponent(0.7) : ZedPalette.border).setStroke()
     path.lineWidth = 1 / (window?.backingScaleFactor ?? 2)
     path.stroke()
 

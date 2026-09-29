@@ -24,6 +24,7 @@ struct GeneralSettingsView: View {
         Picker("File order", selection: $fileOrder) {
           Text("Source first").tag(FileOrder.smart)
           Text("By path").tag(FileOrder.path)
+          Text("By name").tag(FileOrder.name)
         }
         .labelsHidden()
         .fixedSize()

@@ -37,6 +37,8 @@ struct DiffTableView: NSViewRepresentable {
   /// Stages (true) or unstages a whole file from its header; nil where the
   /// diff can't be staged from.
   var stageFile: ((String, Bool) -> Void)? = nil
+  /// The file picked in the Changes list: its header is tinted.
+  var selectedFile: Int? = nil
   /// Who last changed a new-side line of the file at an index; nil until
   /// that file's blame is loaded (asking starts the load). Feeds the blame
   /// column and the selected line's inline blame.
@@ -110,6 +112,7 @@ struct DiffTableView: NSViewRepresentable {
     private var editLines: ((DiffRowID) -> Void)?
     private var openFile: ((String) -> Void)?
     private var stageFile: ((String, Bool) -> Void)?
+    private var selectedFile: Int?
     private var hunkAction: (DiffRowID) -> Void = { _ in }
     private var blame: ((Int, DiffLine) -> BlameCommit?)?
     private var showsBlame = false
@@ -124,6 +127,7 @@ struct DiffTableView: NSViewRepresentable {
     func attach(table: NSTableView, scrollView: NSScrollView) {
       self.table = table
       self.scrollView = scrollView
+      updateOverscroll()
       let clip = scrollView.contentView
       clip.postsBoundsChangedNotifications = true
       table.postsFrameChangedNotifications = true
@@ -147,6 +151,14 @@ struct DiffTableView: NSViewRepresentable {
       editLines = view.editLines
       openFile = view.openFile
       stageFile = view.stageFile
+      if view.selectedFile != selectedFile, let table {
+        // Only the two headers change: the old one and the new one.
+        let headers = [selectedFile, view.selectedFile].compactMap { $0 }.compactMap { index(of: .file($0)) }
+        selectedFile = view.selectedFile
+        if !headers.isEmpty {
+          table.reloadData(forRowIndexes: IndexSet(headers), columnIndexes: IndexSet(integer: 0))
+        }
+      }
       blame = view.blame
       permalinks = view.permalinks
       let restoreChanged = (view.restoreHunk != nil) != (restoreHunk != nil)
@@ -265,7 +277,8 @@ struct DiffTableView: NSViewRepresentable {
       cell.configure(
         rows[row], metrics: metrics, hunkAction: hunkActionTitle(for: rows[row]), blame: column, inlineBlame: inline,
         restoreAction: restoreHunk != nil && !rows[row].fileIsStaged, openFile: openFile != nil,
-        fileStageTitle: fileStageTitle(for: rows[row]))
+        fileStageTitle: fileStageTitle(for: rows[row]),
+        isSelectedFile: selectedFile != nil && rows[row].id == .file(selectedFile!))
       return cell
     }
 
@@ -519,7 +532,20 @@ struct DiffTableView: NSViewRepresentable {
       visibleRowsChanged([rows[range.location].id])
     }
 
+    /// Room past the end, like Zed's scroll beyond the last line, so any
+    /// file's header can come to the top when you pick it, the last one too.
+    private func updateOverscroll() {
+      guard let scrollView else { return }
+      scrollView.automaticallyAdjustsContentInsets = false
+      let bottom = max(0, scrollView.contentView.bounds.height - 120)
+      guard scrollView.contentInsets.bottom != bottom else { return }
+      var insets = scrollView.contentInsets
+      insets.bottom = bottom
+      scrollView.contentInsets = insets
+    }
+
     private func widthMayHaveChanged() {
+      updateOverscroll()
       guard let table, table.bounds.width != heightsWidth, !rows.isEmpty else { return }
       // Heights depend on how many characters fit per line. Recompute only
       // when that count changes, which is every few points of resizing.

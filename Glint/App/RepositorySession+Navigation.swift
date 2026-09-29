@@ -55,10 +55,14 @@ extension RepositorySession {
   /// Style Zed: brings the selected file's section of the all-files diff to
   /// the top.
   func scrollToSelectedFile() {
-    guard Theme.shared.isZed, tab == .changes, let path = selectedChange?.path,
-      let index = diff?.files.firstIndex(where: { $0.newPath == path || $0.oldPath == path })
-    else { return }
+    guard let index = selectedDiffFileIndex else { return }
     scroll(to: .file(index))
+  }
+
+  /// Style Zed: where the file picked in the list is in Uncommitted Changes.
+  var selectedDiffFileIndex: Int? {
+    guard Theme.shared.isZed, tab == .changes, let path = selectedChange?.path else { return nil }
+    return diff?.files.firstIndex { $0.newPath == path || $0.oldPath == path }
   }
 
   func scroll(to target: DiffRowID) {

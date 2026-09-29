@@ -86,6 +86,9 @@ extension RepositorySession {
     let hunk = cursor.hunk >= 0 ? cursor.hunk : 0
     guard files.indices.contains(file), files[file].hunks.indices.contains(hunk) else { return }
     stageHunk(.hunk(file, hunk))
+    // Style Zed: the hunk stays in Uncommitted Changes, so go on to the
+    // next one, like Zed's Stage and Next.
+    if Theme.shared.isZed { nextHunk() }
   }
 
   private struct Pick {

@@ -166,6 +166,10 @@ final class Theme {
     changed()
   }
 
+  /// For tests: switches Style without saving it, so the Glint you have
+  /// open keeps its own.
+  func setUsesLiquidGlassForTesting(_ on: Bool) { usesLiquidGlass = on }
+
   func setUsesLiquidGlass(_ on: Bool) {
     usesLiquidGlass = on
     defaults.set(!on, forKey: "flatToolbar")
