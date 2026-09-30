@@ -69,6 +69,26 @@ import Testing
   }
 }
 
+extension StagedFoldTests {
+  /// The first diff at launch comes a different way; it folds too.
+  @Test func aFileStagedBeforeOpeningIsFoldedAtLaunch() async throws {
+    let was = Theme.shared.usesLiquidGlass
+    Theme.shared.setUsesLiquidGlassForTesting(false)
+    defer { Theme.shared.setUsesLiquidGlassForTesting(was) }
+
+    let fixture = try FixtureRepository()
+    try fixture.commit("base", files: ["a.py": "1\n", "b.py": "1\n"])
+    try fixture.write("a.py", "2\n")
+    try fixture.stage("a.py")
+    try fixture.write("b.py", "2\n")
+    let session = RepositorySession()
+    session.install(try await RepositorySession.load(fixture.url))
+    await settle(session)
+    #expect(session.diff?.files.map(\.path) == ["a.py", "b.py"])
+    #expect(session.collapsedFiles == [try #require(index(session, "a.py"))])
+  }
+}
+
 @Suite struct VersionHistoryTests {
   @Test func parsesVersionsNewestFirst() {
     let versions = VersionHistory.parse("# 0.2.0\n\n- One\n- Two `code`\n\n# 0.1.0\n- First\n")

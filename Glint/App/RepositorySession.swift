@@ -157,7 +157,11 @@ final class RepositorySession {
   // MARK: Diff on screen
 
   internal(set) var diff: Diff? {
-    didSet { rebuildRows(.all) }
+    didSet {
+      // Every Uncommitted Changes diff, the first at launch included.
+      if let diff, Theme.shared.isZed, case .workingTree(false, nil) = diff.source { foldStagedFiles(in: diff) }
+      rebuildRows(.all)
+    }
   }
   internal(set) var diffError: String?
   internal(set) var isLoadingDiff = false
@@ -747,7 +751,6 @@ final class RepositorySession {
           branchComparison = comparison
         }
         guard !Task.isCancelled, selectedSource == source else { return }
-        if case .workingTree(false, nil) = source, Theme.shared.isZed { foldStagedFiles(in: loaded) }
         diff = loaded
         if !inPlace { scrollToSelectedFile() }
         if !loaded.isComplete {
