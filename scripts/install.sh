@@ -20,7 +20,7 @@ else
 fi
 
 xcodebuild -project Glint.xcodeproj -scheme Glint -configuration Release -skipPackagePluginValidation \
-  -derivedDataPath "$derived" "${signing[@]}" build | grep -E "error:|BUILD" || true
+  -derivedDataPath "$derived" "${signing[@]}" CURRENT_PROJECT_VERSION="$(git rev-list --count HEAD)" build | grep -E "error:|BUILD" || true
 
 app="$derived/Build/Products/Release/Glint.app"
 [[ -d "$app" ]] || { echo "Build failed"; exit 1; }

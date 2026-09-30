@@ -161,6 +161,10 @@ final class RepositorySession {
   }
   internal(set) var diffError: String?
   internal(set) var isLoadingDiff = false
+  /// Style Zed's Uncommitted Changes: staged files you opened, and files
+  /// you folded, by path, so reloads keep your choice.
+  @ObservationIgnored var openedStagedPaths: Set<String> = []
+  @ObservationIgnored var foldedPaths: Set<String> = []
   internal(set) var collapsedFiles: Set<Int> = [] {
     // Set.remove of a missing member still counts as a set. Without this check
     // every hunk jump rebuilt every row and reloaded the whole table.
@@ -594,6 +598,8 @@ final class RepositorySession {
 
   func install(_ opened: Opened, selecting preferred: ChangeSelection? = nil) {
     closeOpenedFile()
+    openedStagedPaths = []
+    foldedPaths = []
     projectFiles = []
     ignoredFiles = []
     ignoredFolders = []
@@ -741,6 +747,7 @@ final class RepositorySession {
           branchComparison = comparison
         }
         guard !Task.isCancelled, selectedSource == source else { return }
+        if case .workingTree(false, nil) = source, Theme.shared.isZed { foldStagedFiles(in: loaded) }
         diff = loaded
         if !inPlace { scrollToSelectedFile() }
         if !loaded.isComplete {

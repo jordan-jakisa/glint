@@ -16,14 +16,19 @@ struct UserAlert: Equatable, Sendable {
   @MainActor init(_ title: String, error: Error) {
     self.title = title
     let raw = Self.rawText(of: error)
-    message = Self.advice(for: error, raw: raw)
-    details = raw == message ? nil : raw
+    let advice = Self.advice(for: error, raw: raw)
+    message = advice
+    details = raw == advice ? nil : raw
+    // Every error you're shown is kept, for Export Diagnostics. Git's own
+    // text can hold paths and names, so it stays private in the log.
+    Diagnostics.errors.error("\(title, privacy: .public): \(advice, privacy: .public) [\(raw, privacy: .private)]")
   }
 
   init(_ title: String, message: String, opensSettings: Bool = false) {
     self.title = title
     self.message = message
     self.opensSettings = opensSettings
+    Diagnostics.errors.notice("\(title, privacy: .public): \(message, privacy: .public)")
   }
 
   private static func rawText(of error: Error) -> String {

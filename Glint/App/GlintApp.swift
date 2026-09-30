@@ -14,6 +14,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     source.setEventHandler { NSApp.terminate(nil) }
     source.resume()
     terminationSignal = source
+    Diagnostics.start()
   }
 
   func application(_ application: NSApplication, open urls: [URL]) {
