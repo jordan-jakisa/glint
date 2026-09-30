@@ -127,7 +127,6 @@ struct DiffTableView: NSViewRepresentable {
     func attach(table: NSTableView, scrollView: NSScrollView) {
       self.table = table
       self.scrollView = scrollView
-      updateOverscroll()
       let clip = scrollView.contentView
       clip.postsBoundsChangedNotifications = true
       table.postsFrameChangedNotifications = true
@@ -532,20 +531,11 @@ struct DiffTableView: NSViewRepresentable {
       visibleRowsChanged([rows[range.location].id])
     }
 
-    /// Room past the end, like Zed's scroll beyond the last line, so any
-    /// file's header can come to the top when you pick it, the last one too.
-    private func updateOverscroll() {
-      guard let scrollView else { return }
-      scrollView.automaticallyAdjustsContentInsets = false
-      let bottom = max(0, scrollView.contentView.bounds.height - 120)
-      guard scrollView.contentInsets.bottom != bottom else { return }
-      var insets = scrollView.contentInsets
-      insets.bottom = bottom
-      scrollView.contentInsets = insets
-    }
+    // No room past the end (content insets): they broke the table's clicks,
+    // so headers wouldn't fold, Open File did nothing and lines couldn't be
+    // selected. The last file scrolls as far as it can instead.
 
     private func widthMayHaveChanged() {
-      updateOverscroll()
       guard let table, table.bounds.width != heightsWidth, !rows.isEmpty else { return }
       // Heights depend on how many characters fit per line. Recompute only
       // when that count changes, which is every few points of resizing.
