@@ -133,6 +133,22 @@ private let sample = """
   }
 }
 
+@MainActor @Suite struct NotebookFilesTabTests {
+  @Test func theFilesTabOpensANotebook() async throws {
+    let fixture = try FixtureRepository()
+    try fixture.commit("base", files: ["notebooks/a.ipynb": sample])
+    let session = RepositorySession()
+    session.install(try await RepositorySession.load(fixture.url))
+    session.showFile("notebooks/a.ipynb")
+    #expect(session.alert == nil)
+    #expect(session.openedNotebook?.notebook.cells.count == 2)
+    #expect(session.tab == .files)
+    session.closeOpenedFile()
+    // Opening and closing left the file as it was.
+    #expect(try String(contentsOf: fixture.url.appendingPathComponent("notebooks/a.ipynb"), encoding: .utf8) == sample)
+  }
+}
+
 /// Notebooks in the diff read as cells.
 @Suite struct NotebookDiffTests {
   @Test func aChangedNotebookDiffsAsCells() async throws {

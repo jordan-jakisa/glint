@@ -72,7 +72,19 @@ struct FilesView: View {
     let isOpen = !row.isFolder && row.path == session.openedFilePath
     let kind = row.isFolder ? nil : changes[row.path]
     let ignored = isIgnored(row.path)
-    return HStack(spacing: 6) {
+    return Button {
+      if row.isFolder {
+        if expanded.contains(row.path) {
+          expanded.remove(row.path)
+        } else {
+          expanded.insert(row.path)
+          loadIgnoredFolder(row.path)
+        }
+      } else {
+        session.showFile(row.path)
+      }
+    } label: {
+    HStack(spacing: 6) {
       if row.isFolder {
         Image(systemName: expanded.contains(row.path) ? "chevron.down" : "chevron.right")
           .font(.app(.caption2))
@@ -101,18 +113,11 @@ struct FilesView: View {
     .frame(height: 26)
     .background(isOpen ? Color.themeAccent.opacity(0.12) : .clear)
     .contentShape(Rectangle())
-    .onTapGesture {
-      if row.isFolder {
-        if expanded.contains(row.path) {
-          expanded.remove(row.path)
-        } else {
-          expanded.insert(row.path)
-          loadIgnoredFolder(row.path)
-        }
-      } else {
-        session.showFile(row.path)
-      }
     }
+    // A button, not a tap gesture: it opens for VoiceOver and keyboard
+    // too, and takes the first click in a window that isn't in front.
+    .buttonStyle(.plain)
+    .accessibilityAddTraits(isOpen ? .isSelected : [])
     .help(row.path)
     .contextMenu {
       let url = session.filesRoot?.appendingPathComponent(row.path)
