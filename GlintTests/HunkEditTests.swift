@@ -190,7 +190,7 @@ import Testing
     let edit = LiveEdit(url: url, content: "a\nb\n", start: 0, count: 2, wholeFile: true)
     edit.autosaveDelay = .milliseconds(50)
     edit.text = "a\nB"
-    try await Task.sleep(for: .milliseconds(300))
+    for _ in 0..<100 where (try? String(contentsOf: url, encoding: .utf8)) != "a\nB\n" { try await Task.sleep(for: .milliseconds(50)) }
     #expect(try String(contentsOf: url, encoding: .utf8) == "a\nB\n")
     #expect(!edit.hasUnsavedChanges)
   }

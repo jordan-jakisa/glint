@@ -131,7 +131,7 @@ extension RepositorySession {
   func filesChanged(_ change: RepositoryWatcher.Change) {
     // FSEvents reports real paths (/private/var/...); the repository may have
     // been opened through a symlink (/var/...). Compare real paths.
-    guard let active = repository?.url.resolvingSymlinksInPath().path else { return }
+    guard let active = repository?.url.realPath else { return }
     let prefix = active.hasSuffix("/") ? active : active + "/"
     let mine = change.paths.filter { $0.key.hasPrefix(prefix) || $0.key == active }
     if mine.values.contains(.head) { refreshHistory() }
@@ -151,7 +151,7 @@ extension RepositorySession {
   func otherRepositoriesChanged(_ paths: [String]) {
     guard let workspace else { return }
     let touched = workspace.repositories.filter { repo in
-      let prefix = repo.url.resolvingSymlinksInPath().path + "/"
+      let prefix = repo.url.realPath + "/"
       return paths.contains { $0.hasPrefix(prefix) }
     }
     let active = activeWorkspaceRepository?.relativePath

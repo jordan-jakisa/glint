@@ -25,6 +25,8 @@ final class NotebookKernel {
   /// The Python in use, for the toolbar.
   private(set) var python: URL?
 
+  /// A Python to use before any other (tests; otherwise Settings' choice).
+  @ObservationIgnored var pythonOverride: URL?
   @ObservationIgnored private var process: Process?
   @ObservationIgnored private var input: FileHandle?
   @ObservationIgnored private var reading: Task<Void, Never>?
@@ -50,7 +52,7 @@ final class NotebookKernel {
     guard state == .stopped || state == .needsSetup || isFailed else { return }
     state = .starting
     Task {
-      guard let python = await Self.findPython(project: project) else {
+      guard let python = await Self.findPython(project: project, override: pythonOverride) else {
         state = .needsSetup
         return
       }
@@ -186,8 +188,9 @@ final class NotebookKernel {
   // MARK: Finding and setting up Python
 
   /// Pythons to try, best first.
-  nonisolated static func candidates(project: URL) async -> [URL] {
+  nonisolated static func candidates(project: URL, override: URL? = nil) async -> [URL] {
     var urls: [URL] = []
+    if let override { urls.append(override) }
     if let chosen = UserDefaults.standard.string(forKey: "notebookPython"), !chosen.isEmpty {
       urls.append(URL(fileURLWithPath: (chosen as NSString).expandingTildeInPath))
     }
@@ -203,8 +206,8 @@ final class NotebookKernel {
   }
 
   /// The first candidate that has jupyter_client and ipykernel.
-  nonisolated static func findPython(project: URL) async -> URL? {
-    for python in await candidates(project: project) where await hasJupyter(python) {
+  nonisolated static func findPython(project: URL, override: URL? = nil) async -> URL? {
+    for python in await candidates(project: project, override: override) where await hasJupyter(python) {
       return python
     }
     return nil
@@ -217,9 +220,9 @@ final class NotebookKernel {
   /// Makes Glint's own environment with jupyter_client and ipykernel: uv if
   /// it's on your PATH (fast, and it can fetch a Python), else `python3 -m
   /// venv` and pip. Returns its Python.
-  func setUp() async throws -> URL {
+  func setUp(environment: URL = NotebookKernel.ownEnvironment, usingUV: Bool = true) async throws -> URL {
     state = .settingUp
-    let environment = Self.ownEnvironment
+    defer { if state == .settingUp { state = .stopped } }
     let path = await LoginEnvironment.shared.value.variables["PATH"] ?? ""
     let directories = path.split(separator: ":").map { URL(fileURLWithPath: String($0)) }
     let find = { (name: String) in
@@ -227,7 +230,7 @@ final class NotebookKernel {
     }
     let python = environment.appendingPathComponent("bin/python")
     let packages = ["jupyter_client", "ipykernel"]
-    if let uv = find("uv") ?? (FileManager.default.isExecutableFile(atPath: NSHomeDirectory() + "/.local/bin/uv") ? URL(fileURLWithPath: NSHomeDirectory() + "/.local/bin/uv") : nil) {
+    if usingUV, let uv = find("uv") ?? (FileManager.default.isExecutableFile(atPath: NSHomeDirectory() + "/.local/bin/uv") ? URL(fileURLWithPath: NSHomeDirectory() + "/.local/bin/uv") : nil) {
       guard await Self.run(uv, ["venv", "--allow-existing", environment.path]) == 0,
         await Self.run(uv, ["pip", "install", "--python", python.path] + packages) == 0
       else { throw SetUpError.failed("uv couldn't make the environment.") }

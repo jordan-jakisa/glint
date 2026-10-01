@@ -16,6 +16,8 @@ final class NotebookDocument: Identifiable {
   private(set) var note: String?
   let kernel = NotebookKernel()
 
+  /// Cells whose current run has begun, so their old outputs are cleared.
+  @ObservationIgnored private var started: Set<String> = []
   @ObservationIgnored private var saved: Data
   @ObservationIgnored private var diskStamp: Date?
   @ObservationIgnored private var watch: Task<Void, Never>?
@@ -96,7 +98,9 @@ final class NotebookDocument: Identifiable {
   func run(_ cellID: String, project: URL) {
     guard let index = index(of: cellID), notebook.cells[index].kind == .code else { return }
     if kernel.state == .stopped || isKernelFailed { kernel.start(project: project, kernelName: notebook.kernelName) }
-    notebook.cells[index].outputs = []
+    // Old outputs stay until this cell really starts: a cell waiting its
+    // turn, or dropped by Interrupt, keeps what it showed.
+    started.remove(cellID)
     running.insert(cellID)
     let code = notebook.cells[index].source
     kernel.run(id: cellID, code: code) { [weak self] event in
@@ -113,20 +117,27 @@ final class NotebookDocument: Identifiable {
   private func apply(_ event: NotebookKernel.Event, to cellID: String) {
     guard let index = index(of: cellID) else { return }
     switch event {
-    case .output(let raw):
+    case .output(let kernelOutput):
+      let raw = Notebook.normalized(kernelOutput)
+      if started.insert(cellID).inserted { notebook.cells[index].outputs = [] }
       let kind = Notebook.Output.Kind(rawValue: raw["output_type"]?.string ?? "") ?? .displayData
       // Consecutive stream text of the same name joins, as Jupyter does.
       if kind == .stream, var last = notebook.cells[index].outputs.last, last.kind == .stream,
         last.raw["name"] == raw["name"]
       {
-        last.raw["text"] = .string((Notebook.joined(last.raw["text"]) ?? "") + (raw["text"]?.string ?? ""))
+        last.raw["text"] = Notebook.lines((Notebook.joined(last.raw["text"]) ?? "") + (Notebook.joined(raw["text"]) ?? ""))
         notebook.cells[index].outputs[notebook.cells[index].outputs.count - 1] = last
       } else {
         notebook.cells[index].outputs.append(Notebook.Output(kind: kind, raw: raw))
       }
     case .clear:
+      started.insert(cellID)
       notebook.cells[index].outputs = []
     case .done(let count, _):
+      // It ran but printed nothing: the old output is stale. Dropped by an
+      // interrupt (no count): it never ran, so it keeps its output.
+      if count != nil, started.insert(cellID).inserted { notebook.cells[index].outputs = [] }
+      started.remove(cellID)
       if let count { notebook.cells[index].executionCount = count }
       running.remove(cellID)
       changed()

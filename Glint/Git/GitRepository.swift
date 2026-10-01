@@ -703,26 +703,28 @@ actor GitRepository {
     }
     guard let old = text(oldData), let new = text(newData) else { return nil }
     var options = Self.diffOptions()
-    var patch: OpaquePointer?
-    let code = old.withCString { oldBuffer in
-      new.withCString { newBuffer in
-        git_patch_from_buffers(
+    // libgit2 reads a patch's lines from these buffers, not copies of them:
+    // the patch must be built, read and freed while they're alive.
+    return old.withCString { oldBuffer -> FileChange? in
+      new.withCString { newBuffer -> FileChange? in
+        var patch: OpaquePointer?
+        let code = git_patch_from_buffers(
           &patch, oldBuffer, old.utf8.count, oldPath ?? newPath, newBuffer, new.utf8.count, newPath ?? oldPath,
           &options)
+        guard code == 0, let patch else { return nil }
+        defer { git_patch_free(patch) }
+        var adds = 0
+        var dels = 0
+        git_patch_line_stats(nil, &adds, &dels, patch)
+        var hunks: [Hunk] = []
+        for index in 0..<git_patch_num_hunks(patch) {
+          if let built = try? hunk(patch: patch, index: index, wordDiff: wordDiff) { hunks.append(built) }
+        }
+        return FileChange(
+          id: 0, status: status, oldPath: oldPath, newPath: newPath, isBinary: false, hunks: hunks,
+          additions: adds, deletions: dels, isRendered: true)
       }
     }
-    guard code == 0, let patch else { return nil }
-    defer { git_patch_free(patch) }
-    var adds = 0
-    var dels = 0
-    git_patch_line_stats(nil, &adds, &dels, patch)
-    var hunks: [Hunk] = []
-    for index in 0..<git_patch_num_hunks(patch) {
-      if let built = try? hunk(patch: patch, index: index, wordDiff: wordDiff) { hunks.append(built) }
-    }
-    return FileChange(
-      id: 0, status: status, oldPath: oldPath, newPath: newPath, isBinary: false, hunks: hunks,
-      additions: adds, deletions: dels, isRendered: true)
   }
 
   /// A side of a delta: its blob, or for the working tree (no blob id), the

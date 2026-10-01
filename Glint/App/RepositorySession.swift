@@ -637,7 +637,7 @@ final class RepositorySession {
     phase = .ready
     // A workspace is watched once, from its folder; events are routed to the
     // repository they belong to.
-    if watcher == nil || watcher?.root != (opened.workspace?.root ?? opened.repository.url).standardizedFileURL.path {
+    if watcher == nil || watcher?.root != (opened.workspace?.root ?? opened.repository.url).realPath {
       watcher = RepositoryWatcher(url: opened.workspace?.root ?? opened.repository.url) { [weak self] change in
         self?.filesChanged(change)
       }

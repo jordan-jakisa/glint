@@ -57,17 +57,24 @@ struct Notebook: Equatable, Sendable {
   var cells: [Cell]
   /// The document as read; `cells` replaces its `cells` when written.
   var raw: JSONValue
+  /// The file's own layout (indent, key order, final newline), kept so a
+  /// save changes what you edited and nothing else.
+  var style = JSONValue.Style()
+  var endsWithNewline = true
 
   /// The kernel the notebook asks for, like `python3`.
   var kernelName: String? { raw["metadata"]?["kernelspec"]?["name"]?.string }
   var language: String { raw["metadata"]?["language_info"]?["name"]?.string ?? raw["metadata"]?["kernelspec"]?["language"]?.string ?? "python" }
 
   init(data: Data) throws {
-    let value = try JSONValue.parse(data)
+    let (value, escapesNonASCII) = try JSONValue.parseDetailed(data)
     guard case .object(let object) = value, case .array(let cells)? = object["cells"] else {
       throw NotebookError.notANotebook
     }
     raw = value
+    style = JSONValue.Style(
+      indent: Self.indent(of: data), sortKeys: JSONValue.hasSortedKeys(value), escapeNonASCII: escapesNonASCII)
+    endsWithNewline = data.last == 0x0A
     self.cells = cells.enumerated().map { index, cell in
       let kind = CellKind(rawValue: cell["cell_type"]?.string ?? "") ?? .raw
       return Cell(
@@ -95,14 +102,33 @@ struct Notebook: Equatable, Sendable {
   func data() -> Data {
     var document = raw
     document["cells"] = .array(cells.map(Self.encode))
-    return Data((JSONValue.write(document, indent: 1) + "\n").utf8)
+    return Data((JSONValue.write(document, style: style) + (endsWithNewline ? "\n" : "")).utf8)
+  }
+
+  /// The width of the first indented line.
+  private static func indent(of data: Data) -> Int {
+    var count = 0
+    var seenNewline = false
+    for byte in data {
+      if byte == 0x0A {
+        seenNewline = true
+        count = 0
+      } else if seenNewline, byte == 0x20 {
+        count += 1
+      } else if seenNewline {
+        if count > 0 { return count }
+        seenNewline = false
+      }
+    }
+    return 1
   }
 
   private static func encode(_ cell: Cell) -> JSONValue {
     var value = cell.raw
     if case .null = value { value = .object([:]) }
     value["cell_type"] = .string(cell.kind.rawValue)
-    value["source"] = lines(cell.source)
+    // As the file had it: one string, or a list of lines.
+    value["source"] = cell.raw["source"]?.string != nil ? .string(cell.source) : lines(cell.source)
     if value["metadata"] == nil { value["metadata"] = .object([:]) }
     if cell.kind == .code {
       value["outputs"] = .array(cell.outputs.map(\.raw))
@@ -112,6 +138,26 @@ struct Notebook: Equatable, Sendable {
       value["execution_count"] = nil
     }
     return value
+  }
+
+  /// An output as nbformat writes it: stream text and every text mime type
+  /// split into lines (images and JSON stay as they are), whatever way the
+  /// kernel sent them.
+  static func normalized(_ output: JSONValue) -> JSONValue {
+    var output = output
+    if output["output_type"]?.string == "stream", let text = joined(output["text"]) {
+      output["text"] = lines(text)
+    }
+    if case .object(let data)? = output["data"] {
+      var data = data
+      for key in data.keys {
+        guard key != "application/json", !key.hasPrefix("image/"), !key.hasSuffix("+json"),
+          let text = joined(data[key]), case .string? = data[key] else { continue }
+        data[key] = lines(text)
+      }
+      output["data"] = .object(data)
+    }
+    return output
   }
 
   /// nbformat's multiline string: a list of lines, each keeping its "\n".

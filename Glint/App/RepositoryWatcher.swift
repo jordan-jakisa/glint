@@ -31,7 +31,7 @@ final class RepositoryWatcher {
   private var flushTask: Task<Void, Never>?
 
   init(url: URL, onChange: @escaping (Change) -> Void) {
-    root = url.resolvingSymlinksInPath().path
+    root = url.realPath
     self.onChange = onChange
     start()
   }
@@ -102,5 +102,16 @@ final class RepositoryWatcher {
     if inside == "index" { return .workingTree }
     if inside == "HEAD" || inside.hasPrefix("refs/") || inside == "packed-refs" { return .head }
     return .ignored
+  }
+}
+
+extension URL {
+  /// The path with every symlink resolved, as FSEvents reports it. Not
+  /// `resolvingSymlinksInPath()`, which turns `/private/tmp/x` into `/tmp/x`
+  /// and so never matches an event for a project under `/tmp` or `/var`.
+  var realPath: String {
+    var buffer = [CChar](repeating: 0, count: Int(PATH_MAX))
+    guard realpath(path, &buffer) != nil else { return standardizedFileURL.path }
+    return String(cString: buffer)
   }
 }

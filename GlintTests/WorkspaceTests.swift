@@ -200,7 +200,9 @@ import Testing
     #expect(session.status.isClean)
 
     try fixture.write("b.txt", "2\n")
-    let real = fixture.url.resolvingSymlinksInPath().appendingPathComponent("b.txt").path
+    // FSEvents reports /private/var/..., not the /var/... it was given.
+    let real = URL(fileURLWithPath: fixture.url.realPath).appendingPathComponent("b.txt").path
+    #expect(real.hasPrefix("/private/"))
     var change = RepositoryWatcher.Change()
     change.workingTree = true
     change.paths = [real: .workingTree]
