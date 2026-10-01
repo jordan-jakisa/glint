@@ -189,7 +189,12 @@ struct FileEditorPane: View {
   @Bindable var session: RepositorySession
 
   var body: some View {
-    if let edit = session.openedFile, let path = session.openedFilePath {
+    if let notebook = session.openedNotebook, let root = session.filesRoot {
+      NotebookView(document: notebook, project: root) { title, error in
+        session.alert = UserAlert(title, error: error)
+      }
+      .id(notebook.id)
+    } else if let edit = session.openedFile, let path = session.openedFilePath {
       VStack(spacing: 0) {
         HStack(spacing: 8) {
           Text(edit.fileName).font(.code(.body)).fontWeight(.semibold)

@@ -381,7 +381,7 @@ struct DiffTableView: NSViewRepresentable {
 
     /// A fully staged file's hunks unstage, whatever the diff's side.
     func hunkActionTitle(for row: DiffRow) -> String? {
-      guard partialAction != nil else { return nil }
+      guard partialAction != nil, !row.fileIsRendered else { return nil }
       return row.fileIsStaged ? "Unstage Hunk" : hunkActionTitle
     }
     var canRestoreHunks: Bool { restoreHunk != nil }

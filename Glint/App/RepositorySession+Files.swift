@@ -72,6 +72,20 @@ extension RepositorySession {
   func showFile(_ path: String) {
     guard let root = filesRoot, path != openedFilePath else { return }
     let url = root.appendingPathComponent(path)
+    // A notebook opens as cells you can edit and run.
+    if url.pathExtension.lowercased() == "ipynb" {
+      do {
+        let document = try NotebookDocument(url: url)
+        closeOpenedFile()
+        document.startWatching()
+        openedNotebook = document
+        openedFilePath = path
+        tab = .files
+      } catch {
+        alert = UserAlert("Couldn't open \(url.lastPathComponent)", error: error)
+      }
+      return
+    }
     let size = (try? FileManager.default.attributesOfItem(atPath: url.path)[.size] as? NSNumber)?.intValue ?? 0
     guard size <= 2_000_000, let content = try? String(contentsOf: url, encoding: .utf8) else {
       NSWorkspace.shared.open(url)
@@ -99,6 +113,14 @@ extension RepositorySession {
 
   /// Saves what you changed, then closes the editor.
   func closeOpenedFile() {
+    if let openedNotebook {
+      do { try openedNotebook.save() } catch {
+        alert = UserAlert("Couldn't save \(openedNotebook.fileName)", error: error)
+      }
+      openedNotebook.stopWatching()
+      self.openedNotebook = nil
+      openedFilePath = nil
+    }
     guard let openedFile else { return }
     if openedFile.hasUnsavedChanges { saveOpenedFile() }
     openedFile.stopWatching()

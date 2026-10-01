@@ -103,6 +103,8 @@ final class RepositorySession {
   internal(set) var ignoredFolders: Set<String> = []
   /// The file open in the Files tab's editor.
   internal(set) var openedFile: LiveEdit?
+  /// A notebook open in the Files tab, instead of `openedFile`.
+  internal(set) var openedNotebook: NotebookDocument?
   /// Its path from the repository root.
   internal(set) var openedFilePath: String?
 

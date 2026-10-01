@@ -6,6 +6,7 @@
 - Stage a whole file from its header in the diff; Space stages and moves on; `s` stages a hunk and goes to the next.
 - Syntax colours for about forty languages, in diffs and the editor.
 - A Files tab: browse every file in the project, folders of repositories too, ignored files dimmed.
+- Jupyter notebooks: diffs show cells, not JSON; the Files tab opens a notebook to edit, with outputs and images, and runs cells in a real kernel (Shift-Return). Glint can set up a Python for it.
 - An editor with line numbers and autosave, kept in step with the file on disk. When something else changes lines you changed, it asks.
 - Stash, blame, permalinks, conflicts, word diff, restore a hunk, file history, remotes, sign-off.
 - AI commit messages start faster, use OpenRouter's Auto router by default, and show a Stop button while writing.

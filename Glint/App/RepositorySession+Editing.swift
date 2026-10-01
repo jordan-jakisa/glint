@@ -227,6 +227,8 @@ extension RepositorySession {
   func beginEdit(_ row: DiffRowID) {
     guard canEditDiff, let repository, let files = diff?.files, files.indices.contains(row.file) else { return }
     let file = files[row.file]
+    // A notebook's diff lines aren't the file's lines: open the notebook.
+    if file.isRendered, let path = file.newPath { return openFile(path) }
     guard let path = file.newPath, !file.isBinary, file.hunks.indices.contains(row.hunk) else { return }
     let hunk = file.hunks[row.hunk]
     // The file as it is now: context and added lines, not the removed ones.
