@@ -75,6 +75,18 @@ struct LineStat: Equatable, Sendable {
 /// How much of a file is staged: its checkbox in the Changes list.
 enum StageState: Sendable { case none, partial, all }
 
+/// Zed's Group By for the Changes list; the diff follows it too.
+enum ChangeGrouping: String, Sendable {
+  case none, trackedUntracked, stagedUnstaged
+
+  static var current: ChangeGrouping {
+    UserDefaults.standard.string(forKey: "gitPanelGroupBy").flatMap(ChangeGrouping.init(rawValue:)) ?? .trackedUntracked
+  }
+
+  /// Zed's View: Tree. Folders sort before files, in the list and the diff.
+  static var isTree: Bool { UserDefaults.standard.bool(forKey: "gitPanelTree") }
+}
+
 /// One file in the Changes list: staged and unstaged together.
 struct StagingEntry: Identifiable, Hashable, Sendable {
   let path: String
@@ -84,15 +96,38 @@ struct StagingEntry: Identifiable, Hashable, Sendable {
   var id: String { path }
   var fileName: String { (path as NSString).lastPathComponent }
   var directory: String { (path as NSString).deletingLastPathComponent }
+
+  /// Zed's git panel sections, in order: Conflicts, Tracked, then
+  /// Untracked, which holds new files whether or not they're staged.
+  enum Section: Int, Comparable, Sendable {
+    case conflicts, tracked, untracked
+    static func < (a: Section, b: Section) -> Bool { a.rawValue < b.rawValue }
+  }
+
+  var section: Section {
+    switch kind {
+    case .conflicted: .conflicts
+    case .untracked, .added: .untracked
+    default: .tracked
+    }
+  }
 }
 
 extension WorkingTreeStatus {
-  /// Each path once, sorted by path. A file only in the staged group is
-  /// fully staged; in both, partly; only unstaged, not at all.
-  var entries: [StagingEntry] {
+  /// Each path once, top to bottom as the Changes list shows them (see
+  /// `ChangeList`), the same order Uncommitted Changes uses.
+  var entries: [StagingEntry] { ChangeList.visibleOrder(self) }
+
+  func entries(order: FileOrder, grouping: ChangeGrouping, tree: Bool = false) -> [StagingEntry] {
+    ChangeList.visibleOrder(self, order: order, grouping: grouping, tree: tree)
+  }
+
+  /// Each path once, in no particular order. A file only in the staged
+  /// group is fully staged; in both, partly; only unstaged, not at all.
+  var unsortedEntries: [StagingEntry] {
     let staged = Dictionary(self.staged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
     let unstaged = Dictionary(self.unstaged.map { ($0.path, $0) }, uniquingKeysWith: { a, _ in a })
-    return Set(staged.keys).union(unstaged.keys).sorted().map { path in
+    return Set(staged.keys).union(unstaged.keys).map { path in
       let state: StageState = unstaged[path] == nil ? .all : (staged[path] == nil ? .none : .partial)
       // A new file with later edits is still new: say so, not "modified".
       let kind =

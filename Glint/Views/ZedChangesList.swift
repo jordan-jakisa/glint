@@ -9,13 +9,10 @@ import SwiftUI
 struct ZedChangesList: View {
   @Bindable var session: RepositorySession
   @AppStorage("gitPanelTree") private var isTree = false
-  @AppStorage("gitPanelSortByName") private var sortByName = false
-  @AppStorage("gitPanelGroupBy") private var groupBy = Grouping.trackedUntracked
-
-  /// Zed's Group By.
-  enum Grouping: String {
-    case none, trackedUntracked, stagedUnstaged
-  }
+  /// Zed's Sort By, as Glint's File order: one order for the list and the
+  /// diff, so they always match.
+  @AppStorage("fileOrder") private var fileOrder = FileOrder.smart
+  @AppStorage("gitPanelGroupBy") private var groupBy = ChangeGrouping.trackedUntracked
   @State private var collapsed: Set<String> = []
 
   var body: some View {
@@ -25,16 +22,8 @@ struct ZedChangesList: View {
       ScrollViewReader { proxy in
         ScrollView {
           LazyVStack(spacing: 0) {
-            section("Conflicts", entries.filter { $0.kind == .conflicted })
-            switch groupBy {
-            case .none:
-              section("Changes", entries.filter { $0.kind != .conflicted })
-            case .trackedUntracked:
-              section("Tracked", entries.filter { $0.kind != .conflicted && $0.kind != .untracked })
-              section("Untracked", entries.filter { $0.kind == .untracked })
-            case .stagedUnstaged:
-              section("Staged", entries.filter { $0.kind != .conflicted && $0.state == .all })
-              section("Unstaged", entries.filter { $0.kind != .conflicted && $0.state != .all })
+            ForEach(sections) { section in
+              self.section(section)
             }
           }
           .padding(.vertical, 2)
@@ -42,7 +31,9 @@ struct ZedChangesList: View {
         .onChange(of: session.selectedChange) { _, selection in
           // The list's own row identity: a second `.id` on the row made the
           // lazy stack keep stale copies (old ticks, two selections).
-          if let path = selection?.path { proxy.scrollTo("file:" + path) }
+          if let path = selection?.path, let first = sections.first(where: { $0.entries.contains { $0.path == path } }) {
+            proxy.scrollTo(Row.fileID(path, in: first.kind))
+          }
         }
       }
     }
@@ -72,15 +63,16 @@ struct ZedChangesList: View {
           Text("Tree").tag(true)
         }
         .pickerStyle(.inline)
-        Picker("Sort By", selection: $sortByName) {
-          Text("Path").tag(false)
-          Text("Name").tag(true)
+        Picker("Sort By", selection: $fileOrder) {
+          Text("Source First").tag(FileOrder.smart)
+          Text("Path").tag(FileOrder.path)
+          Text("Name").tag(FileOrder.name)
         }
         .pickerStyle(.inline)
         Picker("Group By", selection: $groupBy) {
-          Text("None").tag(Grouping.none)
-          Text("Tracked & Untracked").tag(Grouping.trackedUntracked)
-          Text("Staged & Unstaged").tag(Grouping.stagedUnstaged)
+          Text("None").tag(ChangeGrouping.none)
+          Text("Tracked & Untracked").tag(ChangeGrouping.trackedUntracked)
+          Text("Staged & Unstaged").tag(ChangeGrouping.stagedUnstaged)
         }
         .pickerStyle(.inline)
       } label: {
@@ -88,6 +80,15 @@ struct ZedChangesList: View {
       }
       .menuStyle(.borderlessButton)
       .menuIndicator(.hidden)
+      .onChange(of: fileOrder) {
+        NotificationCenter.default.post(name: RepositorySession.preferencesChanged, object: nil)
+      }
+      .onChange(of: isTree) {
+        NotificationCenter.default.post(name: RepositorySession.preferencesChanged, object: nil)
+      }
+      .onChange(of: groupBy) {
+        NotificationCenter.default.post(name: RepositorySession.preferencesChanged, object: nil)
+      }
       .fixedSize()
       .tint(.secondary)
       .help("View options")
@@ -124,16 +125,47 @@ struct ZedChangesList: View {
 
   // MARK: Sections and rows
 
-  @ViewBuilder private func section(_ title: String, _ items: [Entry]) -> some View {
+  /// The list, from the same model as the diff (`ChangeList`).
+  private var sections: [ChangeList.Section] {
+    ChangeList.sections(session.status, order: fileOrder, grouping: groupBy, tree: isTree)
+  }
+
+  /// A row's box. Grouped by staging, a file's box says what its section
+  /// holds, as in Zed: ticked in Staged (a click unstages), empty in
+  /// Unstaged (a click stages), even for a file in both.
+  private static func boxState(_ entry: Entry, in section: ChangeList.Section.Kind) -> StageState {
+    switch section {
+    case .staged: .all
+    case .unstaged: .none
+    default: entry.state
+    }
+  }
+
+  @ViewBuilder private func section(_ section: ChangeList.Section) -> some View {
+    let items = section.entries
+    let title = section.title
     if !items.isEmpty {
       let isCollapsed = collapsed.contains(title)
+      let boxes = items.map { Self.boxState($0, in: section.kind) }
+      let state: StageState =
+        boxes.allSatisfy { $0 == .all } ? .all : boxes.allSatisfy { $0 == .none } ? .none : .partial
+      // No header without grouping, as in Zed: just the files.
+      if section.kind != .changes {
       HStack(spacing: 4) {
         Image(systemName: isCollapsed ? "chevron.right" : "chevron.down")
           .font(.app(.caption2))
           .frame(width: 12)
         Text(title).font(.app(.caption))
         Spacer()
-        StageBox(state: Self.state(of: items)) { stage(items, Self.state(of: items) != .all) }
+        StageBox(state: state) {
+          // Scoped to this section, as in Zed: Staged unstages its files,
+          // Unstaged stages them.
+          switch section.kind {
+          case .staged: stage(items, false, force: true)
+          case .unstaged: stage(items, true, force: true)
+          default: stage(items, state != .all)
+          }
+        }
       }
       .foregroundStyle(.secondary)
       .padding(.leading, 10)
@@ -143,20 +175,21 @@ struct ZedChangesList: View {
       .onTapGesture {
         if isCollapsed { collapsed.remove(title) } else { collapsed.insert(title) }
       }
+      }
       if !isCollapsed {
-        ForEach(rows(for: items)) { row in
+        ForEach(rows(for: items, in: section.kind)) { row in
           switch row {
-          case .folder(let path, let depth):
+          case .folder(let path, let depth, _):
             FolderRow(name: (path as NSString).lastPathComponent, depth: depth)
-          case .file(let entry, let depth):
-            fileRow(entry, depth: depth)
+          case .file(let entry, let depth, _):
+            fileRow(entry, depth: depth, box: Self.boxState(entry, in: section.kind))
           }
         }
       }
     }
   }
 
-  private func fileRow(_ entry: Entry, depth: Int) -> some View {
+  private func fileRow(_ entry: Entry, depth: Int, box: StageState) -> some View {
     let isSelected = session.selectedChange?.path == entry.path
     return HStack(spacing: 6) {
       HStack(spacing: 4) {
@@ -178,7 +211,7 @@ struct ZedChangesList: View {
       if let stat = session.lineStats[entry.path] {
         LineStatLabel(stat: stat).font(.app(.caption))
       }
-      StageBox(state: entry.state) { session.setStaged(entry.path, entry.state != .all) }
+      StageBox(state: box) { session.setStaged(entry.path, box != .all) }
     }
     .font(.app(.body))
     .padding(.leading, 10)
@@ -228,30 +261,36 @@ struct ZedChangesList: View {
     Button("Reveal in Finder") { session.revealInFinder(entry.path) }
   }
 
-  private func stage(_ items: [Entry], _ staged: Bool) {
-    for item in items where (item.state == .all) != staged { session.setStaged(item.path, staged) }
+  /// Stages or unstages a section's files; `force` also takes the files
+  /// already partly the other way, as a Staged or Unstaged section does.
+  private func stage(_ items: [Entry], _ staged: Bool, force: Bool = false) {
+    for item in items where force ? item.state != (staged ? .all : .none) : (item.state == .all) != staged {
+      session.setStaged(item.path, staged)
+    }
   }
 
   // MARK: Model
 
   typealias Entry = StagingEntry
 
+  /// Ids are per section: grouped by staging, a file can be in two.
   enum Row: Identifiable {
-    case folder(String, depth: Int)
-    case file(Entry, depth: Int)
+    case folder(String, depth: Int, section: ChangeList.Section.Kind)
+    case file(Entry, depth: Int, section: ChangeList.Section.Kind)
     var id: String {
       switch self {
-      case .folder(let path, _): "folder:" + path
-      case .file(let entry, _): "file:" + entry.path
+      case .folder(let path, _, let section): "\(section.rawValue)/folder:" + path
+      case .file(let entry, _, let section): Self.fileID(entry.path, in: section)
       }
+    }
+    static func fileID(_ path: String, in section: ChangeList.Section.Kind) -> String {
+      "\(section.rawValue)/file:" + path
     }
   }
 
   /// Each path once, staged and unstaged together.
   private var entries: [Entry] {
-    let entries = session.status.entries
-    guard sortByName else { return entries }
-    return entries.sorted { ($0.fileName, $0.path) < ($1.fileName, $1.path) }
+    session.status.entries
   }
 
   private var totals: LineStat {
@@ -264,26 +303,21 @@ struct ZedChangesList: View {
 
   /// Flat: the files. Tree: each folder once, before its files, indented
   /// 16 pt a level, as in Zed.
-  private func rows(for items: [Entry]) -> [Row] {
-    guard isTree else { return items.map { .file($0, depth: 0) } }
+  private func rows(for items: [Entry], in section: ChangeList.Section.Kind) -> [Row] {
+    guard isTree else { return items.map { .file($0, depth: 0, section: section) } }
     var rows: [Row] = []
     var shown: Set<String> = []
     for item in items {
       let parts = item.directory.split(separator: "/").map(String.init)
       for depth in parts.indices {
         let folder = parts[0...depth].joined(separator: "/")
-        if shown.insert(folder).inserted { rows.append(.folder(folder, depth: depth)) }
+        if shown.insert(folder).inserted { rows.append(.folder(folder, depth: depth, section: section)) }
       }
-      rows.append(.file(item, depth: parts.count))
+      rows.append(.file(item, depth: parts.count, section: section))
     }
     return rows
   }
 
-  private static func state(of items: [Entry]) -> StageState {
-    if items.allSatisfy({ $0.state == .all }) { return .all }
-    if items.allSatisfy({ $0.state == .none }) { return .none }
-    return .partial
-  }
 }
 
 /// Zed's `+N −N`, added in green and deleted in red.

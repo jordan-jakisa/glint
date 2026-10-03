@@ -31,7 +31,8 @@ extension RepositorySession {
     guard canRestoreHunks, let pick = pick(file: row.file, hunk: row.hunk, lines: nil), !pick.file.isStaged
     else { return }
     let file = pick.file
-    if file.status == .added || file.status == .deleted || file.status == .renamed {
+    // A notebook's hunks are its rendered cells, not lines of the file.
+    if file.status == .added || file.status == .deleted || file.status == .renamed || file.isRendered {
       requestDiscard([file.path])
       return
     }
@@ -86,6 +87,9 @@ extension RepositorySession {
     let hunk = cursor.hunk >= 0 ? cursor.hunk : 0
     guard files.indices.contains(file), files[file].hunks.indices.contains(hunk) else { return }
     stageHunk(.hunk(file, hunk))
+    // Style Zed: the hunk stays in Uncommitted Changes, so go on to the
+    // next one, like Zed's Stage and Next.
+    if Theme.shared.isZed { nextHunk() }
   }
 
   private struct Pick {
@@ -135,7 +139,8 @@ extension RepositorySession {
     var wholeFiles: [FileChange] = []
     for filePicks in Dictionary(grouping: picks, by: { $0.file.id }).values {
       let file = filePicks[0].file
-      if file.status == .added || file.status == .deleted, Self.coversEveryChange(file, filePicks) {
+      // A notebook stages whole: its hunks are rendered cells, not patches.
+      if file.isRendered || (file.status == .added || file.status == .deleted) && Self.coversEveryChange(file, filePicks) {
         wholeFiles.append(file)
       } else {
         partial.append(contentsOf: filePicks)

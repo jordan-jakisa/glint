@@ -90,7 +90,12 @@ extension RepositorySession {
       selection.staged ? unstageAll() : stageAll()
       return
     }
-    setStaged(path, !selection.staged)
+    guard Theme.shared.isZed else { return setStaged(path, !selection.staged) }
+    // Style Zed: one list, so the file's own state says which way to go, and
+    // the selection moves on to the next file, like Zed's Stage and Next.
+    let entry = status.entries.first { $0.path == path }
+    setStaged(path, entry?.state != .all)
+    moveChangeSelection(by: 1)
   }
 
   func stageAll() {
@@ -146,7 +151,20 @@ extension RepositorySession {
   /// the group is empty does the selection follow the file to the other one.
   private func reconcileChangeSelection(previous: WorkingTreeStatus) {
     guard let selection = selectedChange else {
-      selectedChange = ChangeSelection.first(in: status)
+      selectedChange = Theme.shared.isZed ? changeSelections.first : ChangeSelection.first(in: status)
+      return
+    }
+    if Theme.shared.isZed {
+      // One list in Zed: staging a file doesn't move it or the selection.
+      // Only when the file is gone (committed, discarded) does the selection
+      // go to its neighbour, in the order you see.
+      guard let path = selection.path else { return }
+      let paths = status.entries.map(\.path)
+      if paths.contains(path) { return }
+      let old = previous.entries.map(\.path)
+      let index = old.firstIndex(of: path) ?? 0
+      let next = old[index...].first { paths.contains($0) } ?? old[..<index].last { paths.contains($0) }
+      selectedChange = next.map { ChangeSelection(staged: false, path: $0) }
       return
     }
     let group = selection.staged ? status.staged : status.unstaged
@@ -171,7 +189,9 @@ extension RepositorySession {
 
   /// Every selectable file, in list order: staged first, then unstaged.
   var changeSelections: [ChangeSelection] {
-    status.staged.map { ChangeSelection(staged: true, path: $0.path) }
+    // Style Zed: the list's own order, the same as the diff's.
+    if Theme.shared.isZed { return status.entries.map { ChangeSelection(staged: false, path: $0.path) } }
+    return status.staged.map { ChangeSelection(staged: true, path: $0.path) }
       + status.unstaged.map { ChangeSelection(staged: false, path: $0.path) }
   }
 

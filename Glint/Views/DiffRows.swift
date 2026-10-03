@@ -49,6 +49,8 @@ struct DiffRow: Identifiable, Sendable {
   var inMixedHunk = false
   /// The row's file is fully staged (Style Zed's Uncommitted Changes).
   var fileIsStaged = false
+  /// The row's file is shown rendered (a notebook): no hunk actions.
+  var fileIsRendered = false
   /// The file's language, for syntax colours.
   var language: SyntaxLanguage?
 
@@ -80,19 +82,20 @@ struct DiffRow: Identifiable, Sendable {
         rows.append(DiffRow(id: .note(file.id), content: .note(Self.emptyNote(file.status))))
       }
 
-      let language = SyntaxLanguage.forPath(file.newPath ?? file.path)
+      // A notebook's cells read as Python, `# %%` markers as comments.
+      let language = file.isRendered ? SyntaxLanguage.python : SyntaxLanguage.forPath(file.newPath ?? file.path)
       for hunk in file.hunks {
-        rows.append(DiffRow(id: .hunk(file.id, hunk.id), content: .hunkHeader(hunk), fileIsStaged: file.isStaged))
+        rows.append(DiffRow(id: .hunk(file.id, hunk.id), content: .hunkHeader(hunk), fileIsStaged: file.isStaged, fileIsRendered: file.isRendered))
         let mixed =
           hunk.lines.contains { $0.kind == .addition } && hunk.lines.contains { $0.kind == .deletion }
         switch layout {
         case .unified:
           for (index, line) in hunk.lines.enumerated() {
-            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .line(line), inMixedHunk: mixed, fileIsStaged: file.isStaged, language: language))
+            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .line(line), inMixedHunk: mixed, fileIsStaged: file.isStaged, fileIsRendered: file.isRendered, language: language))
           }
         case .split:
           for (index, row) in hunk.splitRows.enumerated() {
-            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .split(row), inMixedHunk: mixed, fileIsStaged: file.isStaged, language: language))
+            rows.append(DiffRow(id: .line(file.id, hunk.id, index), content: .split(row), inMixedHunk: mixed, fileIsStaged: file.isStaged, fileIsRendered: file.isRendered, language: language))
           }
         }
       }

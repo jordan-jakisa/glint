@@ -17,6 +17,9 @@ struct GlintCommands: Commands {
     }
 
     CommandGroup(replacing: .help) {
+      Button("Version History") { VersionHistory.show() }
+      Button("Export Diagnostics\u{2026}") { Diagnostics.export() }
+      Divider()
       Button("Acknowledgements") { AboutPanel.showAcknowledgements() }
     }
 

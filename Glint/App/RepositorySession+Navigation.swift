@@ -8,7 +8,35 @@ extension RepositorySession {
   }
 
   func toggleCollapsed(_ fileID: Int) {
-    if collapsedFiles.remove(fileID) == nil { collapsedFiles.insert(fileID) }
+    let folding = !collapsedFiles.contains(fileID)
+    if folding { collapsedFiles.insert(fileID) } else { collapsedFiles.remove(fileID) }
+    // Style Zed's Uncommitted Changes remembers your choice by path, so it
+    // outlasts reloads: a staged file you open stays open, a file you fold
+    // stays folded.
+    guard Theme.shared.isZed, case .workingTree(false, nil)? = diff?.source,
+      let file = diff?.files.first(where: { $0.id == fileID })
+    else { return }
+    if file.isStaged {
+      if folding { openedStagedPaths.remove(file.path) } else { openedStagedPaths.insert(file.path) }
+    } else {
+      if folding { foldedPaths.insert(file.path) } else { foldedPaths.remove(file.path) }
+    }
+  }
+
+  /// Style Zed: a fully staged file folds away in Uncommitted Changes, as
+  /// if done, unless you opened it; files you folded stay folded.
+  func foldStagedFiles(in diff: Diff) {
+    // Opening a staged file lasts until it's unstaged; staged again, it
+    // folds again.
+    openedStagedPaths.formIntersection(diff.files.filter(\.isStaged).map(\.path))
+    let folded = Set(
+      diff.files.filter { file in
+        file.isStaged ? !openedStagedPaths.contains(file.path) : foldedPaths.contains(file.path)
+      }.map(\.id))
+    guard folded != collapsedFiles else { return }
+    suppressRowsRebuild = true
+    collapsedFiles = folded
+    suppressRowsRebuild = false
   }
 
   func toggleCurrentFileCollapsed() {
@@ -55,10 +83,14 @@ extension RepositorySession {
   /// Style Zed: brings the selected file's section of the all-files diff to
   /// the top.
   func scrollToSelectedFile() {
-    guard Theme.shared.isZed, tab == .changes, let path = selectedChange?.path,
-      let index = diff?.files.firstIndex(where: { $0.newPath == path || $0.oldPath == path })
-    else { return }
+    guard let index = selectedDiffFileIndex else { return }
     scroll(to: .file(index))
+  }
+
+  /// Style Zed: where the file picked in the list is in Uncommitted Changes.
+  var selectedDiffFileIndex: Int? {
+    guard Theme.shared.isZed, tab == .changes, let path = selectedChange?.path else { return nil }
+    return diff?.files.firstIndex { $0.newPath == path || $0.oldPath == path }
   }
 
   func scroll(to target: DiffRowID) {

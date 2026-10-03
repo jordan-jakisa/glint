@@ -103,6 +103,8 @@ final class RepositorySession {
   internal(set) var ignoredFolders: Set<String> = []
   /// The file open in the Files tab's editor.
   internal(set) var openedFile: LiveEdit?
+  /// A notebook open in the Files tab, instead of `openedFile`.
+  internal(set) var openedNotebook: NotebookDocument?
   /// Its path from the repository root.
   internal(set) var openedFilePath: String?
 
@@ -157,10 +159,18 @@ final class RepositorySession {
   // MARK: Diff on screen
 
   internal(set) var diff: Diff? {
-    didSet { rebuildRows(.all) }
+    didSet {
+      // Every Uncommitted Changes diff, the first at launch included.
+      if let diff, Theme.shared.isZed, case .workingTree(false, nil) = diff.source { foldStagedFiles(in: diff) }
+      rebuildRows(.all)
+    }
   }
   internal(set) var diffError: String?
   internal(set) var isLoadingDiff = false
+  /// Style Zed's Uncommitted Changes: staged files you opened, and files
+  /// you folded, by path, so reloads keep your choice.
+  @ObservationIgnored var openedStagedPaths: Set<String> = []
+  @ObservationIgnored var foldedPaths: Set<String> = []
   internal(set) var collapsedFiles: Set<Int> = [] {
     // Set.remove of a missing member still counts as a set. Without this check
     // every hunk jump rebuilt every row and reloaded the whole table.
@@ -320,6 +330,9 @@ final class RepositorySession {
   /// Word highlights as the cached diffs were built, to rebuild them when
   /// the setting changes.
   @ObservationIgnored var builtWithWordDiff = WordDiff.isEnabled
+  @ObservationIgnored var builtWithFileOrder = FileOrder.current
+  @ObservationIgnored var builtWithGrouping = ChangeGrouping.current
+  @ObservationIgnored var builtWithTree = ChangeGrouping.isTree
   @ObservationIgnored var diffRequestedAt: ContinuousClock.Instant?
   /// The reader's position in the diff: the top-most visible row, or the last
   /// place a keyboard jump landed. Not observed: it changes on every scroll.
@@ -361,6 +374,17 @@ final class RepositorySession {
     }
     let all = defaults.bool(forKey: "showsAllRepositories")
     if all != showsAllRepositories { showsAllRepositories = all }
+    // The list and the diff share one order; changing it re-sorts both.
+    if FileOrder.current != builtWithFileOrder || ChangeGrouping.current != builtWithGrouping
+      || ChangeGrouping.isTree != builtWithTree
+    {
+      builtWithFileOrder = FileOrder.current
+      builtWithGrouping = ChangeGrouping.current
+      builtWithTree = ChangeGrouping.isTree
+      cache = DiffCache(capacity: 32)
+      refreshWorkingTree()
+      showSelectedDiff(inPlace: true)
+    }
     if WordDiff.isEnabled != builtWithWordDiff {
       builtWithWordDiff = WordDiff.isEnabled
       cache = DiffCache(capacity: 32)
@@ -545,6 +569,9 @@ final class RepositorySession {
   /// Your recent projects, newest first, for the switcher.
   func recentProjects() -> [URL] { access.recents() }
 
+  /// Drops a project from the switcher's list. Nothing on disk changes.
+  func removeFromRecents(_ url: URL) { access.forget(url) }
+
   private static func sameFolder(_ a: URL, _ b: URL) -> Bool {
     a.standardizedFileURL.resolvingSymlinksInPath().path == b.standardizedFileURL.resolvingSymlinksInPath().path
   }
@@ -577,6 +604,8 @@ final class RepositorySession {
 
   func install(_ opened: Opened, selecting preferred: ChangeSelection? = nil) {
     closeOpenedFile()
+    openedStagedPaths = []
+    foldedPaths = []
     projectFiles = []
     ignoredFiles = []
     ignoredFolders = []
@@ -608,7 +637,7 @@ final class RepositorySession {
     phase = .ready
     // A workspace is watched once, from its folder; events are routed to the
     // repository they belong to.
-    if watcher == nil || watcher?.root != (opened.workspace?.root ?? opened.repository.url).standardizedFileURL.path {
+    if watcher == nil || watcher?.root != (opened.workspace?.root ?? opened.repository.url).realPath {
       watcher = RepositoryWatcher(url: opened.workspace?.root ?? opened.repository.url) { [weak self] change in
         self?.filesChanged(change)
       }
@@ -755,14 +784,37 @@ final class RepositorySession {
   nonisolated static func uncommittedDiff(_ repository: GitRepository) async throws -> Diff {
     let unstaged = try await repository.workingTreeDiff(staged: false, path: nil)
     let staged = try await repository.workingTreeDiff(staged: true, path: nil)
+    let status = try await repository.status()
+    return mergeUncommitted(unstaged: unstaged, staged: staged, status: status)
+  }
+
+  /// The files in the Changes list's order (`WorkingTreeStatus.entries`),
+  /// so the list and the diff never disagree, and a file keeps its place
+  /// when you stage it, as in Zed. Fully staged files are marked, so their
+  /// hunks unstage.
+  nonisolated static func mergeUncommitted(
+    unstaged: Diff, staged: Diff, status: WorkingTreeStatus, order: FileOrder = .current,
+    grouping: ChangeGrouping = .current, tree: Bool = ChangeGrouping.isTree
+  ) -> Diff {
     let shown = Set(unstaged.files.map(\.path))
     var files = unstaged.files
     for file in staged.files where !shown.contains(file.path) {
-      var extra = file.renumbered(files.count)
+      var extra = file
       extra.isStaged = true
       files.append(extra)
     }
-    return Diff(source: unstaged.source, files: files, isComplete: unstaged.isComplete)
+    let position = Dictionary(
+      ChangeList.diffOrder(status, order: order, grouping: grouping, tree: tree).enumerated().map { ($1, $0) },
+      uniquingKeysWith: { a, _ in a })
+    let ordered = files.enumerated().sorted { a, b in
+      let x = position[a.element.path] ?? Int.max
+      let y = position[b.element.path] ?? Int.max
+      return x != y ? x < y : a.offset < b.offset
+    }
+    return Diff(
+      source: unstaged.source,
+      files: ordered.enumerated().map { index, pair in pair.element.renumbered(index) },
+      isComplete: unstaged.isComplete)
   }
 
   /// Called by the diff view once the selected diff is on screen.

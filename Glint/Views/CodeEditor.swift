@@ -8,6 +8,13 @@ struct CodeEditor: NSViewRepresentable {
   @Binding var text: String
   let language: SyntaxLanguage?
   let firstLine: Int
+  /// A notebook cell: as tall as its text (the caller sizes it), no
+  /// vertical scrolling of its own, so the notebook scrolls through it.
+  var fitsContent = false
+  var showsLineNumbers = true
+  var focusesOnAppear = true
+  /// Shift-Return, as in Jupyter: run the cell.
+  var onShiftReturn: (() -> Void)? = nil
 
   func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -47,22 +54,25 @@ struct CodeEditor: NSViewRepresentable {
     textView.string = text
     textView.textStorage?.setAttributes(textView.typingAttributes, range: NSRange(location: 0, length: (text as NSString).length))
 
-    let scrollView = NSScrollView()
+    let scrollView = CellScrollView()
+    scrollView.forwardsVerticalScroll = fitsContent
     scrollView.documentView = textView
-    scrollView.hasVerticalScroller = true
+    scrollView.hasVerticalScroller = !fitsContent
     scrollView.hasHorizontalScroller = true
     scrollView.autohidesScrollers = true
     scrollView.drawsBackground = true
     scrollView.backgroundColor = Theme.shared.editorBackground
-    let ruler = LineNumberRuler(textView: textView, scrollView: scrollView)
-    ruler.firstLine = firstLine
-    scrollView.verticalRulerView = ruler
-    scrollView.hasVerticalRuler = true
-    scrollView.rulersVisible = true
+    if showsLineNumbers {
+      let ruler = LineNumberRuler(textView: textView, scrollView: scrollView)
+      ruler.firstLine = firstLine
+      scrollView.verticalRulerView = ruler
+      scrollView.hasVerticalRuler = true
+      scrollView.rulersVisible = true
+    }
     // Lays the text out beside the gutter, not under it.
     scrollView.tile()
     context.coordinator.highlight(textView)
-    DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) }
+    if focusesOnAppear { DispatchQueue.main.async { textView.window?.makeFirstResponder(textView) } }
     return scrollView
   }
 
@@ -86,6 +96,14 @@ struct CodeEditor: NSViewRepresentable {
       if parent.text != textView.string { parent.text = textView.string }
       highlight(textView)
       textView.enclosingScrollView?.verticalRulerView?.needsDisplay = true
+    }
+
+    func textView(_ textView: NSTextView, doCommandBy selector: Selector) -> Bool {
+      guard let onShiftReturn = parent.onShiftReturn, selector == #selector(NSResponder.insertNewline(_:)),
+        NSApp.currentEvent?.modifierFlags.contains(.shift) == true
+      else { return false }
+      onShiftReturn()
+      return true
     }
 
     func textViewDidChangeSelection(_ notification: Notification) {
@@ -226,6 +244,20 @@ final class LineNumberRuler: NSRulerView {
     let extra = layoutManager.extraLineFragmentRect
     if extra.height > 0 || text.length == 0 {
       draw(line, fragmentTop: extra.minY, current: cursor == text.length)
+    }
+  }
+}
+
+/// A scroll view that can hand vertical scrolling to the view around it,
+/// for an editor inside a scrolling page (a notebook's cells).
+final class CellScrollView: NSScrollView {
+  var forwardsVerticalScroll = false
+
+  override func scrollWheel(with event: NSEvent) {
+    if forwardsVerticalScroll, abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) {
+      nextResponder?.scrollWheel(with: event)
+    } else {
+      super.scrollWheel(with: event)
     }
   }
 }

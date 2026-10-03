@@ -7,6 +7,7 @@ struct HunkEditor: View {
   @Bindable var edit: LiveEdit
   let save: (LiveEdit) -> Void
   let cancel: () -> Void
+  var failed: (Error) -> Void = { _ in }
 
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
@@ -26,6 +27,7 @@ struct HunkEditor: View {
       }
       .padding(12)
       Hairline()
+      EditConflictBar(edit: edit, failed: failed)
       CodeEditor(text: $edit.text, language: edit.language, firstLine: edit.firstLineNumber)
         .frame(
           minWidth: 720, idealWidth: edit.isWholeFile ? 960 : 720,
@@ -47,6 +49,36 @@ struct HunkEditor: View {
           .hidden()
       }
       .padding(12)
+    }
+  }
+}
+
+/// Shown when the file changed on disk in lines you'd also changed:
+/// nothing saves on its own until you pick a side.
+struct EditConflictBar: View {
+  @Bindable var edit: LiveEdit
+  let failed: (Error) -> Void
+
+  var body: some View {
+    if edit.hasConflict {
+      HStack(spacing: 8) {
+        Image(systemName: "exclamationmark.triangle.fill")
+          .foregroundStyle(Color(nsColor: Theme.shared.conflicted))
+        Text("\(edit.fileName) changed on disk in lines you also changed. Autosave is paused.")
+          .lineLimit(2)
+        Spacer()
+        Button("Use Theirs") { edit.useTheirs() }
+          .help("Drop your changes to those lines and take the file as it is on disk")
+        Button("Keep Mine") {
+          do { try edit.keepMine() } catch { failed(error) }
+        }
+        .help("Save your version over the one on disk")
+      }
+      .font(.app(.callout))
+      .controlSize(.small)
+      .padding(.horizontal, 12)
+      .padding(.vertical, 6)
+      .background(Color(nsColor: Theme.shared.conflicted).opacity(0.12))
     }
   }
 }

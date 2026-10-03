@@ -660,6 +660,13 @@ actor GitRepository {
     let oldPath = status == .added ? nil : delta.old_file.path.map { String(cString: $0) }
     let newPath = status == .deleted ? nil : delta.new_file.path.map { String(cString: $0) }
 
+    // A notebook reads as its cells, not its JSON.
+    if !isBinary, (newPath ?? oldPath ?? "").lowercased().hasSuffix(".ipynb"),
+      let rendered = notebookChange(delta: delta, status: status, oldPath: oldPath, newPath: newPath, wordDiff: wordDiff)
+    {
+      return rendered
+    }
+
     var hunks: [Hunk] = []
     var additions = 0
     var deletions = 0
@@ -680,6 +687,61 @@ actor GitRepository {
     return FileChange(
       id: index, status: status, oldPath: oldPath, newPath: newPath,
       isBinary: isBinary, hunks: hunks, additions: additions, deletions: deletions)
+  }
+
+  /// A notebook's change as its cells (`Notebook.readableText`), diffed as
+  /// text. Nil if either side isn't a notebook Glint can read; the JSON
+  /// diff shows instead.
+  private func notebookChange(
+    delta: git_diff_delta, status: FileChange.Status, oldPath: String?, newPath: String?, wordDiff: Bool
+  ) -> FileChange? {
+    let oldData = status == .added ? Data() : blobData(delta.old_file, workdirFallback: false)
+    let newData = status == .deleted ? Data() : blobData(delta.new_file, workdirFallback: true)
+    func text(_ data: Data?) -> String? {
+      guard let data else { return nil }
+      return data.isEmpty ? "" : (try? Notebook(data: data))?.readableText()
+    }
+    guard let old = text(oldData), let new = text(newData) else { return nil }
+    var options = Self.diffOptions()
+    // libgit2 reads a patch's lines from these buffers, not copies of them:
+    // the patch must be built, read and freed while they're alive.
+    return old.withCString { oldBuffer -> FileChange? in
+      new.withCString { newBuffer -> FileChange? in
+        var patch: OpaquePointer?
+        let code = git_patch_from_buffers(
+          &patch, oldBuffer, old.utf8.count, oldPath ?? newPath, newBuffer, new.utf8.count, newPath ?? oldPath,
+          &options)
+        guard code == 0, let patch else { return nil }
+        defer { git_patch_free(patch) }
+        var adds = 0
+        var dels = 0
+        git_patch_line_stats(nil, &adds, &dels, patch)
+        var hunks: [Hunk] = []
+        for index in 0..<git_patch_num_hunks(patch) {
+          if let built = try? hunk(patch: patch, index: index, wordDiff: wordDiff) { hunks.append(built) }
+        }
+        return FileChange(
+          id: 0, status: status, oldPath: oldPath, newPath: newPath, isBinary: false, hunks: hunks,
+          additions: adds, deletions: dels, isRendered: true)
+      }
+    }
+  }
+
+  /// A side of a delta: its blob, or for the working tree (no blob id), the
+  /// file on disk.
+  private func blobData(_ file: git_diff_file, workdirFallback: Bool) -> Data? {
+    var oid = file.id
+    if git_oid_is_zero(&oid) == 0 {
+      var blob: OpaquePointer?
+      if git_blob_lookup(&blob, handle, &oid) == 0, let blob {
+        defer { git_blob_free(blob) }
+        let size = Int(git_blob_rawsize(blob))
+        guard size > 0, let bytes = git_blob_rawcontent(blob) else { return Data() }
+        return Data(bytes: bytes, count: size)
+      }
+    }
+    guard workdirFallback, let path = file.path.map({ String(cString: $0) }) else { return Data() }
+    return try? Data(contentsOf: url.appendingPathComponent(path))
   }
 
   private func hunk(patch: OpaquePointer, index: Int, wordDiff: Bool) throws -> Hunk {

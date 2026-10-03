@@ -131,7 +131,7 @@ extension RepositorySession {
   func filesChanged(_ change: RepositoryWatcher.Change) {
     // FSEvents reports real paths (/private/var/...); the repository may have
     // been opened through a symlink (/var/...). Compare real paths.
-    guard let active = repository?.url.resolvingSymlinksInPath().path else { return }
+    guard let active = repository?.url.realPath else { return }
     let prefix = active.hasSuffix("/") ? active : active + "/"
     let mine = change.paths.filter { $0.key.hasPrefix(prefix) || $0.key == active }
     if mine.values.contains(.head) { refreshHistory() }
@@ -151,7 +151,7 @@ extension RepositorySession {
   func otherRepositoriesChanged(_ paths: [String]) {
     guard let workspace else { return }
     let touched = workspace.repositories.filter { repo in
-      let prefix = repo.url.resolvingSymlinksInPath().path + "/"
+      let prefix = repo.url.realPath + "/"
       return paths.contains { $0.hasPrefix(prefix) }
     }
     let active = activeWorkspaceRepository?.relativePath
@@ -204,15 +204,20 @@ extension RepositorySession {
 /// Which repository of each workspace was active last, so reopening a
 /// workspace lands where you left it.
 enum WorkspaceMemory {
-  private static let key = "workspaceActiveRepositories"
+  /// One key per folder. A single shared dictionary, read, changed and
+  /// written back, lost entries whenever two writers overlapped (two
+  /// windows, or another copy of Glint).
+  private static let prefix = "workspaceActiveRepository:"
+  /// Where they were kept before, read as a fallback.
+  private static let legacyKey = "workspaceActiveRepositories"
 
   static func activeRepository(in root: URL) -> String? {
-    (UserDefaults.standard.dictionary(forKey: key) as? [String: String])?[root.standardizedFileURL.path]
+    let path = root.standardizedFileURL.path
+    return UserDefaults.standard.string(forKey: prefix + path)
+      ?? (UserDefaults.standard.dictionary(forKey: legacyKey) as? [String: String])?[path]
   }
 
   static func remember(_ relativePath: String, in root: URL) {
-    var all = UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
-    all[root.standardizedFileURL.path] = relativePath
-    UserDefaults.standard.set(all, forKey: key)
+    UserDefaults.standard.set(relativePath, forKey: prefix + root.standardizedFileURL.path)
   }
 }

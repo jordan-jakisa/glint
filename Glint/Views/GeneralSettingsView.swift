@@ -10,6 +10,7 @@ struct GeneralSettingsView: View {
   @AppStorage("wordDiff") private var wordDiff = true
   @AppStorage("syntaxHighlighting") private var syntaxHighlighting = true
   @AppStorage("autosave") private var autosave = true
+  @AppStorage("notebookPython") private var notebookPython = ""
   @AppStorage("showsAllRepositories") private var showsAllRepositories = false
   @AppStorage("terminalShown") private var terminalShown = false
   @State private var recentsCleared = false
@@ -24,6 +25,7 @@ struct GeneralSettingsView: View {
         Picker("File order", selection: $fileOrder) {
           Text("Source first").tag(FileOrder.smart)
           Text("By path").tag(FileOrder.path)
+          Text("By name").tag(FileOrder.name)
         }
         .labelsHidden()
         .fixedSize()
@@ -79,6 +81,15 @@ struct GeneralSettingsView: View {
       ) {
         Toggle("Autosave", isOn: $autosave).labelsHidden().toggleStyle(.switch)
       }
+      SettingsRow(
+        title: "Python for notebooks",
+        description: "Runs notebook cells. Empty: the project's .venv, then Glint's own, then python3.",
+        isModified: !notebookPython.isEmpty, reset: { notebookPython = "" }
+      ) {
+        TextField("Automatic", text: $notebookPython)
+          .labelsHidden()
+          .frame(width: 220)
+      }
 
       SettingsSection(title: "Terminal")
       SettingsRow(
@@ -111,7 +122,10 @@ struct GeneralSettingsView: View {
       }
     }
     .onChange(of: terminal) { TerminalApp.preferred = terminal }
-    .onChange(of: fileOrder) { FileOrder.set(fileOrder) }
+    .onChange(of: fileOrder) {
+      FileOrder.set(fileOrder)
+      preferencesChanged()
+    }
     .onChange(of: layout) { preferencesChanged() }
     .onChange(of: showsAllRepositories) { preferencesChanged() }
     .onChange(of: terminalShown) { preferencesChanged() }
